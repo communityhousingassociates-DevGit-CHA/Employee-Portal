@@ -16,6 +16,7 @@ const adminItems = [
   { href: '/approvals', icon: '✅', label: 'Approvals', badge: 2 },
   { href: '/reports', icon: '📊', label: 'Reports' },
   { href: '/employees', icon: '👥', label: 'Employees' },
+  { href: '/admin', icon: '🛡️', label: 'Admin Console' },
 ]
 
 export default function Sidebar() {
