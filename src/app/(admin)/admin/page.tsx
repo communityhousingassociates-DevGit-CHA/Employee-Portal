@@ -66,14 +66,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* Warning banner */}
-      <div className="mt-5 bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 text-[13px]">
-        <span className="text-lg flex-shrink-0">⚠️</span>
-        <div>
-          <strong className="text-amber-800">Supabase schema not yet applied.</strong>
-          <span className="text-amber-700 ml-1">The portal is running on mock data. Run <code className="bg-amber-100 px-1 rounded text-[12px]">supabase-schema.sql</code> in your Supabase SQL editor to activate live data.</span>
-        </div>
-      </div>
     </div>
   )
 }

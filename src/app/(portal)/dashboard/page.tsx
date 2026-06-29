@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { MOCK_BALANCES, MOCK_REQUESTS } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/server'
 
 const statusStyle: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -7,14 +8,28 @@ const statusStyle: Record<string, string> = {
   denied: 'bg-red-100 text-red-700',
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
   const recent = MOCK_REQUESTS.slice(0, 3)
+
+  let firstName = 'there'
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: emp } = await supabase.from('employees').select('name').eq('user_id', user.id).single()
+      const name = emp?.name || user.email?.split('@')[0] || ''
+      firstName = name.split(' ')[0] || 'there'
+    }
+  } catch {}
+
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
     <div>
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Good morning, Maria ✦</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">{greeting}, {firstName} ✦</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Monday, June 29, 2026 · Pay period ends July 4</p>
         </div>
         <Link href="/request"

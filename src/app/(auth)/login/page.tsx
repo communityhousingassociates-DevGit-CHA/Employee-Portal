@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -32,13 +33,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f0f7f8] px-4">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 bg-[#02ACC0] rounded-xl flex items-center justify-center font-black text-white text-sm">
-          CHA
-        </div>
-        <div>
-          <div className="font-bold text-[#0b2b35] text-[17px] leading-tight">Employee Portal</div>
-          <div className="text-[12px] text-gray-400">Community Housing Associates</div>
-        </div>
+        <Image src="/cha-logo.jpg" alt="Community Housing Associates" width={72} height={72} className="object-contain" />
       </div>
 
       {/* Card */}
