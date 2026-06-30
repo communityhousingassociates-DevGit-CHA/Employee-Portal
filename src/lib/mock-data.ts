@@ -60,21 +60,21 @@ export const MOCK_PENDING_APPROVALS = [
 ]
 
 export const MOCK_EMPLOYEES = [
-  { id: '1',  name: 'Alex Torres',     type: 'Full-time',  hire_date: '2024-06-03', tier: '13–24 mo', accrual: 5.08, status: 'active' },
-  { id: '2',  name: 'James Thomas',    type: 'Full-time',  hire_date: '2022-03-05', tier: '36+ mo',   accrual: 6.00, status: 'active' },
-  { id: '3',  name: 'Carla Wilson',    type: 'Full-time',  hire_date: '2023-08-18', tier: '25–36 mo', accrual: 5.54, status: 'active' },
-  { id: '4',  name: 'Maria Edwards',   type: 'Full-time',  hire_date: '2024-01-12', tier: '13–24 mo', accrual: 5.08, status: 'active' },
-  { id: '5',  name: 'David Reyes',     type: 'Part-time',  hire_date: '2024-11-01', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '6',  name: 'Sandra Kim',      type: 'Full-time',  hire_date: '2025-06-02', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '7',  name: 'John Popp',       type: 'Consultant', hire_date: '2026-02-10', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '8',  name: 'Tanya Brennan',   type: 'Full-time',  hire_date: '2021-09-14', tier: '36+ mo',   accrual: 6.00, status: 'active' },
-  { id: '9',  name: 'Marcus Webb',     type: 'Full-time',  hire_date: '2023-03-22', tier: '25–36 mo', accrual: 5.54, status: 'active' },
-  { id: '10', name: 'Priya Nair',      type: 'Full-time',  hire_date: '2025-01-06', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '11', name: 'Leon Carter',     type: 'Part-time',  hire_date: '2024-08-19', tier: '13–24 mo', accrual: 5.08, status: 'active' },
-  { id: '12', name: 'Yolanda Pierce',  type: 'Full-time',  hire_date: '2022-11-07', tier: '36+ mo',   accrual: 6.00, status: 'active' },
-  { id: '13', name: 'Derek Simmons',   type: 'Full-time',  hire_date: '2026-04-01', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '14', name: 'Angela Foster',   type: 'Consultant', hire_date: '2025-10-15', tier: '0–12 mo',  accrual: 4.62, status: 'active' },
-  { id: '15', name: 'Chris Nguyen',    type: 'Full-time',  hire_date: '2020-06-30', tier: '36+ mo',   accrual: 6.00, status: 'inactive' },
+  { id: '1',  name: 'Alex Torres',     type: 'Full-time',  hire_date: '2024-06-03', tier: '13–24 mo', accrual: 5.08, status: 'active',   title: 'Housing Coordinator',          dept: 'Programs'        },
+  { id: '2',  name: 'James Thomas',    type: 'Full-time',  hire_date: '2022-03-05', tier: '36+ mo',   accrual: 6.00, status: 'active',   title: 'Senior Case Manager',          dept: 'Client Services' },
+  { id: '3',  name: 'Carla Wilson',    type: 'Full-time',  hire_date: '2023-08-18', tier: '25–36 mo', accrual: 5.54, status: 'active',   title: 'Community Outreach Specialist', dept: 'Programs'        },
+  { id: '4',  name: 'Maria Edwards',   type: 'Full-time',  hire_date: '2024-01-12', tier: '13–24 mo', accrual: 5.08, status: 'active',   title: 'Housing Coordinator',          dept: 'Programs'        },
+  { id: '5',  name: 'David Reyes',     type: 'Part-time',  hire_date: '2024-11-01', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'Administrative Assistant',     dept: 'Operations'      },
+  { id: '6',  name: 'Sandra Kim',      type: 'Full-time',  hire_date: '2025-06-02', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'Compliance Officer',           dept: 'Administration'  },
+  { id: '7',  name: 'John Popp',       type: 'Consultant', hire_date: '2026-02-10', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'IT Consultant',                dept: 'Technology'      },
+  { id: '8',  name: 'Tanya Brennan',   type: 'Full-time',  hire_date: '2021-09-14', tier: '36+ mo',   accrual: 6.00, status: 'active',   title: 'Director of Programs',         dept: 'Programs'        },
+  { id: '9',  name: 'Marcus Webb',     type: 'Full-time',  hire_date: '2023-03-22', tier: '25–36 mo', accrual: 5.54, status: 'active',   title: 'Case Manager',                 dept: 'Client Services' },
+  { id: '10', name: 'Priya Nair',      type: 'Full-time',  hire_date: '2025-01-06', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'Grant Writer',                 dept: 'Development'     },
+  { id: '11', name: 'Leon Carter',     type: 'Part-time',  hire_date: '2024-08-19', tier: '13–24 mo', accrual: 5.08, status: 'active',   title: 'Maintenance Technician',       dept: 'Operations'      },
+  { id: '12', name: 'Yolanda Pierce',  type: 'Full-time',  hire_date: '2022-11-07', tier: '36+ mo',   accrual: 6.00, status: 'active',   title: 'Finance Manager',              dept: 'Finance'         },
+  { id: '13', name: 'Derek Simmons',   type: 'Full-time',  hire_date: '2026-04-01', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'Intake Specialist',            dept: 'Client Services' },
+  { id: '14', name: 'Angela Foster',   type: 'Consultant', hire_date: '2025-10-15', tier: '0–12 mo',  accrual: 4.62, status: 'active',   title: 'Accounting Consultant',        dept: 'Finance'         },
+  { id: '15', name: 'Chris Nguyen',    type: 'Full-time',  hire_date: '2020-06-30', tier: '36+ mo',   accrual: 6.00, status: 'inactive', title: 'Program Coordinator',          dept: 'Programs'        },
 ]
 
 export const MOCK_REPORT_ROWS = [
