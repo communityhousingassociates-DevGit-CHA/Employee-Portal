@@ -4,6 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
+import Link from 'next/link'
+
+const DEMO_EMAIL = 'demo@communityhousingassociates.org'
+const DEMO_PASSWORD = 'CHAdemo2026!'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,6 +21,13 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
+      await fetch('/api/demo-login', { method: 'POST' })
+      router.push('/dashboard')
+      router.refresh()
+      return
+    }
+
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
 
@@ -29,11 +40,17 @@ export default function LoginPage() {
     }
   }
 
+  function fillDemo() {
+    setEmail(DEMO_EMAIL)
+    setPassword(DEMO_PASSWORD)
+    setError('')
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#f0f7f8] px-4">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-8">
-        <Image src="/cha-logo.jpg" alt="Community Housing Associates" width={72} height={72} className="object-contain" />
+      <div className="mb-8">
+        <Image src="/cha-logo.png" alt="Community Housing Associates" width={280} height={46} className="object-contain" />
       </div>
 
       {/* Card */}
@@ -80,12 +97,30 @@ export default function LoginPage() {
           </button>
         </form>
 
+        <div className="mt-4 border-t border-[#f0f7f8] pt-4">
+          <button
+            type="button"
+            onClick={fillDemo}
+            className="w-full text-[13px] text-[#02ACC0] border border-[#d4eef2] rounded-lg py-2 hover:bg-[#f0f7f8] transition-colors font-medium">
+            Use Demo Account
+          </button>
+        </div>
+
         <p className="text-[12px] text-gray-400 text-center mt-5">
           Trouble signing in? Contact your administrator.
         </p>
       </div>
 
-      <p className="text-[11px] text-gray-400 mt-6">
+      {/* Scope document link */}
+      <div className="mt-5">
+        <Link
+          href="/scope"
+          className="text-[12px] text-[#02ACC0] hover:text-[#028a9e] font-medium transition-colors underline underline-offset-2">
+          View Project Scope Document →
+        </Link>
+      </div>
+
+      <p className="text-[11px] text-gray-400 mt-3">
         portal.communityhousingassociates.org · Powered by Globalist Pro
       </p>
     </div>

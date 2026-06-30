@@ -30,6 +30,7 @@ export default function Sidebar({ role = 'employee' }: { role?: Role }) {
   const visibleAdminItems = adminItems.filter(item => item.roles.includes(role))
 
   async function signOut() {
+    await fetch('/api/demo-logout', { method: 'POST' })
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')

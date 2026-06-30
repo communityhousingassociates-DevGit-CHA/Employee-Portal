@@ -23,6 +23,20 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Public routes — no auth required
+  if (pathname.startsWith('/scope') || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout')) {
+    return supabaseResponse
+  }
+
+  // Demo mode bypass
+  const isDemoMode = request.cookies.get('cha-demo')?.value === 'true'
+  if (isDemoMode) {
+    if (pathname === '/login') {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
+    return supabaseResponse
+  }
+
   let user = null
   try {
     const { data } = await supabase.auth.getUser()
