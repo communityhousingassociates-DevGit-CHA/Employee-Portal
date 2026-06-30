@@ -12,6 +12,7 @@ create table employees (
   department text,
   job_title text,
   hire_date date not null,
+  avatar_url text,
   is_active boolean not null default true,
   created_at timestamptz default now()
 );

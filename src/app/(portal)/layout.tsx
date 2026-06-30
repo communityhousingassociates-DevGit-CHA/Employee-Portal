@@ -1,11 +1,13 @@
 import Sidebar from '@/components/Sidebar'
 import { createClient } from '@/lib/supabase/server'
 import Image from 'next/image'
+import Link from 'next/link'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let displayName = 'User'
   let initials = 'U'
   let role: 'employee' | 'accounting_manager' | 'ceo' | 'admin' = 'employee'
+  let avatarUrl: string | null = null
 
   try {
     const supabase = await createClient()
@@ -13,12 +15,13 @@ export default async function PortalLayout({ children }: { children: React.React
     if (user) {
       const { data: emp } = await supabase
         .from('employees')
-        .select('name, role')
+        .select('name, role, avatar_url')
         .eq('user_id', user.id)
         .single()
       displayName = emp?.name || user.email?.split('@')[0] || 'User'
       initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
       if (emp?.role) role = emp.role
+      if (emp?.avatar_url) avatarUrl = emp.avatar_url
     }
   } catch {}
 
@@ -35,12 +38,16 @@ export default async function PortalLayout({ children }: { children: React.React
             <span className="text-[11px] text-white/50 ml-2">communityhousingassociates.org</span>
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 cursor-pointer">
-          <div className="w-7 h-7 rounded-full bg-[#02ACC0] flex items-center justify-center text-[11px] font-bold">
-            {initials}
-          </div>
+        <Link href="/profile" className="ml-auto flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors">
+          {avatarUrl ? (
+            <Image src={avatarUrl} alt={displayName} width={28} height={28} className="w-7 h-7 rounded-full object-cover" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-[#02ACC0] flex items-center justify-center text-[11px] font-bold">
+              {initials}
+            </div>
+          )}
           <span className="text-[13px]">{displayName}</span>
-        </div>
+        </Link>
       </header>
 
       {/* Body */}

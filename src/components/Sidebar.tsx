@@ -71,6 +71,9 @@ export default function Sidebar({ role = 'employee' }: { role?: Role }) {
       )}
 
       <div className="mt-auto border-t border-[#d4eef2] p-3">
+        <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-gray-400 hover:bg-[#f0f7f8] w-full">
+          <span className="w-5 text-center">👤</span> My Profile
+        </Link>
         <button onClick={signOut} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] text-gray-400 hover:bg-[#f0f7f8] w-full">
           <span className="w-5 text-center">🚪</span> Sign Out
         </button>
