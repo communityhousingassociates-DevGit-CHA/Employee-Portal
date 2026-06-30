@@ -23,16 +23,39 @@ export const MOCK_REQUESTS = [
 
 export const MOCK_PENDING_APPROVALS = [
   {
-    id: '1', employee: 'Alex Torres', avatar: 'AT', avatarColor: '#02ACC0',
-    type: 'PTO', start: '2026-07-03', end: '2026-07-04', hours: 16,
-    submitted: '2026-06-25', balance_after: 82.4, note: 'Taking 4th of July weekend.',
+    id: '1', employee: 'Alex Torres',   avatar: 'AT', avatarColor: '#02ACC0',
+    type: 'PTO',      start: '2026-07-03', end: '2026-07-04', hours: 16,
+    balance_current: 98.4,  balance_after: 82.4,
+    submitted: '2026-06-25', note: 'Taking 4th of July weekend.',
     signed_at: 'Jun 25, 2026 · 9:14 AM',
   },
   {
-    id: '2', employee: 'James Thomas', avatar: 'JT', avatarColor: '#7c3aed',
-    type: 'PTO', start: '2026-07-13', end: '2026-07-15', hours: 24,
-    submitted: '2026-06-28', balance_after: 44.2, note: 'Family vacation.',
+    id: '2', employee: 'James Thomas',  avatar: 'JT', avatarColor: '#7c3aed',
+    type: 'PTO',      start: '2026-07-13', end: '2026-07-15', hours: 24,
+    balance_current: 68.2,  balance_after: 44.2,
+    submitted: '2026-06-28', note: 'Family vacation — already booked flights.',
     signed_at: 'Jun 28, 2026 · 2:31 PM',
+  },
+  {
+    id: '3', employee: 'Carla Wilson',  avatar: 'CW', avatarColor: '#0d9488',
+    type: 'Personal', start: '2026-07-07', end: '2026-07-07', hours: 8,
+    balance_current: 55.6,  balance_after: 55.6,
+    submitted: '2026-06-30', note: '',
+    signed_at: 'Jun 30, 2026 · 8:02 AM',
+  },
+  {
+    id: '4', employee: 'Yolanda Pierce', avatar: 'YP', avatarColor: '#b45309',
+    type: 'Sick',     start: '2026-06-30', end: '2026-06-30', hours: 8,
+    balance_current: 26.3,  balance_after: 18.3,
+    submitted: '2026-06-30', note: 'Feeling unwell this morning.',
+    signed_at: 'Jun 30, 2026 · 7:45 AM',
+  },
+  {
+    id: '5', employee: 'Marcus Webb',   avatar: 'MW', avatarColor: '#4f46e5',
+    type: 'Bereavement', start: '2026-07-01', end: '2026-07-03', hours: 24,
+    balance_current: 72.4,  balance_after: 72.4,
+    submitted: '2026-06-30', note: 'Loss of grandmother.',
+    signed_at: 'Jun 30, 2026 · 11:18 AM',
   },
 ]
 
