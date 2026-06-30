@@ -12,3 +12,10 @@ body {
   background: #f0f7f8;
   color: #1f2937;
 }
+
+@media print {
+  nav, header, aside, .print\:hidden { display: none !important; }
+  main { padding: 0 !important; overflow: visible !important; }
+  body { background: white !important; }
+  @page { margin: 1.5cm; }
+}

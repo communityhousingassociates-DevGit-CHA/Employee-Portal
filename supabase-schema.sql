@@ -9,6 +9,8 @@ create table employees (
   email text not null unique,
   role text not null default 'employee', -- employee | accounting_manager | ceo | admin
   employee_type text not null default 'full-time', -- full-time | part-time | consultant
+  department text,
+  job_title text,
   hire_date date not null,
   is_active boolean not null default true,
   created_at timestamptz default now()

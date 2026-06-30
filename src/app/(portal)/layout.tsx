@@ -5,6 +5,7 @@ import Image from 'next/image'
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let displayName = 'User'
   let initials = 'U'
+  let role: 'employee' | 'accounting_manager' | 'ceo' | 'admin' = 'employee'
 
   try {
     const supabase = await createClient()
@@ -12,11 +13,12 @@ export default async function PortalLayout({ children }: { children: React.React
     if (user) {
       const { data: emp } = await supabase
         .from('employees')
-        .select('name')
+        .select('name, role')
         .eq('user_id', user.id)
         .single()
       displayName = emp?.name || user.email?.split('@')[0] || 'User'
       initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+      if (emp?.role) role = emp.role
     }
   } catch {}
 
@@ -43,7 +45,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        <Sidebar role={role} />
         <main className="flex-1 overflow-y-auto p-8">
           {children}
         </main>

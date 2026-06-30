@@ -13,7 +13,9 @@ const INITIAL: Employee[] = MOCK_EMPLOYEES.map((e, i) => ({
 const typeOptions = ['Full-time', 'Part-time', 'Consultant']
 const roleOptions = ['employee', 'accounting_manager', 'ceo', 'admin']
 
-const emptyForm = { name: '', email: '', type: 'Full-time', role: 'employee', hire_date: '' }
+const departmentOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
+
+const emptyForm = { name: '', email: '', type: 'Full-time', role: 'employee', hire_date: '', department: '', job_title: '' }
 
 export default function AdminUsersPage() {
   const [employees, setEmployees] = useState<Employee[]>(INITIAL)
@@ -34,7 +36,7 @@ export default function AdminUsersPage() {
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ name: e.name, email: e.email || '', type: e.type, role: 'employee', hire_date: e.hire_date })
+    setForm({ name: e.name, email: e.email || '', type: e.type, role: 'employee', hire_date: e.hire_date, department: '', job_title: '' })
     setShowForm(true)
   }
 
@@ -194,6 +196,20 @@ export default function AdminUsersPage() {
                   className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]">
                   {roleOptions.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
                 </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Department</label>
+                <select value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+                  className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]">
+                  <option value="">— Select —</option>
+                  {departmentOptions.map(d => <option key={d}>{d}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Job Title</label>
+                <input value={form.job_title} onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))}
+                  placeholder="e.g. Housing Specialist"
+                  className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
               <div className="col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Hire Date</label>
