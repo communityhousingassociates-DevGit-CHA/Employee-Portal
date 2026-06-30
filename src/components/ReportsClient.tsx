@@ -73,11 +73,38 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
             {isManager ? 'All staff — Community Housing Associates' : 'My leave summary'}
           </p>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors flex items-center gap-2">
-          ⬇ Export PDF
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              const headers = ['Employee', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
+              const csvRows = filteredRows.map(r => [
+                r.name,
+                r.pto_used,
+                r.pto_bal,
+                `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`,
+                r.sick_used,
+                r.sick_bal,
+                r.personal_bal,
+                r.accrual,
+              ])
+              const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
+              const blob = new Blob([csv], { type: 'text/csv' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `CHA-Leave-Report-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+            className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors flex items-center gap-2">
+            ⬇ Export CSV
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors flex items-center gap-2">
+            ⬇ Export PDF
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
