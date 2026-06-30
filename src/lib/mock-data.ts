@@ -55,15 +55,15 @@ export const MOCK_EMPLOYEES = [
 ]
 
 export const MOCK_REPORT_ROWS = [
-  { name: 'Alex Torres',    pto_used: 16, sick_used: 8,  personal_used: 8,  pto_bal: 98.4,  sick_bal: 25.8 },
-  { name: 'James Thomas',   pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 68.2,  sick_bal: 22.1 },
-  { name: 'Carla Wilson',   pto_used: 16, sick_used: 0,  personal_used: 0,  pto_bal: 55.6,  sick_bal: 18.4 },
-  { name: 'Maria Edwards',  pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 112.4, sick_bal: 29.5 },
-  { name: 'David Reyes',    pto_used: 0,  sick_used: 0,  personal_used: 8,  pto_bal: 44.0,  sick_bal: 14.7 },
-  { name: 'Sandra Kim',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 96.0,  sick_bal: 29.5 },
-  { name: 'Tanya Brennan',  pto_used: 24, sick_used: 8,  personal_used: 0,  pto_bal: 134.0, sick_bal: 33.2 },
-  { name: 'Marcus Webb',    pto_used: 8,  sick_used: 0,  personal_used: 8,  pto_bal: 72.4,  sick_bal: 19.6 },
-  { name: 'Priya Nair',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 27.7,  sick_bal: 14.8 },
-  { name: 'Leon Carter',    pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 51.2,  sick_bal: 11.1 },
-  { name: 'Yolanda Pierce', pto_used: 32, sick_used: 16, personal_used: 8,  pto_bal: 88.6,  sick_bal: 26.3 },
+  { name: 'Alex Torres',    pto_used: 16, sick_used: 8,  personal_used: 8,  pto_bal: 98.4,  sick_bal: 25.8, personal_bal: 16, accrual: 5.08 },
+  { name: 'James Thomas',   pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 68.2,  sick_bal: 22.1, personal_bal: 24, accrual: 6.00 },
+  { name: 'Carla Wilson',   pto_used: 16, sick_used: 0,  personal_used: 0,  pto_bal: 55.6,  sick_bal: 18.4, personal_bal: 24, accrual: 5.54 },
+  { name: 'Maria Edwards',  pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 112.4, sick_bal: 29.5, personal_bal: 16, accrual: 5.08 },
+  { name: 'David Reyes',    pto_used: 0,  sick_used: 0,  personal_used: 8,  pto_bal: 44.0,  sick_bal: 14.7, personal_bal: 16, accrual: 4.62 },
+  { name: 'Sandra Kim',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 96.0,  sick_bal: 29.5, personal_bal: 24, accrual: 4.62 },
+  { name: 'Tanya Brennan',  pto_used: 24, sick_used: 8,  personal_used: 0,  pto_bal: 134.0, sick_bal: 33.2, personal_bal: 24, accrual: 6.00 },
+  { name: 'Marcus Webb',    pto_used: 8,  sick_used: 0,  personal_used: 8,  pto_bal: 72.4,  sick_bal: 19.6, personal_bal: 8,  accrual: 5.54 },
+  { name: 'Priya Nair',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 27.7,  sick_bal: 14.8, personal_bal: 24, accrual: 4.62 },
+  { name: 'Leon Carter',    pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 51.2,  sick_bal: 11.1, personal_bal: 24, accrual: 5.08 },
+  { name: 'Yolanda Pierce', pto_used: 32, sick_used: 16, personal_used: 8,  pto_bal: 88.6,  sick_bal: 26.3, personal_bal: 8,  accrual: 6.00 },
 ]
