@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const navItems = [
   { href: '/admin', icon: '🛡️', label: 'Admin Overview', exact: true },
@@ -16,7 +17,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: emp } = await supabase
+      const admin = createAdminClient()
+      const { data: emp } = await admin
         .from('employees')
         .select('name')
         .eq('user_id', user.id)

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ProfileForm from '@/components/ProfileForm'
 
@@ -7,7 +8,8 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: emp } = await supabase
+  const admin = createAdminClient()
+  const { data: emp } = await admin
     .from('employees')
     .select('id, name, email, role, employee_type, department, job_title, hire_date, avatar_url')
     .eq('user_id', user.id)

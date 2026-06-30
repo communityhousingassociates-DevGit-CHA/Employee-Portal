@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { MOCK_BALANCES, MOCK_REQUESTS } from '@/lib/mock-data'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const statusStyle: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -16,7 +17,8 @@ export default async function DashboardPage() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: emp } = await supabase.from('employees').select('name').eq('user_id', user.id).single()
+      const admin = createAdminClient()
+      const { data: emp } = await admin.from('employees').select('name').eq('user_id', user.id).single()
       const name = emp?.name || user.email?.split('@')[0] || ''
       firstName = name.split(' ')[0] || 'there'
     }

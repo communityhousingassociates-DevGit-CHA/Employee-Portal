@@ -1,5 +1,6 @@
 import Sidebar from '@/components/Sidebar'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -13,7 +14,8 @@ export default async function PortalLayout({ children }: { children: React.React
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data: emp } = await supabase
+      const admin = createAdminClient()
+      const { data: emp } = await admin
         .from('employees')
         .select('name, role, avatar_url')
         .eq('user_id', user.id)

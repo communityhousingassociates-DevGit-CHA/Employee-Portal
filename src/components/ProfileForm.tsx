@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
+import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl } from '@/app/actions/profile'
 
 type Profile = {
   id: string
@@ -50,15 +50,19 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
   async function handleSave() {
     setSaving(true)
     setError('')
-    const supabase = createClient()
-    const { error: err } = await supabase
-      .from('employees')
-      .update({ name: form.name, job_title: form.job_title || null, department: form.department || null })
-      .eq('id', profile.id)
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    try {
+      await updateProfile({
+        name: form.name,
+        job_title: form.job_title || null,
+        department: form.department || null,
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -66,15 +70,27 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
     if (!file) return
     setUploading(true)
     setError('')
-    const supabase = createClient()
-    const ext = file.name.split('.').pop()
-    const path = `${userId}.${ext}`
-    const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
-    if (upErr) { setError('Photo upload failed — make sure the "avatars" storage bucket exists in Supabase.'); setUploading(false); return }
-    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path)
-    await supabase.from('employees').update({ avatar_url: publicUrl }).eq('id', profile.id)
-    setAvatarUrl(publicUrl + '?t=' + Date.now())
-    setUploading(false)
+    try {
+      const { signedUrl, path } = await getSignedUploadUrl(file.name)
+      const res = await fetch(signedUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      if (!res.ok) throw new Error('Upload failed')
+      const publicUrl = await getPublicAvatarUrl(path)
+      await updateAvatarUrl(publicUrl)
+      setAvatarUrl(publicUrl + '?t=' + Date.now())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Photo upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    try {
+      await updateAvatarUrl(null)
+      setAvatarUrl(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to remove photo')
+    }
   }
 
   return (
@@ -94,13 +110,8 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5 flex items-center gap-6">
         <div className="relative flex-shrink-0">
           {avatarUrl ? (
-            <Image
-              src={avatarUrl}
-              alt={form.name}
-              width={80}
-              height={80}
-              className="w-20 h-20 rounded-full object-cover border-2 border-[#d4eef2]"
-            />
+            <Image src={avatarUrl} alt={form.name} width={80} height={80}
+              className="w-20 h-20 rounded-full object-cover border-2 border-[#d4eef2]" />
           ) : (
             <div className="w-20 h-20 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[24px] font-black">
               {initials}
@@ -111,22 +122,13 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
           <p className="text-[14px] font-semibold text-[#0b2b35] mb-0.5">{form.name}</p>
           <p className="text-[12px] text-gray-400 mb-3">{profile.email}</p>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors disabled:opacity-50"
-            >
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors disabled:opacity-50">
               {uploading ? 'Uploading…' : avatarUrl ? 'Change Photo' : 'Upload Photo'}
             </button>
             {avatarUrl && (
-              <button
-                onClick={async () => {
-                  const supabase = createClient()
-                  await supabase.from('employees').update({ avatar_url: null }).eq('id', profile.id)
-                  setAvatarUrl(null)
-                }}
-                className="text-[12px] text-red-400 hover:text-red-600 transition-colors"
-              >
+              <button onClick={handleRemovePhoto}
+                className="text-[12px] text-red-400 hover:text-red-600 transition-colors">
                 Remove
               </button>
             )}
@@ -142,28 +144,19 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Full Name</label>
-            <input
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]"
-            />
+            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Job Title</label>
-            <input
-              value={form.job_title}
-              onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))}
+            <input value={form.job_title} onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))}
               placeholder="e.g. Housing Specialist"
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]"
-            />
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Department</label>
-            <select
-              value={form.department}
-              onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]"
-            >
+            <select value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]">
               <option value="">— Select —</option>
               {DEPT_OPTIONS.map(d => <option key={d}>{d}</option>)}
             </select>
@@ -179,7 +172,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
             { label: 'Email', value: profile.email },
             { label: 'Role', value: ROLE_LABELS[profile.role] || profile.role },
             { label: 'Employee Type', value: profile.employee_type },
-            { label: 'Hire Date', value: new Date(profile.hire_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) },
+            { label: 'Hire Date', value: new Date(profile.hire_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) },
           ].map(f => (
             <div key={f.label} className="flex flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wide font-semibold text-gray-400">{f.label}</span>
@@ -189,11 +182,8 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
         </div>
       </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="bg-[#02ACC0] text-white text-[13px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-50"
-      >
+      <button onClick={handleSave} disabled={saving}
+        className="bg-[#02ACC0] text-white text-[13px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-50">
         {saving ? 'Saving…' : 'Save Changes'}
       </button>
     </div>
