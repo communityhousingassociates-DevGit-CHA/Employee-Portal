@@ -14,6 +14,11 @@ const portalItems = [
   { href: '/calendar', icon: '📅', label: 'Leave Calendar' },
 ]
 
+const comingSoonItems = [
+  { href: '/onboarding', icon: '📋', label: 'Onboarding',  note: 'Coming Soon' },
+  { href: '/documents',  icon: '📁', label: 'Documents',   note: 'Phase 2'     },
+]
+
 type AdminItem = { href: string; icon: string; label: string; badge?: number; roles: Role[] }
 
 const adminItems: AdminItem[] = [
@@ -51,6 +56,25 @@ export default function Sidebar({ role = 'employee' }: { role?: Role }) {
             <span className="w-5 text-center">{item.icon}</span>
             {item.label}
           </Link>
+        ))}
+      </div>
+
+      {/* Coming soon placeholders */}
+      <div className="px-3 pb-1">
+        {comingSoonItems.map(item => (
+          <div key={item.href} className="relative group">
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium mb-0.5 text-gray-300 cursor-not-allowed select-none">
+              <span className="w-5 text-center opacity-50">{item.icon}</span>
+              {item.label}
+              <span className="ml-auto text-[9px] font-bold bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">{item.note}</span>
+            </div>
+            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 hidden group-hover:block z-50 pointer-events-none">
+              <div className="bg-[#0b2b35] text-white text-[11px] font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-lg">
+                {item.note} — not yet available
+                <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-[#0b2b35]" />
+              </div>
+            </div>
+          </div>
         ))}
       </div>
 
