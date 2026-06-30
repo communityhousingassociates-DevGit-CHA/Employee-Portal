@@ -36,7 +36,8 @@ export default function ScopePage() {
           <h2 className="text-[20px] font-bold text-white mb-2">Try the portal now</h2>
           <p className="text-[13px] text-gray-400 mb-6">
             Log in below using the demo account to explore all Phase 1 features. The demo is pre-populated with
-            realistic data for <strong className="text-white">Alex Torres</strong>, Housing Coordinator.
+            realistic data for <strong className="text-white">Alex Torres</strong>, CEO — with full access to the
+            approval queue, employee roster, and payroll reports.
           </p>
           <div className="bg-white/10 rounded-xl p-5 mb-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -86,16 +87,56 @@ export default function ScopePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { icon: '🔐', title: 'Secure Login', desc: 'Email + password auth with role-based access (Employee, CEO, Admin)' },
-              { icon: '📊', title: 'Leave Dashboard', desc: 'Real-time PTO, Sick, and Personal balance cards with accrual rates' },
-              { icon: '📝', title: 'Leave Requests', desc: 'Submit any leave type with a digital signature and optional note' },
-              { icon: '✅', title: 'Approval Queue', desc: 'Nico Sanders reviews and approves/denies all requests in one view' },
-              { icon: '📋', title: 'Request History', desc: 'Full filterable log of all past leave with status and approver' },
-              { icon: '🕐', title: 'Timesheets', desc: 'Bi-weekly editable time grid with digital signature for each pay period' },
-              { icon: '📅', title: 'Team Calendar', desc: 'Visual monthly calendar showing all approved team leave' },
-              { icon: '📈', title: 'Payroll Reports', desc: 'Bi-weekly leave summary exportable to PDF for payroll processing' },
-              { icon: '👥', title: 'Employee Roster', desc: 'Full employee list with accrual tier management and status tracking' },
-              { icon: '⚙️', title: 'Admin Panel', desc: 'User creation, role assignment, and system configuration' },
+              {
+                icon: '🔐',
+                title: 'Secure Login',
+                desc: 'Email + password auth with role-based access (Employee, CEO, Admin). Demo mode for client previews.',
+              },
+              {
+                icon: '📊',
+                title: 'Dashboard',
+                desc: 'Dynamic greeting, live pay period progress bar, PTO/Sick/Personal balance cards, recent requests, and CEO pending-approval banner.',
+              },
+              {
+                icon: '📝',
+                title: 'Leave Requests',
+                desc: 'Visual leave-type selector cards showing live balance, auto-fills hours from date range, team conflict checker, inline digital signature, and balance preview panel.',
+              },
+              {
+                icon: '✅',
+                title: 'Approval Queue',
+                desc: 'CEO queue with urgency badges, balance-before/after progress bars, employee notes, two-step approve or deny with required reason and CEO countersignature.',
+              },
+              {
+                icon: '📋',
+                title: 'Request History',
+                desc: 'Stat cards, status and leave-type filters, expandable rows revealing employee notes and denial reasons with approver attribution.',
+              },
+              {
+                icon: '🕐',
+                title: 'Timesheets',
+                desc: 'Bi-weekly editable time grid with pay period navigation, leave-row highlighting, incomplete-row warnings, hours progress bar, and digital signature.',
+              },
+              {
+                icon: '📅',
+                title: 'Team Calendar',
+                desc: 'Color-coded monthly grid showing team leave, holidays, and your own scheduled time off. Upcoming leave sidebar with approval status.',
+              },
+              {
+                icon: '📈',
+                title: 'Payroll Reports',
+                desc: 'Per-employee stacked leave bars, accrual rates, PTO cap warning at 75%, personal balance column, and one-click PDF export with CHA header.',
+              },
+              {
+                icon: '👥',
+                title: 'Employee Roster',
+                desc: 'Live search, employment-type filter, computed tenure, expandable rows showing individual PTO/Sick/Personal balances drawn from payroll data.',
+              },
+              {
+                icon: '⚙️',
+                title: 'Admin Panel',
+                desc: 'User creation, role assignment (Employee / CEO / Admin), and system configuration — accessible only to Admin accounts.',
+              },
             ].map(f => (
               <div key={f.title} className="flex gap-3 items-start p-4 bg-[#f8fcfd] rounded-xl border border-[#e8f4f7]">
                 <span className="text-[22px] leading-none mt-0.5">{f.icon}</span>
@@ -103,6 +144,140 @@ export default function ScopePage() {
                   <p className="text-[13px] font-semibold text-[#0b2b35]">{f.title}</p>
                   <p className="text-[12px] text-gray-500 mt-0.5 leading-relaxed">{f.desc}</p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Portal Pages Detail */}
+        <div className="bg-white rounded-2xl border border-[#d4eef2] p-8 mb-6 shadow-sm">
+          <p className="text-[11px] uppercase tracking-widest font-semibold text-[#02ACC0] mb-3">Portal Pages</p>
+          <h2 className="text-[20px] font-bold text-[#0b2b35] mb-6">Every screen, fully built</h2>
+
+          <div className="space-y-5">
+            {[
+              {
+                page: '/dashboard',
+                label: 'Dashboard',
+                color: 'bg-[#02ACC0]',
+                bullets: [
+                  'Dynamic greeting with first name and live date',
+                  'Pay period progress bar (days elapsed vs. days remaining)',
+                  'Three balance cards — PTO, Sick, Personal — each with accrual rate badge and days equivalent',
+                  'Recent leave requests with color-coded status borders',
+                  'Timesheet status card with due-today indicator',
+                  'Upcoming leave preview and quick-links panel',
+                  'Amber banner for CEO when pending approvals are waiting',
+                ],
+              },
+              {
+                page: '/request',
+                label: 'Leave Request',
+                color: 'bg-violet-500',
+                bullets: [
+                  '5 leave type cards (PTO, Sick, Personal, Bereavement, Jury Duty) each showing current balance',
+                  'Start / end date pickers with auto-fill button calculating workdays × 8 hrs',
+                  'Live balance preview — current → remaining with progress bar; red if negative',
+                  'Team coverage panel — flags teammates already approved during the same dates',
+                  'Optional note field for approver context',
+                  'Click-to-sign digital signature with employee name and timestamp',
+                  'Submit button enabled only when all required fields are complete and signed',
+                  'Confirmation screen with link to history and option to submit another',
+                ],
+              },
+              {
+                page: '/history',
+                label: 'Request History',
+                color: 'bg-amber-400',
+                bullets: [
+                  'Stat strip: total requests, approved count, pending count, total approved hours',
+                  'Status filter tabs (All / Pending / Approved / Denied) with live counts',
+                  'Leave-type dropdown filter',
+                  'Expandable rows showing employee note and denial reason with approver name',
+                  'Color bar per leave type for instant visual scanning',
+                  'Relative timestamps ("3d ago", "2mo ago") on each request',
+                ],
+              },
+              {
+                page: '/approvals',
+                label: 'Approval Queue',
+                color: 'bg-emerald-500',
+                bullets: [
+                  'Stats strip — pending count, total hours in queue, oldest request age',
+                  'Pending and Reviewed tabs',
+                  'Rich approval card: urgency badge, hours grid, balance-after progress bar, employee note',
+                  'Two-step approve: inline confirmation with CEO name + date before committing',
+                  'Two-step deny: requires typed reason before confirming denial',
+                  'Reviewed cards archived with outcome, reason, and approver signature',
+                ],
+              },
+              {
+                page: '/timesheet',
+                label: 'Timesheet',
+                color: 'bg-[#0b2b35]',
+                bullets: [
+                  'Pay period navigator (‹ ›) with bi-weekly labels',
+                  'Week 1 / Week 2 sections each with daily hour inputs and subtotals',
+                  'Leave rows highlighted purple with Leave badge; incomplete rows flagged amber',
+                  'Four stat cards: Regular Hours, Leave Hours, Total, Remaining to 80',
+                  'Progress bar — teal under 80 hrs, green at 80, red if over',
+                  'Digital signature section with submitted confirmation state',
+                ],
+              },
+              {
+                page: '/calendar',
+                label: 'Team Calendar',
+                color: 'bg-rose-400',
+                bullets: [
+                  'Full monthly grid with navigation — defaults to next month',
+                  'Color-coded event chips: PTO (teal), Sick (violet), Personal (amber), Bereavement (slate), Holiday (rose), My Leave (navy)',
+                  'Today highlighted with teal ring; own leave days shown in dark navy',
+                  'Upcoming Leave sidebar for next 30 days with approval status badges',
+                  'My Scheduled Leave dark card linking to full request history',
+                ],
+              },
+              {
+                page: '/reports',
+                label: 'Payroll Reports',
+                color: 'bg-teal-500',
+                bullets: [
+                  'Pay period selector (6 rolling bi-weekly periods)',
+                  'Leave type filter tabs: All / PTO / Sick / Personal',
+                  'Four stat cards: PTO Used, Sick Used, Personal Used, Employees with Leave',
+                  'Per-employee stacked horizontal bars (teal=PTO, violet=Sick, amber=Personal)',
+                  'Table with accrual rate, PTO cap % with amber warning ≥ 75%, personal balance',
+                  "PDF export: print-optimized layout with CHA logo header and today's date",
+                ],
+              },
+              {
+                page: '/employees',
+                label: 'Employee Roster',
+                color: 'bg-indigo-500',
+                bullets: [
+                  'Stat cards: Active, Full-time, Part-time, Consultants',
+                  'Live search by name, title, or department',
+                  'Employment type tabs (All / Full-time / Part-time / Consultant)',
+                  'Include Inactive toggle',
+                  'Computed tenure (X yr Y mo) from hire date vs. today',
+                  'Hash-based avatar colors for consistent visual identity',
+                  'Expandable detail rows showing PTO, Sick, Personal balance cards from payroll data',
+                ],
+              },
+            ].map(p => (
+              <div key={p.page} className="border border-[#e8f4f7] rounded-xl overflow-hidden">
+                <div className="flex items-center gap-3 px-5 py-3 bg-[#f8fcfd] border-b border-[#e8f4f7]">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${p.color}`} />
+                  <p className="text-[13px] font-bold text-[#0b2b35]">{p.label}</p>
+                  <code className="text-[11px] text-gray-400 ml-1">{p.page}</code>
+                </div>
+                <ul className="px-5 py-4 space-y-1.5">
+                  {p.bullets.map(b => (
+                    <li key={b} className="flex gap-2 text-[12px] text-gray-500">
+                      <span className="text-[#02ACC0] flex-shrink-0 mt-0.5">›</span>
+                      {b}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
@@ -146,7 +321,7 @@ export default function ScopePage() {
           <h2 className="text-[20px] font-bold text-[#0b2b35] mb-5">Built to last, built to own</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             {[
-              { label: 'Framework', value: 'Next.js 15 (React)' },
+              { label: 'Framework', value: 'Next.js 16 (React)' },
               { label: 'Authentication', value: 'Supabase Auth' },
               { label: 'Database', value: 'Supabase (PostgreSQL)' },
               { label: 'Hosting', value: 'Vercel' },
