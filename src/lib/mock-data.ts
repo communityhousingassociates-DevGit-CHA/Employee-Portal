@@ -14,11 +14,15 @@ export const MOCK_BALANCES = {
 }
 
 export const MOCK_REQUESTS = [
-  { id: '1', type: 'PTO', start: '2026-07-03', end: '2026-07-04', hours: 16, submitted: '2026-06-25', status: 'pending', approved_by: null },
-  { id: '2', type: 'Sick', start: '2026-06-11', end: '2026-06-11', hours: 8, submitted: '2026-06-11', status: 'approved', approved_by: 'N. Sanders' },
-  { id: '3', type: 'PTO', start: '2026-05-26', end: '2026-05-27', hours: 16, submitted: '2026-05-20', status: 'approved', approved_by: 'N. Sanders' },
-  { id: '4', type: 'Personal', start: '2026-04-04', end: '2026-04-04', hours: 8, submitted: '2026-04-01', status: 'approved', approved_by: 'N. Sanders' },
-  { id: '5', type: 'Bereavement', start: '2026-02-03', end: '2026-02-05', hours: 24, submitted: '2026-02-03', status: 'approved', approved_by: 'N. Sanders' },
+  { id: '1', type: 'PTO',         start: '2026-07-03', end: '2026-07-04', hours: 16, submitted: '2026-06-25', status: 'pending',  approved_by: null,         note: 'Taking 4th of July weekend.' },
+  { id: '2', type: 'Sick',        start: '2026-06-11', end: '2026-06-11', hours: 8,  submitted: '2026-06-11', status: 'approved', approved_by: 'N. Sanders', note: '' },
+  { id: '3', type: 'PTO',         start: '2026-05-26', end: '2026-05-27', hours: 16, submitted: '2026-05-20', status: 'approved', approved_by: 'N. Sanders', note: 'Memorial Day extended weekend.' },
+  { id: '4', type: 'Personal',    start: '2026-04-04', end: '2026-04-04', hours: 8,  submitted: '2026-04-01', status: 'approved', approved_by: 'N. Sanders', note: '' },
+  { id: '5', type: 'Bereavement', start: '2026-02-03', end: '2026-02-05', hours: 24, submitted: '2026-02-03', status: 'approved', approved_by: 'N. Sanders', note: 'Loss of grandmother.' },
+  { id: '6', type: 'PTO',         start: '2025-12-24', end: '2025-12-26', hours: 24, submitted: '2025-12-10', status: 'approved', approved_by: 'N. Sanders', note: 'Christmas holiday.' },
+  { id: '7', type: 'Sick',        start: '2025-11-05', end: '2025-11-05', hours: 8,  submitted: '2025-11-05', status: 'approved', approved_by: 'N. Sanders', note: '' },
+  { id: '8', type: 'Jury Duty',   start: '2025-10-14', end: '2025-10-15', hours: 16, submitted: '2025-10-01', status: 'approved', approved_by: 'N. Sanders', note: 'Jury summons received.' },
+  { id: '9', type: 'PTO',         start: '2025-08-11', end: '2025-08-13', hours: 24, submitted: '2025-07-28', status: 'denied',   approved_by: 'N. Sanders', note: 'Summer vacation.', deny_reason: 'Insufficient coverage during this period.' },
 ]
 
 export const MOCK_PENDING_APPROVALS = [
