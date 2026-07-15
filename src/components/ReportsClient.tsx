@@ -23,9 +23,32 @@ export type ReportRow = {
   accrual: number
 }
 
-export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; isManager: boolean }) {
+export type TimesheetSummaryRow = {
+  name: string
+  initials: string
+  reg_hours: number
+  leave_hours: number
+  status: string
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  approved:  'bg-emerald-100 text-emerald-700',
+  submitted: 'bg-amber-100 text-amber-700',
+  draft:     'bg-gray-100 text-gray-500',
+}
+
+export default function ReportsClient({
+  rows,
+  timesheetRows,
+  isManager,
+}: {
+  rows: ReportRow[]
+  timesheetRows: TimesheetSummaryRow[]
+  isManager: boolean
+}) {
   const [period, setPeriod] = useState(PAY_PERIODS[0].value)
   const [typeFilter, setTypeFilter] = useState('All')
+  const [tab, setTab] = useState<'leave' | 'timesheets'>('leave')
 
   const selectedPeriod = PAY_PERIODS.find(p => p.value === period)!
 
@@ -41,6 +64,46 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
   const totalPersonal = filteredRows.reduce((s, r) => s + r.personal_used, 0)
   const maxUsed       = Math.max(...filteredRows.map(r => r.pto_used + r.sick_used + r.personal_used), 1)
   const rowsWithUsage = filteredRows.filter(r => r.pto_used + r.sick_used + r.personal_used > 0)
+
+  const tsTotalReg       = timesheetRows.reduce((s, r) => s + r.reg_hours, 0)
+  const tsTotalLeave     = timesheetRows.reduce((s, r) => s + r.leave_hours, 0)
+  const tsSubmittedCount = timesheetRows.filter(r => r.status === 'submitted' || r.status === 'approved').length
+  const tsMissingCount   = timesheetRows.filter(r => r.status === 'draft').length
+
+  function exportLeaveCsv() {
+    const headers = ['Employee', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
+    const csvRows = filteredRows.map(r => [
+      r.name,
+      r.pto_used,
+      r.pto_bal,
+      `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`,
+      r.sick_used,
+      r.sick_bal,
+      r.personal_bal,
+      r.accrual,
+    ])
+    const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CHA-Leave-Report-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportTimesheetsCsv() {
+    const headers = ['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status']
+    const csvRows = timesheetRows.map(r => [r.name, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status])
+    const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CHA-Team-Timesheets-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <>
@@ -59,7 +122,9 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
       <div className="print-show mb-6 pb-4 border-b border-gray-200">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>Leave Report — {selectedPeriod.label}</h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>
+          {tab === 'leave' ? 'Leave Report' : 'Team Timesheets'} — {selectedPeriod.label}
+        </h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
           Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
@@ -68,34 +133,16 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
       {/* Screen header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6 no-print">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Leave Reports</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">{tab === 'leave' ? 'Leave Reports' : 'Team Timesheets'}</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">
-            {isManager ? 'All staff — Community Housing Associates' : 'My leave summary'}
+            {tab === 'leave'
+              ? (isManager ? 'All staff — Community Housing Associates' : 'My leave summary')
+              : 'All staff — Community Housing Associates'}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
-            onClick={() => {
-              const headers = ['Employee', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
-              const csvRows = filteredRows.map(r => [
-                r.name,
-                r.pto_used,
-                r.pto_bal,
-                `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`,
-                r.sick_used,
-                r.sick_bal,
-                r.personal_bal,
-                r.accrual,
-              ])
-              const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
-              const blob = new Blob([csv], { type: 'text/csv' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `CHA-Leave-Report-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
+            onClick={tab === 'leave' ? exportLeaveCsv : exportTimesheetsCsv}
             className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors flex items-center gap-2">
             ⬇ Export CSV
           </button>
@@ -106,6 +153,22 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
           </button>
         </div>
       </div>
+
+      {/* Tabs — manager only, group timesheet view lives alongside leave reports */}
+      {isManager && (
+        <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 mb-4 w-fit no-print">
+          {([['leave', 'Leave Reports'], ['timesheets', 'Timesheets']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${
+                tab === value ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       {isManager && (
@@ -118,6 +181,7 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
+          {tab === 'leave' && (
           <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1">
             {['All', 'PTO', 'Sick', 'Personal'].map(t => (
               <button
@@ -130,9 +194,83 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
               </button>
             ))}
           </div>
+          )}
         </div>
       )}
 
+      {tab === 'timesheets' ? (
+      <>
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: 'Regular Hours', value: `${tsTotalReg} hrs`,   color: '#0b2b35' },
+          { label: 'Leave Hours',   value: `${tsTotalLeave} hrs`, color: '#7c3aed' },
+          { label: 'Submitted',     value: tsSubmittedCount,      color: '#059669' },
+          { label: 'Not Submitted', value: tsMissingCount,        color: tsMissingCount > 0 ? '#d97706' : '#0b2b35' },
+        ].map(s => (
+          <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
+            <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+        <div className="px-5 py-4 border-b border-[#d4eef2]">
+          <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {selectedPeriod.label}</h2>
+          <p className="text-[11px] text-gray-400 mt-0.5">Regular + leave hours logged per employee this pay period</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
+                {['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status'].map(h => (
+                  <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {timesheetRows.map(r => (
+                <tr key={r.name} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
+                        {r.initials}
+                      </div>
+                      <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
+                  <td className="px-5 py-3">
+                    {r.leave_hours
+                      ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span>
+                      : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours} hrs</td>
+                  <td className="px-5 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[r.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      {r.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-[#d4eef2] bg-[#f9fefe]">
+                <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
+                <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg} hrs</td>
+                <td className="px-5 py-3 font-bold text-violet-600">{tsTotalLeave} hrs</td>
+                <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave} hrs</td>
+                <td className="px-5 py-3" />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      </>
+      ) : (
+      <>
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
@@ -302,6 +440,8 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
           </table>
         </div>
       </div>
+      </>
+      )}
     </>
   )
 }

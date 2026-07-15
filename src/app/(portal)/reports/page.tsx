@@ -1,5 +1,5 @@
-import { MOCK_REPORT_ROWS, MOCK_USER } from '@/lib/mock-data'
-import ReportsClient, { type ReportRow } from '@/components/ReportsClient'
+import { MOCK_REPORT_ROWS, MOCK_TIMESHEET_ROWS, MOCK_USER } from '@/lib/mock-data'
+import ReportsClient, { type ReportRow, type TimesheetSummaryRow } from '@/components/ReportsClient'
 import { createClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 
@@ -44,5 +44,7 @@ export default async function ReportsPage() {
       : MOCK_REPORT_ROWS.filter(r => r.name === currentUserName)
   ).map(r => ({ ...r, initials: toInitials(r.name) }))
 
-  return <ReportsClient rows={rows} isManager={isManager} />
+  const timesheetRows: TimesheetSummaryRow[] = MOCK_TIMESHEET_ROWS.map(r => ({ ...r, initials: toInitials(r.name) }))
+
+  return <ReportsClient rows={rows} timesheetRows={timesheetRows} isManager={isManager} />
 }

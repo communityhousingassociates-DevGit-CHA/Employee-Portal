@@ -77,10 +77,44 @@ export default function TimesheetPage() {
   const week1Total = week1.reduce((s, r) => s + r.reg + r.leave, 0)
   const week2Total = week2.reduce((s, r) => s + r.reg + r.leave, 0)
 
+  function exportCsv() {
+    const headers = ['Date', 'Description', 'Regular Hours', 'Leave Hours', 'Total Hours']
+    const csvRows = rows.map(r => [r.full, r.desc, r.reg, r.leave, r.reg + r.leave])
+    csvRows.push(['', 'Totals', totalReg, totalLeave, total])
+    const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `CHA-Timesheet-${MOCK_USER.name.replace(/\s+/g, '-')}-${period.label.replace(/[^a-z0-9]/gi, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-show { display: block !important; }
+          body { background: white !important; }
+          input { border: none !important; background: transparent !important; padding: 2px 0 !important; }
+        }
+        @media screen { .print-show { display: none !important; } }
+      `}</style>
+
+      {/* Print-only header */}
+      <div className="print-show mb-6 pb-4 border-b border-gray-200">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>Timesheet — {period.label}</h1>
+        <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+          {MOCK_USER.name} · Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+        </p>
+      </div>
+
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6 no-print">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet</h1>
           <div className="flex items-center gap-2 mt-1">
@@ -96,7 +130,15 @@ export default function TimesheetPage() {
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={exportCsv}
+            className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
+            ⬇ Export CSV
+          </button>
+          <button onClick={() => window.print()}
+            className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
+            ⬇ Export PDF
+          </button>
           <button onClick={saveDraft}
             className="border border-[#d4eef2] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
             {savedDraft ? '✓ Saved' : 'Save Draft'}

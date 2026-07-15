@@ -94,3 +94,17 @@ export const MOCK_REPORT_ROWS = [
   { name: 'Leon Carter',    pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 51.2,  sick_bal: 11.1, personal_bal: 24, accrual: 5.08 },
   { name: 'Yolanda Pierce', pto_used: 32, sick_used: 16, personal_used: 8,  pto_bal: 88.6,  sick_bal: 26.3, personal_bal: 8,  accrual: 6.00 },
 ]
+
+export const MOCK_TIMESHEET_ROWS = [
+  { name: 'Alex Torres',    reg_hours: 64, leave_hours: 16, status: 'approved'  },
+  { name: 'James Thomas',   reg_hours: 80, leave_hours: 0,  status: 'approved'  },
+  { name: 'Carla Wilson',   reg_hours: 64, leave_hours: 16, status: 'submitted' },
+  { name: 'Maria Edwards',  reg_hours: 72, leave_hours: 8,  status: 'approved'  },
+  { name: 'David Reyes',    reg_hours: 32, leave_hours: 8,  status: 'submitted' },
+  { name: 'Sandra Kim',     reg_hours: 80, leave_hours: 0,  status: 'approved'  },
+  { name: 'Tanya Brennan',  reg_hours: 56, leave_hours: 24, status: 'approved'  },
+  { name: 'Marcus Webb',    reg_hours: 64, leave_hours: 8,  status: 'submitted' },
+  { name: 'Priya Nair',     reg_hours: 80, leave_hours: 0,  status: 'draft'     },
+  { name: 'Leon Carter',    reg_hours: 24, leave_hours: 8,  status: 'approved'  },
+  { name: 'Yolanda Pierce', reg_hours: 48, leave_hours: 32, status: 'submitted' },
+]
