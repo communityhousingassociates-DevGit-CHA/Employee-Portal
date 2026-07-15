@@ -80,7 +80,7 @@ export default function TimesheetPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet</h1>
           <div className="flex items-center gap-2 mt-1">
@@ -111,7 +111,7 @@ export default function TimesheetPage() {
       </div>
 
       {/* Stats strip */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Regular',   value: `${totalReg} hrs`,            color: 'text-[#0b2b35]' },
           { label: 'Leave',     value: `${totalLeave} hrs`,          color: 'text-violet-600' },
@@ -139,6 +139,8 @@ export default function TimesheetPage() {
 
       {/* Timesheet table */}
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
+        <div className="overflow-x-auto">
+        <div className="min-w-[620px]">
         {/* Column headers */}
         <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
           {['Date', 'Description / Project', 'Regular', 'Leave', 'Total'].map((h, i) => (
@@ -178,10 +180,12 @@ export default function TimesheetPage() {
           <span className="text-center font-bold text-violet-600">{totalLeave}</span>
           <span className="text-center font-bold text-[#0b2b35]">{total} / {period.target}</span>
         </div>
+        </div>
+        </div>
       </div>
 
       {/* Signature */}
-      <div className="bg-white border border-[#d4eef2] rounded-xl p-6 max-w-2xl">
+      <div className="bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-2xl">
         <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">Employee Certification &amp; Signature</p>
         <p className="text-[12px] text-gray-400 mb-5">
           By signing, I certify that the hours above are accurate and complete. This timesheet will be sent to Nico Sanders for approval.

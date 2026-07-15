@@ -107,7 +107,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       )}
 
       {/* Avatar section */}
-      <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5 flex items-center gap-6">
+      <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5 flex flex-col sm:flex-row items-center sm:items-center gap-6 text-center sm:text-left">
         <div className="relative flex-shrink-0">
           {avatarUrl ? (
             <Image src={avatarUrl} alt={form.name} width={80} height={80}
@@ -141,8 +141,8 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       {/* Editable fields */}
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5">
         <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Personal Information</h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2 flex flex-col gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2 flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Full Name</label>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
@@ -167,7 +167,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       {/* Read-only fields */}
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-6">
         <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Employment Details</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
             { label: 'Email', value: profile.email },
             { label: 'Role', value: ROLE_LABELS[profile.role] || profile.role },

@@ -66,14 +66,14 @@ export default function ReportsClient({ rows, isManager }: { rows: ReportRow[]; 
       </div>
 
       {/* Screen header */}
-      <div className="flex items-start justify-between mb-6 no-print">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 no-print">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Leave Reports</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">
             {isManager ? 'All staff — Community Housing Associates' : 'My leave summary'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => {
               const headers = ['Employee', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']

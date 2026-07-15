@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -29,36 +30,32 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   } catch {}
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Topbar */}
-      <header className="bg-[#0b2b35] text-white flex items-center px-6 h-14 flex-shrink-0 z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-white rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0 p-0.5">
-            <Image src="/cha-logo.jpg" alt="CHA" width={36} height={36} className="object-contain w-full h-full" />
+    <ResponsiveShell
+      topbarLeft={
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="bg-white rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
+            <Image src="/cha-logo.png" alt="Community Housing Associates" width={160} height={26} className="object-contain" />
           </div>
-          <div className="leading-tight">
-            <span className="font-bold text-[15px]">Admin Console</span>
-            <span className="text-[11px] text-white/50 ml-2">CHA Employee Portal</span>
-          </div>
+          <span className="text-white/50 text-[12px] font-medium tracking-wide hidden sm:block">Admin Console</span>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+      }
+      topbarRight={
+        <div className="flex items-center gap-3 min-w-0">
           <Link href="/dashboard"
-            className="text-[12px] text-white/60 hover:text-white transition-colors flex items-center gap-1.5">
+            className="text-[12px] text-white/60 hover:text-white transition-colors items-center gap-1.5 hidden sm:flex flex-shrink-0">
             ← Back to Portal
           </Link>
-          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
-            <div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center text-[11px] font-bold">
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-red-500 flex items-center justify-center text-[11px] font-bold flex-shrink-0">
               {initials}
             </div>
-            <span className="text-[13px]">{displayName}</span>
-            <span className="text-[10px] bg-red-500/80 px-1.5 py-0.5 rounded-full font-semibold ml-1">ADMIN</span>
+            <span className="text-[13px] truncate hidden sm:inline">{displayName}</span>
+            <span className="text-[10px] bg-red-500/80 px-1.5 py-0.5 rounded-full font-semibold ml-1 flex-shrink-0">ADMIN</span>
           </div>
         </div>
-      </header>
-
-      <div className="flex flex-1 overflow-hidden">
-        {/* Admin Sidebar */}
-        <nav className="w-[220px] bg-[#0b2b35] flex flex-col flex-shrink-0 overflow-y-auto">
+      }
+      sidebar={
+        <nav className="w-[220px] bg-[#0b2b35] flex flex-col flex-shrink-0 overflow-y-auto h-full">
           <div className="p-3 pt-5">
             <p className="text-[10px] uppercase tracking-widest text-white/30 px-2 mb-2">Admin</p>
             {navItems.map(item => (
@@ -76,11 +73,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
         </nav>
-
-        <main className="flex-1 overflow-y-auto bg-[#f0f7f8] p-8">
-          {children}
-        </main>
+      }
+    >
+      <div className="bg-[#f0f7f8] -m-4 sm:-m-6 md:-m-8 p-4 sm:p-6 md:p-8 min-h-full">
+        {children}
       </div>
-    </div>
+    </ResponsiveShell>
   )
 }

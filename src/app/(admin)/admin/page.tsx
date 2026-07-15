@@ -12,7 +12,7 @@ export default function AdminPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
           { label: 'Active Employees', value: active, icon: '👥', color: 'text-[#02ACC0]' },
           { label: 'Pending Approvals', value: 2, icon: '⏳', color: 'text-amber-500' },
@@ -28,7 +28,7 @@ export default function AdminPage() {
       </div>
 
       {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="bg-white rounded-xl border border-[#d4eef2] p-6">
           <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">User Management</h2>
           <div className="flex flex-col gap-2">

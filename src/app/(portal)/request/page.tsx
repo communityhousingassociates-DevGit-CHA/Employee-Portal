@@ -106,7 +106,7 @@ export default function RequestPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Request Leave</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Sent to Nico Sanders for approval</p>
@@ -116,7 +116,7 @@ export default function RequestPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-[1fr_280px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
 
         {/* ── Left: form ── */}
         <div className="space-y-5">
@@ -150,7 +150,7 @@ export default function RequestPage() {
           {/* Dates + hours */}
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Dates &amp; Hours</p>
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Start Date</label>
                 <input type="date" value={start} min={today}

@@ -129,7 +129,7 @@ export default function HistoryPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">My Leave Requests</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Full history of submitted requests</p>
@@ -141,7 +141,7 @@ export default function HistoryPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Requests', value: MOCK_REQUESTS.length, color: 'text-[#0b2b35]' },
           { label: 'Approved',       value: approved,             color: 'text-emerald-600' },

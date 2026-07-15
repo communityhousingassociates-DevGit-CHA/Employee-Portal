@@ -1,4 +1,5 @@
 import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { MOCK_USER } from '@/lib/mock-data'
@@ -39,34 +40,30 @@ export default async function PortalLayout({ children }: { children: React.React
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Topbar */}
-      <header className="bg-[#0b2b35] text-white flex items-center px-6 h-14 flex-shrink-0 z-10">
-        <div className="flex items-center gap-3">
+    <ResponsiveShell
+      topbarLeft={
+        <div className="flex items-center gap-3 min-w-0">
           <div className="bg-white rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
             <Image src="/cha-logo.png" alt="Community Housing Associates" width={160} height={26} className="object-contain" />
           </div>
           <span className="text-white/50 text-[12px] font-medium tracking-wide hidden sm:block">Employee Portal</span>
         </div>
-        <Link href="/profile" className="ml-auto flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors">
+      }
+      topbarRight={
+        <Link href="/profile" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors min-w-0">
           {avatarUrl ? (
-            <Image src={avatarUrl} alt={displayName} width={28} height={28} className="w-7 h-7 rounded-full object-cover" />
+            <Image src={avatarUrl} alt={displayName} width={28} height={28} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
           ) : (
-            <div className="w-7 h-7 rounded-full bg-[#02ACC0] flex items-center justify-center text-[11px] font-bold">
+            <div className="w-7 h-7 rounded-full bg-[#02ACC0] flex items-center justify-center text-[11px] font-bold flex-shrink-0">
               {initials}
             </div>
           )}
-          <span className="text-[13px]">{displayName}</span>
+          <span className="text-[13px] truncate hidden sm:inline">{displayName}</span>
         </Link>
-      </header>
-
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar role={role} />
-        <main className="flex-1 overflow-y-auto p-8">
-          {children}
-        </main>
-      </div>
-    </div>
+      }
+      sidebar={<Sidebar role={role} />}
+    >
+      {children}
+    </ResponsiveShell>
   )
 }

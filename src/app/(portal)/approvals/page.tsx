@@ -76,7 +76,7 @@ function ApprovalCard({
 
       <div className="p-5">
         {/* Top row */}
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0"
@@ -124,8 +124,8 @@ function ApprovalCard({
         </div>
 
         {/* Details grid */}
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="col-span-2 bg-[#f8fcfd] rounded-xl p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="sm:col-span-2 bg-[#f8fcfd] rounded-xl p-4">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Date Range</p>
             <p className="text-[14px] font-semibold text-[#0b2b35]">{dateRange}</p>
             <p className="text-[12px] text-gray-400 mt-0.5">{item.hours} hours requested</p>
@@ -240,13 +240,13 @@ export default function ApprovalsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Approvals</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Nico Sanders · President &amp; CEO · June 30, 2026</p>
         </div>
         {pending.length > 0 && (
-          <div className="flex gap-4 text-right">
+          <div className="flex gap-4 text-right flex-wrap">
             <div>
               <p className="text-[22px] font-black text-[#0b2b35] leading-none">{pending.length}</p>
               <p className="text-[10px] uppercase tracking-widest text-gray-400">Pending</p>

@@ -164,7 +164,7 @@ export default function EmployeesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Employees</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Community Housing Associates staff roster</p>
@@ -175,7 +175,7 @@ export default function EmployeesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Active',      value: active.length,  color: 'text-[#0b2b35]'   },
           { label: 'Full-time',   value: fullTime,        color: 'text-emerald-600' },

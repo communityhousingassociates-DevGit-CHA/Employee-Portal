@@ -81,7 +81,7 @@ export default async function DashboardPage() {
 
       {/* Pending approvals banner — CEO/manager only */}
       {isManager && pendingCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex items-center justify-between">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 font-bold text-[13px] flex-shrink-0">
               {pendingCount}
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-bold text-[#0b2b35]">{greeting}, {firstName}</h1>
           <p className="text-[13px] text-gray-400 mt-0.5">{dayLabel}</p>
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* PTO */}
         <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#02ACC0] rounded-t-xl" />
@@ -192,10 +192,10 @@ export default async function DashboardPage() {
       </div>
 
       {/* Lower section — two columns */}
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
         {/* Recent requests — takes 2/3 */}
-        <div className="col-span-2 bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#d4eef2]">
             <h2 className="text-[14px] font-bold text-[#0b2b35]">Recent Leave Requests</h2>
             <Link href="/history" className="text-[12px] font-semibold text-[#02ACC0] hover:underline">View All →</Link>

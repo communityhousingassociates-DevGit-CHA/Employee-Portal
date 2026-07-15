@@ -48,7 +48,7 @@ export default function Sidebar({ role = 'employee' }: { role?: Role }) {
     }`
 
   return (
-    <nav className="w-[220px] bg-white border-r border-[#d4eef2] flex flex-col flex-shrink-0 overflow-y-auto print:hidden">
+    <nav className="w-[220px] bg-white border-r border-[#d4eef2] flex flex-col flex-shrink-0 overflow-y-auto h-full print:hidden">
       <div className="p-3 pt-5">
         <p className="text-[10px] uppercase tracking-widest text-gray-400 px-2 mb-1.5">My Portal</p>
         {portalItems.map(item => (

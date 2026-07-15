@@ -51,14 +51,14 @@ function Section({ id, title, children }: { id: string; title: string; children:
       <div className="bg-gradient-to-r from-[#0b2b35] to-[#02ACC0] px-5 py-3">
         <h2 className="text-white font-bold text-[13px] uppercase tracking-wide">{title}</h2>
       </div>
-      <div className="p-6 grid grid-cols-2 gap-5">{children}</div>
+      <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-5">{children}</div>
     </div>
   )
 }
 
 function Field({ label, hint, children, full }: { label: string; hint?: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <div className={`flex flex-col gap-1.5 ${full ? 'col-span-2' : ''}`}>
+    <div className={`flex flex-col gap-1.5 ${full ? 'sm:col-span-2' : ''}`}>
       <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">{label}</label>
       {children}
       {hint && <span className="text-[11px] text-gray-400">{hint}</span>}
@@ -94,7 +94,7 @@ export default function AdminSettingsPage() {
 
   function ToggleRow({ k, label }: { k: keyof Settings; label: string }) {
     return (
-      <div className="col-span-2 flex items-center justify-between py-2 border-b border-[#f0f7f8] last:border-0">
+      <div className="sm:col-span-2 flex items-center justify-between py-2 border-b border-[#f0f7f8] last:border-0">
         <span className="text-[13px] text-gray-700">{label}</span>
         <Toggle k={k} />
       </div>
@@ -103,7 +103,7 @@ export default function AdminSettingsPage() {
 
   return (
     <div>
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Portal Settings</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Configure leave policy, pay periods, approvals, and notifications</p>
