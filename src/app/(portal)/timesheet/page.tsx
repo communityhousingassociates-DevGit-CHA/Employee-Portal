@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { MOCK_USER } from '@/lib/mock-data'
+import { MOCK_USER, MOCK_USER_EMPLOYEE_ID } from '@/lib/mock-data'
 import Link from 'next/link'
 
 const PERIODS = [
@@ -78,9 +78,9 @@ export default function TimesheetPage() {
   const week2Total = week2.reduce((s, r) => s + r.reg + r.leave, 0)
 
   function exportCsv() {
-    const headers = ['Date', 'Description', 'Regular Hours', 'Leave Hours', 'Total Hours']
-    const csvRows = rows.map(r => [r.full, r.desc, r.reg, r.leave, r.reg + r.leave])
-    csvRows.push(['', 'Totals', totalReg, totalLeave, total])
+    const headers = ['Employee', 'Employee ID', 'Date', 'Description', 'Regular Hours', 'Leave Hours', 'Total Hours']
+    const csvRows = rows.map(r => [MOCK_USER.name, MOCK_USER_EMPLOYEE_ID, r.full, r.desc, r.reg, r.leave, r.reg + r.leave])
+    csvRows.push([MOCK_USER.name, MOCK_USER_EMPLOYEE_ID, '', 'Totals', totalReg, totalLeave, total])
     const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -109,7 +109,7 @@ export default function TimesheetPage() {
         <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
         <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>Timesheet — {period.label}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-          {MOCK_USER.name} · Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          {MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID} · Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>
 
@@ -117,6 +117,7 @@ export default function TimesheetPage() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6 no-print">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet</h1>
+          <p className="text-[12px] text-gray-400 mt-0.5">{MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID}</p>
           <div className="flex items-center gap-2 mt-1">
             <button onClick={() => setPeriodIdx(i => Math.min(i + 1, PERIODS.length - 1))}
               disabled={periodIdx >= PERIODS.length - 1}
@@ -243,7 +244,7 @@ export default function TimesheetPage() {
           {signed ? (
             <div>
               <p className="font-[cursive] text-[22px] text-[#0b2b35] mb-1">{MOCK_USER.name}</p>
-              <p className="text-[11px] text-gray-400">{MOCK_USER.name} · Signed Jun 29, 2026 · 9:14 AM</p>
+              <p className="text-[11px] text-gray-400">{MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID} · Signed Jun 29, 2026 · 9:14 AM</p>
             </div>
           ) : (
             <p className="text-gray-300 text-[13px]">Click here to sign</p>

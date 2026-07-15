@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { MOCK_BALANCES, MOCK_USER, MOCK_PENDING_APPROVALS } from '@/lib/mock-data'
+import { MOCK_BALANCES, MOCK_USER, MOCK_USER_EMPLOYEE_ID, MOCK_PENDING_APPROVALS } from '@/lib/mock-data'
 
 const LEAVE_TYPES = [
   { key: 'PTO',         label: 'PTO / Vacation',  icon: '🌴', desc: 'Paid time off',          balance: MOCK_BALANCES.pto.available,      unit: 'hrs' },
@@ -85,6 +85,9 @@ export default function RequestPage() {
           <p className="text-[13px] text-gray-500 mb-1">
             <strong className="text-[#0b2b35]">{leaveType}</strong> · {start === end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`}
           </p>
+          <p className="text-[12px] text-gray-400 mb-1">
+            {MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID}
+          </p>
           <p className="text-[13px] text-gray-500 mb-6">
             Nico Sanders will be notified to review and approve.
           </p>
@@ -110,6 +113,7 @@ export default function RequestPage() {
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Request Leave</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Sent to Nico Sanders for approval</p>
+          <p className="text-[12px] text-gray-400 mt-1">{MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID}</p>
         </div>
         <Link href="/history" className="text-[13px] font-semibold text-gray-400 hover:text-[#0b2b35] transition-colors">
           View History →
@@ -210,7 +214,7 @@ export default function RequestPage() {
               {signed ? (
                 <div>
                   <p className="font-[cursive] text-[22px] text-[#0b2b35]">{MOCK_USER.name}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{MOCK_USER.name} · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{MOCK_USER.name} · Employee ID {MOCK_USER_EMPLOYEE_ID} · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                 </div>
               ) : (
                 <p className="text-gray-300 text-[13px]">Click here to sign</p>

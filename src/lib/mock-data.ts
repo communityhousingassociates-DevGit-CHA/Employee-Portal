@@ -82,29 +82,33 @@ export const MOCK_EMPLOYEES = [
 ]
 
 export const MOCK_REPORT_ROWS = [
-  { name: 'Alex Torres',    pto_used: 16, sick_used: 8,  personal_used: 8,  pto_bal: 98.4,  sick_bal: 25.8, personal_bal: 16, accrual: 5.08 },
-  { name: 'James Thomas',   pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 68.2,  sick_bal: 22.1, personal_bal: 24, accrual: 6.00 },
-  { name: 'Carla Wilson',   pto_used: 16, sick_used: 0,  personal_used: 0,  pto_bal: 55.6,  sick_bal: 18.4, personal_bal: 24, accrual: 5.54 },
-  { name: 'Maria Edwards',  pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 112.4, sick_bal: 29.5, personal_bal: 16, accrual: 5.08 },
-  { name: 'David Reyes',    pto_used: 0,  sick_used: 0,  personal_used: 8,  pto_bal: 44.0,  sick_bal: 14.7, personal_bal: 16, accrual: 4.62 },
-  { name: 'Sandra Kim',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 96.0,  sick_bal: 29.5, personal_bal: 24, accrual: 4.62 },
-  { name: 'Tanya Brennan',  pto_used: 24, sick_used: 8,  personal_used: 0,  pto_bal: 134.0, sick_bal: 33.2, personal_bal: 24, accrual: 6.00 },
-  { name: 'Marcus Webb',    pto_used: 8,  sick_used: 0,  personal_used: 8,  pto_bal: 72.4,  sick_bal: 19.6, personal_bal: 8,  accrual: 5.54 },
-  { name: 'Priya Nair',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 27.7,  sick_bal: 14.8, personal_bal: 24, accrual: 4.62 },
-  { name: 'Leon Carter',    pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 51.2,  sick_bal: 11.1, personal_bal: 24, accrual: 5.08 },
-  { name: 'Yolanda Pierce', pto_used: 32, sick_used: 16, personal_used: 8,  pto_bal: 88.6,  sick_bal: 26.3, personal_bal: 8,  accrual: 6.00 },
+  { id: '1',  name: 'Alex Torres',    pto_used: 16, sick_used: 8,  personal_used: 8,  pto_bal: 98.4,  sick_bal: 25.8, personal_bal: 16, accrual: 5.08 },
+  { id: '2',  name: 'James Thomas',   pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 68.2,  sick_bal: 22.1, personal_bal: 24, accrual: 6.00 },
+  { id: '3',  name: 'Carla Wilson',   pto_used: 16, sick_used: 0,  personal_used: 0,  pto_bal: 55.6,  sick_bal: 18.4, personal_bal: 24, accrual: 5.54 },
+  { id: '4',  name: 'Maria Edwards',  pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 112.4, sick_bal: 29.5, personal_bal: 16, accrual: 5.08 },
+  { id: '5',  name: 'David Reyes',    pto_used: 0,  sick_used: 0,  personal_used: 8,  pto_bal: 44.0,  sick_bal: 14.7, personal_bal: 16, accrual: 4.62 },
+  { id: '6',  name: 'Sandra Kim',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 96.0,  sick_bal: 29.5, personal_bal: 24, accrual: 4.62 },
+  { id: '8',  name: 'Tanya Brennan',  pto_used: 24, sick_used: 8,  personal_used: 0,  pto_bal: 134.0, sick_bal: 33.2, personal_bal: 24, accrual: 6.00 },
+  { id: '9',  name: 'Marcus Webb',    pto_used: 8,  sick_used: 0,  personal_used: 8,  pto_bal: 72.4,  sick_bal: 19.6, personal_bal: 8,  accrual: 5.54 },
+  { id: '10', name: 'Priya Nair',     pto_used: 0,  sick_used: 0,  personal_used: 0,  pto_bal: 27.7,  sick_bal: 14.8, personal_bal: 24, accrual: 4.62 },
+  { id: '11', name: 'Leon Carter',    pto_used: 0,  sick_used: 8,  personal_used: 0,  pto_bal: 51.2,  sick_bal: 11.1, personal_bal: 24, accrual: 5.08 },
+  { id: '12', name: 'Yolanda Pierce', pto_used: 32, sick_used: 16, personal_used: 8,  pto_bal: 88.6,  sick_bal: 26.3, personal_bal: 8,  accrual: 6.00 },
 ]
 
 export const MOCK_TIMESHEET_ROWS = [
-  { name: 'Alex Torres',    reg_hours: 64, leave_hours: 16, status: 'approved'  },
-  { name: 'James Thomas',   reg_hours: 80, leave_hours: 0,  status: 'approved'  },
-  { name: 'Carla Wilson',   reg_hours: 64, leave_hours: 16, status: 'submitted' },
-  { name: 'Maria Edwards',  reg_hours: 72, leave_hours: 8,  status: 'approved'  },
-  { name: 'David Reyes',    reg_hours: 32, leave_hours: 8,  status: 'submitted' },
-  { name: 'Sandra Kim',     reg_hours: 80, leave_hours: 0,  status: 'approved'  },
-  { name: 'Tanya Brennan',  reg_hours: 56, leave_hours: 24, status: 'approved'  },
-  { name: 'Marcus Webb',    reg_hours: 64, leave_hours: 8,  status: 'submitted' },
-  { name: 'Priya Nair',     reg_hours: 80, leave_hours: 0,  status: 'draft'     },
-  { name: 'Leon Carter',    reg_hours: 24, leave_hours: 8,  status: 'approved'  },
-  { name: 'Yolanda Pierce', reg_hours: 48, leave_hours: 32, status: 'submitted' },
+  { id: '1',  name: 'Alex Torres',    reg_hours: 64, leave_hours: 16, status: 'approved'  },
+  { id: '2',  name: 'James Thomas',   reg_hours: 80, leave_hours: 0,  status: 'approved'  },
+  { id: '3',  name: 'Carla Wilson',   reg_hours: 64, leave_hours: 16, status: 'submitted' },
+  { id: '4',  name: 'Maria Edwards',  reg_hours: 72, leave_hours: 8,  status: 'approved'  },
+  { id: '5',  name: 'David Reyes',    reg_hours: 32, leave_hours: 8,  status: 'submitted' },
+  { id: '6',  name: 'Sandra Kim',     reg_hours: 80, leave_hours: 0,  status: 'approved'  },
+  { id: '8',  name: 'Tanya Brennan',  reg_hours: 56, leave_hours: 24, status: 'approved'  },
+  { id: '9',  name: 'Marcus Webb',    reg_hours: 64, leave_hours: 8,  status: 'submitted' },
+  { id: '10', name: 'Priya Nair',     reg_hours: 80, leave_hours: 0,  status: 'draft'     },
+  { id: '11', name: 'Leon Carter',    reg_hours: 24, leave_hours: 8,  status: 'approved'  },
+  { id: '12', name: 'Yolanda Pierce', reg_hours: 48, leave_hours: 32, status: 'submitted' },
 ]
+
+// The employees.id backing the signed-in demo user (Alex Torres in MOCK_EMPLOYEES) —
+// stands in for the real employee record ID once wired to Supabase.
+export const MOCK_USER_EMPLOYEE_ID = MOCK_EMPLOYEES.find(e => e.name === MOCK_USER.name)!.id

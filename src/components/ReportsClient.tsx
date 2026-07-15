@@ -12,6 +12,7 @@ const PAY_PERIODS = [
 ]
 
 export type ReportRow = {
+  id: string
   name: string
   initials: string
   pto_used: number
@@ -24,6 +25,7 @@ export type ReportRow = {
 }
 
 export type TimesheetSummaryRow = {
+  id: string
   name: string
   initials: string
   reg_hours: number
@@ -71,9 +73,10 @@ export default function ReportsClient({
   const tsMissingCount   = timesheetRows.filter(r => r.status === 'draft').length
 
   function exportLeaveCsv() {
-    const headers = ['Employee', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
+    const headers = ['Employee', 'Employee ID', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
     const csvRows = filteredRows.map(r => [
       r.name,
+      r.id,
       r.pto_used,
       r.pto_bal,
       `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`,
@@ -93,8 +96,8 @@ export default function ReportsClient({
   }
 
   function exportTimesheetsCsv() {
-    const headers = ['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status']
-    const csvRows = timesheetRows.map(r => [r.name, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status])
+    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status']
+    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status])
     const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -126,6 +129,7 @@ export default function ReportsClient({
           {tab === 'leave' ? 'Leave Report' : 'Team Timesheets'} — {selectedPeriod.label}
         </h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+          {!isManager && filteredRows[0] ? `${filteredRows[0].name} · Employee ID ${filteredRows[0].id} · ` : ''}
           Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>
@@ -232,13 +236,16 @@ export default function ReportsClient({
             </thead>
             <tbody>
               {timesheetRows.map(r => (
-                <tr key={r.name} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
+                <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
                         {r.initials}
                       </div>
-                      <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
+                      <div className="whitespace-nowrap">
+                        <span className="font-medium text-[#0b2b35]">{r.name}</span>
+                        <span className="text-[10px] text-gray-400 ml-1.5">ID {r.id}</span>
+                      </div>
                     </div>
                   </td>
                   <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
@@ -299,7 +306,7 @@ export default function ReportsClient({
               const sickW  = (r.sick_used     / maxUsed) * 100
               const persW  = (r.personal_used / maxUsed) * 100
               return (
-                <div key={r.name} className="flex items-center gap-3">
+                <div key={r.id} className="flex items-center gap-3">
                   <div className="w-[120px] text-[12px] font-medium text-[#0b2b35] flex-shrink-0 flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
                       {r.initials}
@@ -378,14 +385,17 @@ export default function ReportsClient({
                 const capPct     = Math.min(Math.round((r.pto_bal / 400) * 100), 100)
                 const capWarning = capPct >= 75
                 return (
-                  <tr key={r.name} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
+                  <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
                     {isManager && (
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
                             {r.initials}
                           </div>
-                          <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
+                          <div className="whitespace-nowrap">
+                            <span className="font-medium text-[#0b2b35]">{r.name}</span>
+                            <span className="text-[10px] text-gray-400 ml-1.5">ID {r.id}</span>
+                          </div>
                         </div>
                       </td>
                     )}
