@@ -39,3 +39,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+LEVEL_OF_EFFORT.md
+CHA_Portal_Billing_Summary.docx
