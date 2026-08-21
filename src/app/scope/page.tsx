@@ -1,9 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
-const DEMO_EMAIL = 'demo@communityhousingassociates.org'
-const DEMO_PASSWORD = 'CHAdemo2026!'
-
 export default function ScopePage() {
   return (
     <div className="min-h-screen bg-[#f0f7f8] py-12 px-4">
@@ -30,34 +27,17 @@ export default function ScopePage() {
           </div>
         </div>
 
-        {/* Demo Access */}
+        {/* Demo Access — disabled ahead of real-user beta */}
         <div className="bg-[#0b2b35] rounded-2xl p-8 mb-6 shadow-sm">
-          <p className="text-[11px] uppercase tracking-widest font-semibold text-[#02ACC0] mb-3">Demo Access</p>
-          <h2 className="text-[20px] font-bold text-white mb-2">Try the portal now</h2>
+          <p className="text-[11px] uppercase tracking-widest font-semibold text-gray-400 mb-3">Demo Access</p>
+          <h2 className="text-[20px] font-bold text-white mb-2">Demo account retired</h2>
           <p className="text-[13px] text-gray-400 mb-6">
-            Log in below using the demo account to explore all Phase 1 features. The demo is pre-populated with
-            realistic data for <strong className="text-white">Alex Torres</strong>, CEO — with full access to the
-            approval queue, employee roster, and payroll reports.
+            The shared demo account has been disabled now that CHA is moving to real employee accounts for the
+            beta rollout. Staff will receive their individual login credentials directly.
           </p>
-          <div className="bg-white/10 rounded-xl p-5 mb-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Name</p>
-              <p className="text-white font-semibold text-[14px]">Alex Torres</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Email</p>
-              <p className="text-white font-semibold text-[14px] break-all">{DEMO_EMAIL}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Password</p>
-              <p className="text-white font-semibold text-[14px] font-mono">{DEMO_PASSWORD}</p>
-            </div>
-          </div>
-          <Link
-            href="/login"
-            className="inline-block bg-[#02ACC0] text-white text-[14px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">
-            Go to Login →
-          </Link>
+          <span className="inline-block bg-white/10 text-gray-300 text-[12px] font-semibold px-4 py-2 rounded-lg">
+            Feature disabled
+          </span>
         </div>
 
         {/* Problem & Solution */}

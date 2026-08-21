@@ -25,7 +25,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes — no auth required
-  if (pathname.startsWith('/scope') || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password')) {
+  if (pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password')) {
     return supabaseResponse
   }
 
