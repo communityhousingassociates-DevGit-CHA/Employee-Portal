@@ -1,0 +1,29 @@
+name: OWASP ZAP Baseline Scan
+
+# Manual only — this hits the live production site, so it should never run
+# automatically on push/PR. Trigger from the Actions tab (or `gh workflow run`)
+# when you want a fresh scan.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "URL to scan"
+        required: false
+        default: "https://portal.communityhousingassociates.org"
+
+jobs:
+  zap-baseline:
+    runs-on: ubuntu-latest
+    name: ZAP baseline scan
+    permissions:
+      contents: read
+    steps:
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ github.event.inputs.target || 'https://portal.communityhousingassociates.org' }}
+          # Baseline = passive scan + spider only, no active attack payloads —
+          # appropriate for scanning our own production site without risking
+          # data changes or tripping the app's own rate limiter.
+          cmd_options: '-a'
+          fail_action: false
