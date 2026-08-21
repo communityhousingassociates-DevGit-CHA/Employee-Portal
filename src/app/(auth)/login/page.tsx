@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
-import Link from 'next/link'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
@@ -114,16 +113,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      {/* Scope document link */}
-      <div className="mt-5">
-        <Link
-          href="/scope"
-          className="text-[12px] text-[#02ACC0] hover:text-[#028a9e] font-medium transition-colors underline underline-offset-2">
-          View Project Scope Document →
-        </Link>
-      </div>
-
-      <p className="text-[11px] text-gray-400 mt-3">
+      <p className="text-[11px] text-gray-400 mt-5">
         portal.communityhousingassociates.org · Powered by Globalist Pro
       </p>
     </div>
