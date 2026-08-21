@@ -11,6 +11,12 @@ const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
   { value: 'airline', label: 'Airline' },
   { value: 'meals', label: 'Meals' },
   { value: 'entertainment', label: 'Entertainment' },
+  { value: 'cash_advance', label: 'Cash Advance' },
+  { value: 'tolls', label: 'Tolls' },
+  { value: 'conference_fees', label: 'Conference Fees' },
+  { value: 'rental_car', label: 'Rental Car' },
+  { value: 'gratuities', label: 'Gratuities' },
+  { value: 'parking', label: 'Parking' },
   { value: 'other', label: 'Other' },
 ]
 

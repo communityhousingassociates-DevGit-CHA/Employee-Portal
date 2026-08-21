@@ -49,11 +49,23 @@ export async function getOrCreateTimesheet(periodStart: string, periodEnd: strin
     if (createError) throw new Error(createError.message)
     timesheet = created
 
+    // Salaried employees (those with a current salary record) default to 8 hrs/day so a
+    // full two-week timesheet totals 80 hrs automatically. It's on the employee to lower
+    // regular_hours and log leave_hours instead on days they took sick/PTO/other time off,
+    // so PTO balances stay accurate. Hourly employees (no salary record) start at 0.
+    const { data: currentSalary, error: salaryError } = await admin
+      .from('employee_current_salary')
+      .select('employee_id')
+      .eq('employee_id', employee.id)
+      .maybeSingle()
+    if (salaryError) throw new Error(salaryError.message)
+    const defaultRegularHours = currentSalary ? 8 : 0
+
     const rows = weekdaysInPeriod(periodStart, periodEnd).map(work_date => ({
       timesheet_id: timesheet!.id,
       work_date,
       description: null,
-      regular_hours: 0,
+      regular_hours: defaultRegularHours,
       leave_hours: 0,
       leave_type: null,
     }))

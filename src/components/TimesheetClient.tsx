@@ -240,6 +240,12 @@ export default function TimesheetClient({
         <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>
       )}
 
+      {salary !== null && (
+        <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
+          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. If you took sick, PTO, or other time off, lower <strong>Regular</strong> and log the hours under <strong>Leave</strong> for that day so your balances stay accurate.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Regular', value: `${totalReg} hrs`, color: 'text-[#0b2b35]' },

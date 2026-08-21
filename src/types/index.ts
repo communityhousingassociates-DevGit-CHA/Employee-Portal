@@ -4,7 +4,7 @@ export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty
 export type EmployeeType = 'full-time' | 'part-time' | 'consultant'
 export type StaffCategory = 'cha_employee' | 'resident_advocate'
 export type TimesheetStatus = 'draft' | 'submitted' | 'approved'
-export type ExpenseCategory = 'mileage' | 'hotel' | 'airline' | 'meals' | 'entertainment' | 'other'
+export type ExpenseCategory = 'mileage' | 'hotel' | 'airline' | 'meals' | 'entertainment' | 'cash_advance' | 'tolls' | 'conference_fees' | 'rental_car' | 'gratuities' | 'parking' | 'other'
 export type ExpenseStatus = 'pending' | 'approved' | 'denied'
 
 // DB-shaped types — mirror supabase-schema.sql columns exactly.

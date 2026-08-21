@@ -8,7 +8,7 @@
 create table if not exists expenses (
   id uuid primary key default gen_random_uuid(),
   employee_id uuid references employees(id) not null,
-  category text not null, -- mileage | hotel | airline | meals | entertainment | other
+  category text not null, -- mileage | hotel | airline | meals | entertainment | cash_advance | tolls | conference_fees | rental_car | gratuities | parking | other
   expense_date date not null,
   description text,
   miles numeric,               -- only populated for category = 'mileage'
