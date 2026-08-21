@@ -27,3 +27,4 @@ jobs:
           # data changes or tripping the app's own rate limiter.
           cmd_options: '-a'
           fail_action: false
+          allow_issue_writing: false
