@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -24,12 +25,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes — no auth required
-  if (pathname.startsWith('/scope') || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout')) {
+  if (pathname.startsWith('/scope') || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password')) {
     return supabaseResponse
   }
 
-  // Demo mode bypass
-  const isDemoMode = request.cookies.get('cha-demo')?.value === 'true'
+  // Demo mode bypass — non-production only, so it can't function in the deployed beta.
+  const isDemoMode = DEMO_MODE_ENABLED && process.env.NODE_ENV !== 'production' && request.cookies.get('cha-demo')?.value === 'true'
   if (isDemoMode) {
     if (pathname === '/login') {
       return NextResponse.redirect(new URL('/dashboard', request.url))

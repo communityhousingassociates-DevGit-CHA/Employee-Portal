@@ -1,112 +1,110 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { getReportSummary } from '@/app/actions/reports'
+import type { PayPeriod } from '@/lib/pay-periods'
 
-const PAY_PERIODS = [
-  { label: 'Jun 15 – Jun 28, 2026', value: '2026-06-15' },
-  { label: 'Jun 1 – Jun 14, 2026',  value: '2026-06-01' },
-  { label: 'May 18 – May 31, 2026', value: '2026-05-18' },
-  { label: 'May 4 – May 17, 2026',  value: '2026-05-04' },
-  { label: 'Apr 20 – May 3, 2026',  value: '2026-04-20' },
-  { label: 'Apr 6 – Apr 19, 2026',  value: '2026-04-06' },
-]
-
-export type ReportRow = {
-  id: string
-  name: string
-  initials: string
-  pto_used: number
-  sick_used: number
-  personal_used: number
-  pto_bal: number
-  sick_bal: number
-  personal_bal: number
-  accrual: number
-}
-
-export type TimesheetSummaryRow = {
-  id: string
-  name: string
-  initials: string
-  reg_hours: number
-  leave_hours: number
-  status: string
-}
+export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
+export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; status: string; annual_salary: number | null; weekly_gross: number | null }
+export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
+type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean }
 
 const STATUS_STYLES: Record<string, string> = {
-  approved:  'bg-emerald-100 text-emerald-700',
+  approved: 'bg-emerald-100 text-emerald-700',
   submitted: 'bg-amber-100 text-amber-700',
-  draft:     'bg-gray-100 text-gray-500',
+  draft: 'bg-gray-100 text-gray-500',
+}
+
+const currency = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+
+function toInitials(name: string) {
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+}
+
+function formatPeriodLabel(p: PayPeriod): string {
+  return `${new Date(`${p.start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${p.end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 }
 
 export default function ReportsClient({
-  rows,
-  timesheetRows,
-  isManager,
+  periods,
+  initialSummary,
 }: {
-  rows: ReportRow[]
-  timesheetRows: TimesheetSummaryRow[]
-  isManager: boolean
+  periods: PayPeriod[]
+  initialSummary: Summary
 }) {
-  const [period, setPeriod] = useState(PAY_PERIODS[0].value)
+  const [periodIdx, setPeriodIdx] = useState(0)
+  const [summary, setSummary] = useState<Summary>(initialSummary)
+  const [loading, setLoading] = useState(false)
   const [typeFilter, setTypeFilter] = useState('All')
-  const [tab, setTab] = useState<'leave' | 'timesheets'>('leave')
+  const [tab, setTab] = useState<'leave' | 'timesheets' | 'expenses'>('leave')
 
-  const selectedPeriod = PAY_PERIODS.find(p => p.value === period)!
+  const { leaveRows, timesheetRows, expenseRows, isManager } = summary
+  const selectedPeriod = periods[periodIdx]
+
+  async function switchPeriod(idx: number) {
+    setPeriodIdx(idx)
+    setLoading(true)
+    try {
+      const s = await getReportSummary(periods[idx].start, periods[idx].end)
+      setSummary(s)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredRows = useMemo(() => {
-    if (typeFilter === 'PTO')      return rows.filter(r => r.pto_used > 0)
-    if (typeFilter === 'Sick')     return rows.filter(r => r.sick_used > 0)
-    if (typeFilter === 'Personal') return rows.filter(r => r.personal_used > 0)
-    return rows
-  }, [rows, typeFilter])
+    if (typeFilter === 'PTO') return leaveRows.filter(r => r.pto_used > 0)
+    if (typeFilter === 'Sick') return leaveRows.filter(r => r.sick_used > 0)
+    if (typeFilter === 'Personal') return leaveRows.filter(r => r.personal_used > 0)
+    return leaveRows
+  }, [leaveRows, typeFilter])
 
-  const totalPto      = filteredRows.reduce((s, r) => s + r.pto_used, 0)
-  const totalSick     = filteredRows.reduce((s, r) => s + r.sick_used, 0)
+  const totalPto = filteredRows.reduce((s, r) => s + r.pto_used, 0)
+  const totalSick = filteredRows.reduce((s, r) => s + r.sick_used, 0)
   const totalPersonal = filteredRows.reduce((s, r) => s + r.personal_used, 0)
-  const maxUsed       = Math.max(...filteredRows.map(r => r.pto_used + r.sick_used + r.personal_used), 1)
+  const maxUsed = Math.max(...filteredRows.map(r => r.pto_used + r.sick_used + r.personal_used), 1)
   const rowsWithUsage = filteredRows.filter(r => r.pto_used + r.sick_used + r.personal_used > 0)
 
-  const tsTotalReg       = timesheetRows.reduce((s, r) => s + r.reg_hours, 0)
-  const tsTotalLeave     = timesheetRows.reduce((s, r) => s + r.leave_hours, 0)
+  const tsTotalReg = timesheetRows.reduce((s, r) => s + r.reg_hours, 0)
+  const tsTotalLeave = timesheetRows.reduce((s, r) => s + r.leave_hours, 0)
   const tsSubmittedCount = timesheetRows.filter(r => r.status === 'submitted' || r.status === 'approved').length
-  const tsMissingCount   = timesheetRows.filter(r => r.status === 'draft').length
+  const tsMissingCount = timesheetRows.filter(r => r.status === 'draft').length
+  const tsTotalWeeklyGross = timesheetRows.reduce((s, r) => s + (r.weekly_gross ?? 0), 0)
+
+  const expTotal = expenseRows.reduce((s, r) => s + r.total, 0)
+  const expCount = expenseRows.reduce((s, r) => s + r.count, 0)
 
   function exportLeaveCsv() {
     const headers = ['Employee', 'Employee ID', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
-    const csvRows = filteredRows.map(r => [
-      r.name,
-      r.id,
-      r.pto_used,
-      r.pto_bal,
-      `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`,
-      r.sick_used,
-      r.sick_bal,
-      r.personal_bal,
-      r.accrual,
-    ])
-    const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
+    const csvRows = filteredRows.map(r => [r.name, r.id, r.pto_used, r.pto_bal, `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`, r.sick_used, r.sick_bal, r.personal_bal, r.accrual])
+    downloadCsv(headers, csvRows, `CHA-Leave-Report-${selectedPeriod.start}.csv`)
+  }
+
+  function exportTimesheetsCsv() {
+    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status', 'Annual Salary', 'Weekly Gross Wages']
+    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status, r.annual_salary ?? '', r.weekly_gross !== null ? r.weekly_gross.toFixed(2) : ''])
+    downloadCsv(headers, csvRows, `CHA-Team-Timesheets-${selectedPeriod.start}.csv`)
+  }
+
+  function exportExpensesCsv() {
+    const headers = ['Employee', 'Employee ID', 'Total ($)', 'Count']
+    const csvRows = expenseRows.map(r => [r.name, r.id, r.total.toFixed(2), r.count])
+    downloadCsv(headers, csvRows, `CHA-Expenses-${selectedPeriod.start}.csv`)
+  }
+
+  function downloadCsv(headers: string[], rows: (string | number)[][], filename: string) {
+    const csv = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `CHA-Leave-Report-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  function exportTimesheetsCsv() {
-    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status']
-    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status])
-    const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `CHA-Team-Timesheets-${selectedPeriod.label.replace(/[^a-z0-9]/gi, '-')}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+  const exportFn = tab === 'leave' ? exportLeaveCsv : tab === 'timesheets' ? exportTimesheetsCsv : exportExpensesCsv
+  const tabLabel = tab === 'leave' ? 'Leave Reports' : tab === 'timesheets' ? 'Team Timesheets' : 'Expenses'
 
   return (
     <>
@@ -121,336 +119,295 @@ export default function ReportsClient({
         @media screen { .print-show { display: none !important; } }
       `}</style>
 
-      {/* Print-only header */}
       <div className="print-show mb-6 pb-4 border-b border-gray-200">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>
-          {tab === 'leave' ? 'Leave Report' : 'Team Timesheets'} — {selectedPeriod.label}
-        </h1>
+        <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>{tabLabel} — {formatPeriodLabel(selectedPeriod)}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
           {!isManager && filteredRows[0] ? `${filteredRows[0].name} · Employee ID ${filteredRows[0].id} · ` : ''}
           Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>
 
-      {/* Screen header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6 no-print">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">{tab === 'leave' ? 'Leave Reports' : 'Team Timesheets'}</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">
-            {tab === 'leave'
-              ? (isManager ? 'All staff — Community Housing Associates' : 'My leave summary')
-              : 'All staff — Community Housing Associates'}
-          </p>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">{tabLabel}</h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">{isManager ? 'All staff — Community Housing Associates' : 'My summary'}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={tab === 'leave' ? exportLeaveCsv : exportTimesheetsCsv}
-            className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors flex items-center gap-2">
-            ⬇ Export CSV
-          </button>
-          <button
-            onClick={() => window.print()}
-            className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors flex items-center gap-2">
-            ⬇ Export PDF
-          </button>
+          <button onClick={exportFn} className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors flex items-center gap-2">⬇ Export CSV</button>
+          <button onClick={() => window.print()} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors flex items-center gap-2">⬇ Export PDF</button>
         </div>
       </div>
 
-      {/* Tabs — manager only, group timesheet view lives alongside leave reports */}
       {isManager && (
         <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 mb-4 w-fit no-print">
-          {([['leave', 'Leave Reports'], ['timesheets', 'Timesheets']] as const).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setTab(value)}
-              className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${
-                tab === value ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'
-              }`}>
+          {([['leave', 'Leave Reports'], ['timesheets', 'Timesheets'], ['expenses', 'Expenses']] as const).map(([value, label]) => (
+            <button key={value} onClick={() => setTab(value)}
+              className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${tab === value ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
               {label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Filters */}
       {isManager && (
         <div className="flex flex-wrap gap-3 mb-6 no-print">
-          <select
-            value={period}
-            onChange={e => setPeriod(e.target.value)}
+          <select value={periodIdx} onChange={e => switchPeriod(Number(e.target.value))} disabled={loading}
             className="border border-[#d4eef2] rounded-lg px-3 py-2 text-[13px] text-[#0b2b35] focus:outline-none focus:border-[#02ACC0] bg-white cursor-pointer">
-            {PAY_PERIODS.map(p => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
+            {periods.map((p, i) => <option key={p.start} value={i}>{formatPeriodLabel(p)}</option>)}
           </select>
           {tab === 'leave' && (
-          <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1">
-            {['All', 'PTO', 'Sick', 'Personal'].map(t => (
-              <button
-                key={t}
-                onClick={() => setTypeFilter(t)}
-                className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${
-                  typeFilter === t ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'
-                }`}>
-                {t}
-              </button>
-            ))}
-          </div>
+            <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1">
+              {['All', 'PTO', 'Sick', 'Personal'].map(t => (
+                <button key={t} onClick={() => setTypeFilter(t)}
+                  className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${typeFilter === t ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}
 
       {tab === 'timesheets' ? (
-      <>
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Regular Hours', value: `${tsTotalReg} hrs`,   color: '#0b2b35' },
-          { label: 'Leave Hours',   value: `${tsTotalLeave} hrs`, color: '#7c3aed' },
-          { label: 'Submitted',     value: tsSubmittedCount,      color: '#059669' },
-          { label: 'Not Submitted', value: tsMissingCount,        color: tsMissingCount > 0 ? '#d97706' : '#0b2b35' },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
-            <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#d4eef2]">
-          <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {selectedPeriod.label}</h2>
-          <p className="text-[11px] text-gray-400 mt-0.5">Regular + leave hours logged per employee this pay period</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                {['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status'].map(h => (
-                  <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {timesheetRows.map(r => (
-                <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
-                        {r.initials}
-                      </div>
-                      <div className="whitespace-nowrap">
-                        <span className="font-medium text-[#0b2b35]">{r.name}</span>
-                        <span className="text-[10px] text-gray-400 ml-1.5">ID {r.id}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
-                  <td className="px-5 py-3">
-                    {r.leave_hours
-                      ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span>
-                      : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours} hrs</td>
-                  <td className="px-5 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[r.status] ?? 'bg-gray-100 text-gray-500'}`}>
-                      {r.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-[#d4eef2] bg-[#f9fefe]">
-                <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
-                <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg} hrs</td>
-                <td className="px-5 py-3 font-bold text-violet-600">{tsTotalLeave} hrs</td>
-                <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave} hrs</td>
-                <td className="px-5 py-3" />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      </>
-      ) : (
-      <>
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'PTO Hours Used',      value: `${totalPto} hrs`,      color: '#02ACC0' },
-          { label: 'Sick Hours Used',      value: `${totalSick} hrs`,     color: '#7c3aed' },
-          { label: 'Personal Hours Used',  value: `${totalPersonal} hrs`, color: '#f59e0b' },
-          { label: isManager ? 'Employees Reported' : 'Pay Period',
-            value: isManager ? filteredRows.length : selectedPeriod.label.split(',')[0],
-            color: '#0b2b35' },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
-            <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Visual usage bars — screen only */}
-      {isManager && rowsWithUsage.length > 0 && (
-        <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-6 no-print">
-          <h2 className="text-[13px] font-bold text-[#0b2b35] mb-4">Hours Used This Period</h2>
-          <div className="space-y-2.5">
-            {rowsWithUsage.map(r => {
-              const total  = r.pto_used + r.sick_used + r.personal_used
-              const ptoW   = (r.pto_used      / maxUsed) * 100
-              const sickW  = (r.sick_used     / maxUsed) * 100
-              const persW  = (r.personal_used / maxUsed) * 100
-              return (
-                <div key={r.id} className="flex items-center gap-3">
-                  <div className="w-[120px] text-[12px] font-medium text-[#0b2b35] flex-shrink-0 flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
-                      {r.initials}
-                    </div>
-                    <span className="truncate">{r.name.split(' ')[0]}</span>
-                  </div>
-                  <div className="flex-1 flex gap-0.5 h-7 rounded-lg overflow-hidden bg-[#f8fcfd]">
-                    {r.pto_used > 0 && (
-                      <div style={{ width: `${ptoW}%`, backgroundColor: '#02ACC0' }}
-                        className="flex items-center justify-center text-white text-[10px] font-bold transition-all"
-                        title={`PTO: ${r.pto_used}h`}>
-                        {r.pto_used}
-                      </div>
-                    )}
-                    {r.sick_used > 0 && (
-                      <div style={{ width: `${sickW}%`, backgroundColor: '#7c3aed' }}
-                        className="flex items-center justify-center text-white text-[10px] font-bold transition-all"
-                        title={`Sick: ${r.sick_used}h`}>
-                        {r.sick_used}
-                      </div>
-                    )}
-                    {r.personal_used > 0 && (
-                      <div style={{ width: `${persW}%`, backgroundColor: '#f59e0b' }}
-                        className="flex items-center justify-center text-white text-[10px] font-bold transition-all"
-                        title={`Personal: ${r.personal_used}h`}>
-                        {r.personal_used}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-[12px] text-gray-400 w-12 text-right flex-shrink-0">{total} hrs</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex gap-5 mt-4 pt-4 border-t border-[#f0f7f8]">
-            {([['#02ACC0', 'PTO'], ['#7c3aed', 'Sick'], ['#f59e0b', 'Personal']] as const).map(([color, label]) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
-                <span className="text-[11px] text-gray-400">{label}</span>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'Regular Hours', value: `${tsTotalReg} hrs`, color: '#0b2b35' },
+              { label: 'Leave Hours', value: `${tsTotalLeave} hrs`, color: '#7c3aed' },
+              { label: 'Submitted', value: tsSubmittedCount, color: '#059669' },
+              { label: 'Not Submitted', value: tsMissingCount, color: tsMissingCount > 0 ? '#d97706' : '#0b2b35' },
+              ...(isManager ? [{ label: 'Est. Weekly Payroll', value: currency(tsTotalWeeklyGross), color: '#02ACC0' }] : []),
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
+                <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
               </div>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#d4eef2] flex items-center justify-between">
-          <div>
-            <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {selectedPeriod.label}</h2>
-            <p className="text-[11px] text-gray-400 mt-0.5">All balances in hours · PTO carryover cap: 400 hrs</p>
-          </div>
-          {typeFilter !== 'All' && (
-            <span className="text-[11px] bg-[#e0f5f8] text-[#028a9e] font-semibold px-2.5 py-1 rounded-full no-print">
-              {typeFilter} only
-            </span>
-          )}
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                {isManager && <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Employee</th>}
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">PTO Used</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">PTO Balance</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Cap</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Used</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Balance</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Personal Rem.</th>
-                <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold no-print">Accrual/PP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.map(r => {
-                const capPct     = Math.min(Math.round((r.pto_bal / 400) * 100), 100)
-                const capWarning = capPct >= 75
-                return (
-                  <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
-                    {isManager && (
+          <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#d4eef2]">
+              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">Regular + leave hours logged per employee this pay period</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
+                    {['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status', 'Weekly Gross Wages'].map(h => (
+                      <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {timesheetRows.map(r => (
+                    <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">
-                            {r.initials}
-                          </div>
-                          <div className="whitespace-nowrap">
-                            <span className="font-medium text-[#0b2b35]">{r.name}</span>
-                            <span className="text-[10px] text-gray-400 ml-1.5">ID {r.id}</span>
-                          </div>
+                          <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
+                          <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
                         </div>
                       </td>
-                    )}
-                    <td className="px-5 py-3">
-                      {r.pto_used
-                        ? <span className="font-semibold text-[#02ACC0]">{r.pto_used} hrs</span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.pto_bal} hrs</td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2 min-w-[80px]">
-                        <div className="w-16 h-1.5 bg-[#f0f7f8] rounded-full overflow-hidden flex-shrink-0">
-                          <div
-                            className={`h-full rounded-full ${capWarning ? 'bg-amber-400' : 'bg-[#02ACC0]'}`}
-                            style={{ width: `${capPct}%` }} />
-                        </div>
-                        <span className={`text-[11px] font-semibold whitespace-nowrap ${capWarning ? 'text-amber-500' : 'text-gray-400'}`}>
-                          {capPct}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      {r.sick_used
-                        ? <span className="font-semibold text-violet-600">{r.sick_used} hrs</span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.sick_bal} hrs</td>
-                    <td className="px-5 py-3">
-                      <span className={`font-semibold ${r.personal_bal <= 8 ? 'text-amber-500' : 'text-[#0b2b35]'}`}>
-                        {r.personal_bal} hrs
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-400 no-print">{r.accrual} hrs</td>
+                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
+                      <td className="px-5 py-3">{r.leave_hours ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours} hrs</td>
+                      <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[r.status] ?? 'bg-gray-100 text-gray-500'}`}>{r.status}</span></td>
+                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.weekly_gross !== null ? currency(r.weekly_gross) : <span className="font-normal text-gray-300">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-[#d4eef2] bg-[#f9fefe]">
+                    <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
+                    <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg} hrs</td>
+                    <td className="px-5 py-3 font-bold text-violet-600">{tsTotalLeave} hrs</td>
+                    <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave} hrs</td>
+                    <td className="px-5 py-3" />
+                    <td className="px-5 py-3 font-bold text-[#02ACC0]">{currency(tsTotalWeeklyGross)}</td>
                   </tr>
-                )
-              })}
-            </tbody>
-            {isManager && filteredRows.length > 1 && (
-              <tfoot>
-                <tr className="border-t-2 border-[#d4eef2] bg-[#f9fefe]">
-                  <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
-                  <td className="px-5 py-3 font-bold text-[#02ACC0]">{totalPto} hrs</td>
-                  <td className="px-5 py-3" />
-                  <td className="px-5 py-3" />
-                  <td className="px-5 py-3 font-bold text-violet-600">{totalSick} hrs</td>
-                  <td className="px-5 py-3" />
-                  <td className="px-5 py-3 font-bold text-amber-500">{totalPersonal} hrs</td>
-                  <td className="px-5 py-3 no-print" />
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
-      </>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : tab === 'expenses' ? (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'Total Reimbursed', value: `$${expTotal.toFixed(2)}`, color: '#0b2b35' },
+              { label: 'Expenses Submitted', value: expCount, color: '#02ACC0' },
+              { label: 'Employees w/ Expenses', value: expenseRows.filter(r => r.count > 0).length, color: '#7c3aed' },
+              { label: 'Pay Period', value: selectedPeriod.start, color: '#0b2b35' },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
+                <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#d4eef2]">
+              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">Mileage and travel reimbursement submitted per employee this pay period</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
+                    {['Employee', 'Count', 'Total'].map(h => (
+                      <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenseRows.filter(r => r.count > 0).map(r => (
+                    <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
+                          <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-gray-500">{r.count}</td>
+                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">${r.total.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {expenseRows.filter(r => r.count > 0).length === 0 && (
+                    <tr><td colSpan={3} className="px-5 py-8 text-center text-gray-400">No expenses this period</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'PTO Hours Used', value: `${totalPto} hrs`, color: '#02ACC0' },
+              { label: 'Sick Hours Used', value: `${totalSick} hrs`, color: '#7c3aed' },
+              { label: 'Personal Hours Used', value: `${totalPersonal} hrs`, color: '#f59e0b' },
+              { label: isManager ? 'Employees Reported' : 'Pay Period', value: isManager ? filteredRows.length : selectedPeriod.start, color: '#0b2b35' },
+            ].map(s => (
+              <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
+                <p className="text-[26px] font-black leading-none mt-1" style={{ color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {isManager && rowsWithUsage.length > 0 && (
+            <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-6 no-print">
+              <h2 className="text-[13px] font-bold text-[#0b2b35] mb-4">Hours Used This Period</h2>
+              <div className="space-y-2.5">
+                {rowsWithUsage.map(r => {
+                  const total = r.pto_used + r.sick_used + r.personal_used
+                  const ptoW = (r.pto_used / maxUsed) * 100
+                  const sickW = (r.sick_used / maxUsed) * 100
+                  const persW = (r.personal_used / maxUsed) * 100
+                  return (
+                    <div key={r.id} className="flex items-center gap-3">
+                      <div className="w-[120px] text-[12px] font-medium text-[#0b2b35] flex-shrink-0 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
+                        <span className="truncate">{r.name.split(' ')[0]}</span>
+                      </div>
+                      <div className="flex-1 flex gap-0.5 h-7 rounded-lg overflow-hidden bg-[#f8fcfd]">
+                        {r.pto_used > 0 && <div style={{ width: `${ptoW}%`, backgroundColor: '#02ACC0' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`PTO: ${r.pto_used}h`}>{r.pto_used}</div>}
+                        {r.sick_used > 0 && <div style={{ width: `${sickW}%`, backgroundColor: '#7c3aed' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`Sick: ${r.sick_used}h`}>{r.sick_used}</div>}
+                        {r.personal_used > 0 && <div style={{ width: `${persW}%`, backgroundColor: '#f59e0b' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`Personal: ${r.personal_used}h`}>{r.personal_used}</div>}
+                      </div>
+                      <span className="text-[12px] text-gray-400 w-12 text-right flex-shrink-0">{total} hrs</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex gap-5 mt-4 pt-4 border-t border-[#f0f7f8]">
+                {([['#02ACC0', 'PTO'], ['#7c3aed', 'Sick'], ['#f59e0b', 'Personal']] as const).map(([color, label]) => (
+                  <div key={label} className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
+                    <span className="text-[11px] text-gray-400">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+            <div className="px-5 py-4 border-b border-[#d4eef2] flex items-center justify-between">
+              <div>
+                <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">All balances in hours · PTO carryover cap: 400 hrs</p>
+              </div>
+              {typeFilter !== 'All' && <span className="text-[11px] bg-[#e0f5f8] text-[#028a9e] font-semibold px-2.5 py-1 rounded-full no-print">{typeFilter} only</span>}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
+                    {isManager && <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Employee</th>}
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">PTO Used</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">PTO Balance</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Cap</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Used</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Balance</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Personal Rem.</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold no-print">Accrual/PP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map(r => {
+                    const capPct = Math.min(Math.round((r.pto_bal / 400) * 100), 100)
+                    const capWarning = capPct >= 75
+                    return (
+                      <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
+                        {isManager && (
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
+                              <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
+                            </div>
+                          </td>
+                        )}
+                        <td className="px-5 py-3">{r.pto_used ? <span className="font-semibold text-[#02ACC0]">{r.pto_used} hrs</span> : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.pto_bal} hrs</td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2 min-w-[80px]">
+                            <div className="w-16 h-1.5 bg-[#f0f7f8] rounded-full overflow-hidden flex-shrink-0">
+                              <div className={`h-full rounded-full ${capWarning ? 'bg-amber-400' : 'bg-[#02ACC0]'}`} style={{ width: `${capPct}%` }} />
+                            </div>
+                            <span className={`text-[11px] font-semibold whitespace-nowrap ${capWarning ? 'text-amber-500' : 'text-gray-400'}`}>{capPct}%</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3">{r.sick_used ? <span className="font-semibold text-violet-600">{r.sick_used} hrs</span> : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.sick_bal} hrs</td>
+                        <td className="px-5 py-3"><span className={`font-semibold ${r.personal_bal <= 8 ? 'text-amber-500' : 'text-[#0b2b35]'}`}>{r.personal_bal} hrs</span></td>
+                        <td className="px-5 py-3 text-gray-400 no-print">{r.accrual} hrs</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                {isManager && filteredRows.length > 1 && (
+                  <tfoot>
+                    <tr className="border-t-2 border-[#d4eef2] bg-[#f9fefe]">
+                      <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
+                      <td className="px-5 py-3 font-bold text-[#02ACC0]">{totalPto} hrs</td>
+                      <td className="px-5 py-3" />
+                      <td className="px-5 py-3" />
+                      <td className="px-5 py-3 font-bold text-violet-600">{totalSick} hrs</td>
+                      <td className="px-5 py-3" />
+                      <td className="px-5 py-3 font-bold text-amber-500">{totalPersonal} hrs</td>
+                      <td className="px-5 py-3 no-print" />
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </>
   )

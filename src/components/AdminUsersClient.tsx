@@ -3,27 +3,41 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee } from '@/app/actions/employees'
+import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 type Employee = {
   id: string
+  employee_number: number
+  first_name: string
+  last_name: string
+  middle_initial: string | null
   name: string
   email: string
   role: string
   employee_type: string
+  staff_category: string
   department: string | null
   job_title: string | null
   hire_date: string
   tier: string
   accrual: number
   status: string
+  grant_id: string | null
+  grant_name: string | null
 }
+
+type Grant = { id: string; name: string }
 
 const typeOptions = ['Full-time', 'Part-time', 'Consultant']
 const roleOptions = ['employee', 'accounting_manager', 'ceo', 'admin']
+const staffCategoryOptions: { value: string; label: string }[] = [
+  { value: 'cha_employee', label: 'CHA Employee' },
+  { value: 'resident_advocate', label: 'Resident Advocate' },
+]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { name: '', email: '', type: 'Full-time', role: 'employee', department: '', job_title: '', hire_date: '' }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '' }
 
-export default function AdminUsersClient({ initialEmployees }: { initialEmployees: Employee[] }) {
+export default function AdminUsersClient({ initialEmployees, grants }: { initialEmployees: Employee[]; grants: Grant[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
@@ -51,7 +65,7 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ name: e.name, email: e.email, type: e.employee_type, role: e.role, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '' })
     setError('')
     setShowForm(true)
   }
@@ -59,11 +73,13 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
   async function handleSave() {
     setError('')
     try {
+      const grant_id = form.grant_id || null
+      const middle_initial = form.middle_initial || null
       if (editId) {
-        await editEmployee(editId, { name: form.name, email: form.email, employee_type: form.type, role: form.role, department: form.department, job_title: form.job_title, hire_date: form.hire_date })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id })
         showToast('Employee updated')
       } else {
-        await addEmployee({ name: form.name, email: form.email, employee_type: form.type, role: form.role, department: form.department, job_title: form.job_title, hire_date: form.hire_date })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -126,24 +142,31 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
       {/* Table */}
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[860px]">
+        <table className="w-full text-[13px] min-w-[980px]">
           <thead>
             <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-              {['Name', 'Email', 'Role', 'Type', 'Hire Date', 'Accrual Tier', 'Status', 'Actions'].map(h => (
+              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'Accrual Tier', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
+              <tr><td colSpan={11} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
             )}
             {visible.map(e => (
               <tr key={e.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
+                <td className="px-4 py-3 text-gray-400 font-mono text-[12px]">{formatEmployeeId(e.employee_number)}</td>
                 <td className="px-4 py-3 font-medium text-[#0b2b35]">{e.name}</td>
                 <td className="px-4 py-3 text-gray-400">{e.email}</td>
                 <td className="px-4 py-3 text-gray-500 capitalize">{e.role.replace('_', ' ')}</td>
                 <td className="px-4 py-3 text-gray-500 capitalize">{e.employee_type}</td>
+                <td className="px-4 py-3">
+                  {e.staff_category === 'resident_advocate'
+                    ? <span className="bg-violet-100 text-violet-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">Resident Advocate</span>
+                    : <span className="text-gray-400">CHA Employee</span>}
+                </td>
+                <td className="px-4 py-3 text-gray-500">{e.grant_name || '—'}</td>
                 <td className="px-4 py-3 text-gray-500">{e.hire_date}</td>
                 <td className="px-4 py-3">
                   <span className="bg-[#e0f5f8] text-[#028a9e] text-[11px] font-semibold px-2 py-0.5 rounded-full">{e.tier}</span>
@@ -180,9 +203,17 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {error && <div className="sm:col-span-2 bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-3 py-2">{error}</div>}
-              <div className="sm:col-span-2 flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Full Name</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Jane Smith" className={inputCls} />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">First Name</label>
+                <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))} placeholder="Jane" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Last Name</label>
+                <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))} placeholder="Smith" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Middle Initial <span className="normal-case text-gray-400">(optional — for payroll)</span></label>
+                <input value={form.middle_initial} onChange={e => setForm(f => ({ ...f, middle_initial: e.target.value.slice(0, 1).toUpperCase() }))} placeholder="M" maxLength={1} className={inputCls} />
               </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Email</label>
@@ -201,6 +232,12 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Staff Category</label>
+                <select value={form.staff_category} onChange={e => setForm(f => ({ ...f, staff_category: e.target.value }))} className={inputCls}>
+                  {staffCategoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Department</label>
                 <select value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className={inputCls}>
                   <option value="">— Select —</option>
@@ -211,6 +248,13 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Job Title</label>
                 <input value={form.job_title} onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))} placeholder="e.g. Housing Specialist" className={inputCls} />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Grant / Funding Source</label>
+                <select value={form.grant_id} onChange={e => setForm(f => ({ ...f, grant_id: e.target.value }))} className={inputCls}>
+                  <option value="">— Unassigned —</option>
+                  {grants.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                </select>
+              </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Hire Date</label>
                 <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className={inputCls} />
@@ -218,7 +262,7 @@ export default function AdminUsersClient({ initialEmployees }: { initialEmployee
               </div>
             </div>
             <div className="flex gap-3 px-6 pb-6">
-              <button onClick={handleSave} disabled={!form.name || !form.email || !form.hire_date || isPending}
+              <button onClick={handleSave} disabled={!form.first_name || !form.last_name || !form.email || !form.hire_date || isPending}
                 className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 {editId ? 'Save Changes' : 'Add Employee'}
               </button>

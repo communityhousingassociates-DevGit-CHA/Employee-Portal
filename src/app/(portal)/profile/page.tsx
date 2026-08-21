@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ProfileForm from '@/components/ProfileForm'
+import SalaryCard from '@/components/SalaryCard'
+import { getMySalary } from '@/app/actions/salary'
 
 export default async function ProfilePage() {
   const supabase = await createClient()
@@ -11,13 +13,17 @@ export default async function ProfilePage() {
   const admin = createAdminClient()
   const { data: emp } = await admin
     .from('employees')
-    .select('id, name, email, role, employee_type, department, job_title, hire_date, avatar_url')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, department, job_title, hire_date, avatar_url')
     .eq('user_id', user.id)
     .single()
 
   // Fallback profile from auth user if no employees row yet
   const profile = emp ?? {
     id: '',
+    employee_number: null,
+    first_name: user.email?.split('@')[0] || 'User',
+    last_name: '',
+    middle_initial: null,
     name: user.email?.split('@')[0] || 'User',
     email: user.email || '',
     role: 'employee',
@@ -28,6 +34,8 @@ export default async function ProfilePage() {
     avatar_url: null,
   }
 
+  const salary = emp ? await getMySalary() : null
+
   return (
     <div>
       <div className="mb-6">
@@ -35,6 +43,7 @@ export default async function ProfilePage() {
         <p className="text-[13px] text-gray-500 mt-0.5">Update your name, photo, and personal details</p>
       </div>
       <ProfileForm profile={profile} userId={user.id} />
+      <SalaryCard salary={salary} />
     </div>
   )
 }

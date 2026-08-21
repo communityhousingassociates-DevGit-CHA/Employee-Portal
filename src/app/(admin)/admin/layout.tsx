@@ -1,33 +1,32 @@
 import Link from 'next/link'
 import Image from 'next/image'
+import { redirect } from 'next/navigation'
 import ResponsiveShell from '@/components/ResponsiveShell'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { getCurrentEmployee } from '@/lib/auth/session'
+
+const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
 const navItems = [
-  { href: '/admin', icon: '🛡️', label: 'Admin Overview', exact: true },
-  { href: '/admin/users', icon: '👥', label: 'User Management' },
-  { href: '/admin/settings', icon: '⚙️', label: 'Portal Settings' },
+  { href: '/admin', icon: '🛡️', label: 'Admin Overview', exact: true, roles: CONSOLE_ROLES },
+  { href: '/admin/users', icon: '👥', label: 'User Management', roles: ['admin'] },
+  { href: '/admin/import', icon: '📥', label: 'Data Import', roles: ['admin'] },
+  { href: '/admin/grants', icon: '🏷️', label: 'Grants', roles: ['admin'] },
+  { href: '/admin/salary', icon: '💰', label: 'Salary', roles: CONSOLE_ROLES },
+  { href: '/admin/settings', icon: '⚙️', label: 'Portal Settings', roles: CONSOLE_ROLES },
 ]
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  let displayName = 'Admin'
-  let initials = 'A'
+const ROLE_BADGE: Record<string, string> = { admin: 'ADMIN', ceo: 'CEO', accounting_manager: 'ACCOUNTING' }
 
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const admin = createAdminClient()
-      const { data: emp } = await admin
-        .from('employees')
-        .select('name')
-        .eq('user_id', user.id)
-        .single()
-      displayName = emp?.name || user.email?.split('@')[0] || 'Admin'
-      initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-    }
-  } catch {}
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const employee = await getCurrentEmployee()
+  if (!employee || !CONSOLE_ROLES.includes(employee.role)) {
+    redirect('/dashboard')
+  }
+
+  const displayName = employee.name || 'Admin'
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role))
+  const roleBadge = ROLE_BADGE[employee.role] ?? employee.role.toUpperCase()
 
   return (
     <ResponsiveShell
@@ -50,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {initials}
             </div>
             <span className="text-[13px] truncate hidden sm:inline">{displayName}</span>
-            <span className="text-[10px] bg-red-500/80 px-1.5 py-0.5 rounded-full font-semibold ml-1 flex-shrink-0">ADMIN</span>
+            <span className="text-[10px] bg-red-500/80 px-1.5 py-0.5 rounded-full font-semibold ml-1 flex-shrink-0">{roleBadge}</span>
           </div>
         </div>
       }
@@ -58,7 +57,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <nav className="w-[220px] bg-[#0b2b35] flex flex-col flex-shrink-0 overflow-y-auto h-full">
           <div className="p-3 pt-5">
             <p className="text-[10px] uppercase tracking-widest text-white/30 px-2 mb-2">Admin</p>
-            {navItems.map(item => (
+            {visibleNavItems.map(item => (
               <Link key={item.href} href={item.href}
                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium mb-0.5 text-white/70 hover:bg-white/10 hover:text-white transition-colors">
                 <span className="w-5 text-center">{item.icon}</span>

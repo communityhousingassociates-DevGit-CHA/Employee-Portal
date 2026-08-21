@@ -2,8 +2,6 @@ import Sidebar from '@/components/Sidebar'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { MOCK_USER } from '@/lib/mock-data'
-import { cookies } from 'next/headers'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -13,31 +11,22 @@ export default async function PortalLayout({ children }: { children: React.React
   let role: 'employee' | 'accounting_manager' | 'ceo' | 'admin' = 'employee'
   let avatarUrl: string | null = null
 
-  const cookieStore = await cookies()
-  const isDemo = cookieStore.get('cha-demo')?.value === 'true'
-
-  if (isDemo) {
-    displayName = MOCK_USER.name
-    initials = MOCK_USER.avatar
-    role = MOCK_USER.role
-  } else {
-    try {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const admin = createAdminClient()
-        const { data: emp } = await admin
-          .from('employees')
-          .select('name, role, avatar_url')
-          .eq('user_id', user.id)
-          .single()
-        displayName = emp?.name || user.email?.split('@')[0] || 'User'
-        initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-        if (emp?.role) role = emp.role
-        if (emp?.avatar_url) avatarUrl = emp.avatar_url
-      }
-    } catch {}
-  }
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const admin = createAdminClient()
+      const { data: emp } = await admin
+        .from('employees')
+        .select('name, role, avatar_url')
+        .eq('user_id', user.id)
+        .single()
+      displayName = emp?.name || user.email?.split('@')[0] || 'User'
+      initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+      if (emp?.role) role = emp.role
+      if (emp?.avatar_url) avatarUrl = emp.avatar_url
+    }
+  } catch {}
 
   return (
     <ResponsiveShell

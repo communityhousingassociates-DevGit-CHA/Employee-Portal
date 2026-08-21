@@ -3,9 +3,16 @@
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl } from '@/app/actions/profile'
+import { formatEmployeeId } from '@/lib/constants/employee-id'
+import { buildFullName } from '@/lib/format-name'
+import { createClient } from '@/lib/supabase/client'
 
 type Profile = {
   id: string
+  employee_number: number | null
+  first_name: string
+  last_name: string
+  middle_initial: string | null
   name: string
   email: string
   role: string
@@ -34,7 +41,9 @@ const DEPT_OPTIONS = [
 
 export default function ProfileForm({ profile, userId }: { profile: Profile; userId: string }) {
   const [form, setForm] = useState({
-    name: profile.name,
+    first_name: profile.first_name,
+    last_name: profile.last_name,
+    middle_initial: profile.middle_initial || '',
     job_title: profile.job_title || '',
     department: profile.department || '',
   })
@@ -45,14 +54,22 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const initials = form.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const [pwForm, setPwForm] = useState({ newPassword: '', confirm: '' })
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwSaved, setPwSaved] = useState(false)
+  const [pwError, setPwError] = useState('')
+
+  const displayName = buildFullName(form.first_name, form.last_name, form.middle_initial)
+  const initials = ((form.first_name[0] || '') + (form.last_name[0] || '')).toUpperCase()
 
   async function handleSave() {
     setSaving(true)
     setError('')
     try {
       await updateProfile({
-        name: form.name,
+        first_name: form.first_name,
+        last_name: form.last_name,
+        middle_initial: form.middle_initial || null,
         job_title: form.job_title || null,
         department: form.department || null,
       })
@@ -93,6 +110,31 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
     }
   }
 
+  async function handleChangePassword() {
+    setPwError('')
+    if (pwForm.newPassword.length < 8) {
+      setPwError('Password must be at least 8 characters')
+      return
+    }
+    if (pwForm.newPassword !== pwForm.confirm) {
+      setPwError('Passwords do not match')
+      return
+    }
+    setPwSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.updateUser({ password: pwForm.newPassword })
+      if (error) throw error
+      setPwForm({ newPassword: '', confirm: '' })
+      setPwSaved(true)
+      setTimeout(() => setPwSaved(false), 3000)
+    } catch (e: unknown) {
+      setPwError(e instanceof Error ? e.message : 'Failed to change password')
+    } finally {
+      setPwSaving(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl">
       {saved && (
@@ -110,7 +152,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5 flex flex-col sm:flex-row items-center sm:items-center gap-6 text-center sm:text-left">
         <div className="relative flex-shrink-0">
           {avatarUrl ? (
-            <Image src={avatarUrl} alt={form.name} width={80} height={80}
+            <Image src={avatarUrl} alt={displayName} width={80} height={80}
               className="w-20 h-20 rounded-full object-cover border-2 border-[#d4eef2]" />
           ) : (
             <div className="w-20 h-20 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[24px] font-black">
@@ -119,7 +161,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
           )}
         </div>
         <div>
-          <p className="text-[14px] font-semibold text-[#0b2b35] mb-0.5">{form.name}</p>
+          <p className="text-[14px] font-semibold text-[#0b2b35] mb-0.5">{displayName}</p>
           <p className="text-[12px] text-gray-400 mb-3">{profile.email}</p>
           <div className="flex items-center gap-2">
             <button onClick={() => fileRef.current?.click()} disabled={uploading}
@@ -142,9 +184,20 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5">
         <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Personal Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="sm:col-span-2 flex flex-col gap-1.5">
-            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Full Name</label>
-            <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">First Name</label>
+            <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Last Name</label>
+            <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Middle Initial <span className="normal-case text-gray-400">(optional — for payroll)</span></label>
+            <input value={form.middle_initial} onChange={e => setForm(f => ({ ...f, middle_initial: e.target.value.slice(0, 1).toUpperCase() }))}
+              maxLength={1}
               className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -169,6 +222,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
         <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Employment Details</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
+            { label: 'Employee ID', value: profile.employee_number ? formatEmployeeId(profile.employee_number) : '—' },
             { label: 'Email', value: profile.email },
             { label: 'Role', value: ROLE_LABELS[profile.role] || profile.role },
             { label: 'Employee Type', value: profile.employee_type },
@@ -186,6 +240,39 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
         className="bg-[#02ACC0] text-white text-[13px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-50">
         {saving ? 'Saving…' : 'Save Changes'}
       </button>
+
+      {/* Security */}
+      <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mt-6">
+        <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Security</h2>
+        {pwSaved && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2">
+            ✅ Password changed successfully
+          </div>
+        )}
+        {pwError && (
+          <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">
+            {pwError}
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">New Password</label>
+            <input type="password" autoComplete="new-password" placeholder="••••••••"
+              value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Confirm Password</label>
+            <input type="password" autoComplete="new-password" placeholder="••••••••"
+              value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
+              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+          </div>
+        </div>
+        <button onClick={handleChangePassword} disabled={pwSaving || !pwForm.newPassword || !pwForm.confirm}
+          className="bg-[#02ACC0] text-white text-[13px] font-semibold px-6 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-50">
+          {pwSaving ? 'Changing…' : 'Change Password'}
+        </button>
+      </div>
     </div>
   )
 }

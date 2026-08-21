@@ -11,7 +11,9 @@ async function getAuthUserId() {
 }
 
 export async function updateProfile(data: {
-  name: string
+  first_name: string
+  last_name: string
+  middle_initial: string | null
   job_title: string | null
   department: string | null
 }) {

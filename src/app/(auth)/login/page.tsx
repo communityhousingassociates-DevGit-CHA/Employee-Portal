@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
+import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
 const DEMO_PASSWORD = 'CHAdemo2026!'
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    if (email === DEMO_EMAIL && password === DEMO_PASSWORD) {
+    if (DEMO_MODE_ENABLED && email === DEMO_EMAIL && password === DEMO_PASSWORD) {
       await fetch('/api/demo-login', { method: 'POST' })
       router.push('/dashboard')
       router.refresh()
@@ -97,14 +98,16 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-4 border-t border-[#f0f7f8] pt-4">
-          <button
-            type="button"
-            onClick={fillDemo}
-            className="w-full text-[13px] text-[#02ACC0] border border-[#d4eef2] rounded-lg py-2 hover:bg-[#f0f7f8] transition-colors font-medium">
-            Use Demo Account
-          </button>
-        </div>
+        {DEMO_MODE_ENABLED && (
+          <div className="mt-4 border-t border-[#f0f7f8] pt-4">
+            <button
+              type="button"
+              onClick={fillDemo}
+              className="w-full text-[13px] text-[#02ACC0] border border-[#d4eef2] rounded-lg py-2 hover:bg-[#f0f7f8] transition-colors font-medium">
+              Use Demo Account
+            </button>
+          </div>
+        )}
 
         <p className="text-[12px] text-gray-400 text-center mt-5">
           Trouble signing in? Contact your administrator.
