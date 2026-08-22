@@ -206,7 +206,15 @@ export default function TimesheetClient({
           <div className="flex items-center gap-2 mt-1">
             <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading}
               className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">‹</button>
-            <span className="text-[13px] text-gray-500 font-medium">{formatPeriodLabel(period)}</span>
+            <select
+              value={periodIdx}
+              onChange={e => switchPeriod(Number(e.target.value))}
+              disabled={loading}
+              className="text-[13px] text-gray-600 font-medium bg-transparent border border-[#d4eef2] rounded-lg px-2 py-1 focus:outline-none focus:border-[#02ACC0] disabled:opacity-50">
+              {periods.map((p, i) => (
+                <option key={p.start} value={i}>{formatPeriodLabel(p)}{i === 0 ? ' (current)' : ''}</option>
+              ))}
+            </select>
             <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading}
               className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">›</button>
             <span className="text-[11px] text-amber-600 bg-amber-50 font-semibold px-2 py-0.5 rounded-full ml-1">

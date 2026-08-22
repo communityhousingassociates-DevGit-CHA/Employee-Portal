@@ -57,6 +57,20 @@ export function getRecentPeriods(count = 6, anchorDate: string = PAY_PERIOD_ANCH
   return periods
 }
 
+/**
+ * Returns every pay period from the one containing `sinceDate` through the
+ * current one, most recent first — for period pickers that need to go back
+ * further than a fixed recent window (e.g. an employee's full tenure).
+ * Capped at 130 periods (~5 years) as a sanity bound, not a real limit.
+ */
+export function getPeriodsSince(sinceDate: string, anchorDate: string = PAY_PERIOD_ANCHOR, asOf: Date = new Date()): PayPeriod[] {
+  const current = getCurrentPeriod(anchorDate, asOf)
+  const currentStart = new Date(`${current.start}T00:00:00Z`)
+  const since = new Date(`${sinceDate}T00:00:00Z`)
+  const count = Math.min(Math.max(Math.floor((currentStart.getTime() - since.getTime()) / (PERIOD_DAYS * 86400000)) + 1, 1), 130)
+  return getRecentPeriods(count, anchorDate, asOf)
+}
+
 /** True if `dateStr` (YYYY-MM-DD) is the start date of a pay period relative to `anchorDate`. */
 export function isPeriodBoundary(dateStr: string, anchorDate: string = PAY_PERIOD_ANCHOR): boolean {
   const anchor = new Date(`${anchorDate}T00:00:00Z`)

@@ -4,6 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { calcTier } from '@/lib/constants/accrual'
 import { requireRole } from '@/lib/auth/session'
+import type { Role } from '@/types'
+
+const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
 export async function addEmployee(data: {
   first_name: string
@@ -107,6 +110,33 @@ export async function getEmployees() {
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
     return { ...e, tier, accrual: ptoRate, status: e.is_active ? 'active' : 'archived', grant_name: grant?.name ?? null }
   })
+}
+
+/**
+ * Single-employee lookup for the drill-down detail page — visible to the
+ * broader manager tier (accounting_manager/ceo/admin), not just ceo/admin
+ * like the full roster page. Managers without roster access still reach
+ * this via a direct link (e.g. from Reports).
+ */
+export async function getEmployeeSummary(id: string) {
+  await requireRole(MANAGER_ROLES)
+  const admin = createAdminClient()
+  const { data: e, error } = await admin
+    .from('employees')
+    .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, leave_balances(pto_hours, sick_hours, personal_hours)')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+  const { tier, ptoRate } = calcTier(e.hire_date)
+  const bal = Array.isArray(e.leave_balances) ? e.leave_balances[0] : e.leave_balances
+  return {
+    ...e,
+    tier,
+    accrual: ptoRate,
+    pto_bal: bal ? Number(bal.pto_hours) : 0,
+    sick_bal: bal ? Number(bal.sick_hours) : 0,
+    personal_bal: bal ? Number(bal.personal_hours) : 0,
+  }
 }
 
 /** Read-only staff directory for the (portal) Employees page — visible to ceo/admin. */

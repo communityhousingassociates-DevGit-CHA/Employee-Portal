@@ -95,7 +95,17 @@ function RequestRow({ r, expanded, onToggle }: { r: Request; expanded: boolean; 
   )
 }
 
-export default function HistoryClient({ initialRequests }: { initialRequests: Request[] }) {
+export default function HistoryClient({
+  initialRequests,
+  title = 'My Leave Requests',
+  subtitle = 'Full history of submitted requests',
+  showNewRequestLink = true,
+}: {
+  initialRequests: Request[]
+  title?: string
+  subtitle?: string
+  showNewRequestLink?: boolean
+}) {
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [typeFilter, setTypeFilter] = useState<string>('All')
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -119,10 +129,12 @@ export default function HistoryClient({ initialRequests }: { initialRequests: Re
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">My Leave Requests</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Full history of submitted requests</p>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">{title}</h1>
+          <p className="text-[13px] text-gray-500 mt-0.5">{subtitle}</p>
         </div>
-        <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ New Request</Link>
+        {showNewRequestLink && (
+          <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ New Request</Link>
+        )}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">

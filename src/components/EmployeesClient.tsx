@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 type Employee = {
@@ -98,6 +99,9 @@ function EmployeeDetail({ e }: { e: Employee }) {
           <p className="text-[10px] text-gray-400">{e.personal_bal} / 24 hrs</p>
         </div>
       </div>
+      <Link href={`/employees/${e.id}`} className="inline-flex items-center gap-1 text-[#02ACC0] text-[12px] font-semibold hover:underline mt-4">
+        View timesheets &amp; leave history →
+      </Link>
     </div>
   )
 }

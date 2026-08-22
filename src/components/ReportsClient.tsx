@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { getReportSummary } from '@/app/actions/reports'
 import type { PayPeriod } from '@/lib/pay-periods'
 
@@ -205,10 +206,10 @@ export default function ReportsClient({
                   {timesheetRows.map(r => (
                     <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
                       <td className="px-5 py-3">
-                        <div className="flex items-center gap-2">
+                        <Link href={`/employees/${r.id}`} className="flex items-center gap-2 group w-fit">
                           <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
-                          <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
-                        </div>
+                          <span className="font-medium text-[#0b2b35] whitespace-nowrap group-hover:text-[#02ACC0] group-hover:underline">{r.name}</span>
+                        </Link>
                       </td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
                       <td className="px-5 py-3">{r.leave_hours ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
@@ -366,10 +367,10 @@ export default function ReportsClient({
                       <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#fafefe]">
                         {isManager && (
                           <td className="px-5 py-3">
-                            <div className="flex items-center gap-2">
+                            <Link href={`/employees/${r.id}`} className="flex items-center gap-2 group w-fit">
                               <div className="w-6 h-6 rounded-full bg-[#d4eef2] flex items-center justify-center text-[9px] font-bold text-[#028a9e] flex-shrink-0">{toInitials(r.name)}</div>
-                              <span className="font-medium text-[#0b2b35] whitespace-nowrap">{r.name}</span>
-                            </div>
+                              <span className="font-medium text-[#0b2b35] whitespace-nowrap group-hover:text-[#02ACC0] group-hover:underline">{r.name}</span>
+                            </Link>
                           </td>
                         )}
                         <td className="px-5 py-3">{r.pto_used ? <span className="font-semibold text-[#02ACC0]">{r.pto_used} hrs</span> : <span className="text-gray-300">—</span>}</td>
