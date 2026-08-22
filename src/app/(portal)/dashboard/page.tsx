@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
+import DashboardGreeting from '@/components/DashboardGreeting'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
 import { getOrCreateTimesheet } from '@/app/actions/timesheets'
 import { getCurrentPeriod } from '@/lib/pay-periods'
@@ -55,9 +56,6 @@ export default async function DashboardPage() {
   const oldestPending = pendingApprovals.reduce<string | null>((min, a) => (!min || a.created_at < min ? a.created_at : min), null)
 
   const now = new Date()
-  const hour = now.getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const dayLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
   const periodStart = new Date(`${period.start}T00:00:00`)
   const periodEnd = new Date(`${period.end}T00:00:00`)
@@ -98,8 +96,7 @@ export default async function DashboardPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[24px] font-bold text-[#0b2b35]">{greeting}, {firstName}</h1>
-          <p className="text-[13px] text-gray-400 mt-0.5">{dayLabel}</p>
+          <DashboardGreeting firstName={firstName} />
           <div className="flex items-center gap-3 mt-3">
             <div className="w-36 h-1.5 bg-[#e8f4f7] rounded-full overflow-hidden">
               <div className="h-full bg-[#02ACC0] rounded-full transition-all" style={{ width: `${periodPct}%` }} />
