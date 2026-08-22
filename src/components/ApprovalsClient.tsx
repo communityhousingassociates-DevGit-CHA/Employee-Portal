@@ -9,6 +9,14 @@ import type { LeaveRequest, Expense } from '@/types'
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
 
+// Categories with underscores (rental_car, cash_advance, conference_fees) render wrong
+// under CSS `capitalize` (e.g. "Rental_car") — map to real labels instead.
+const CATEGORY_LABELS: Record<string, string> = {
+  mileage: 'Mileage', hotel: 'Hotel', airline: 'Airline', meals: 'Meals', entertainment: 'Entertainment',
+  cash_advance: 'Cash Advance', tolls: 'Tolls', conference_fees: 'Conference Fees', rental_car: 'Rental Car',
+  gratuities: 'Gratuities', parking: 'Parking', other: 'Other',
+}
+
 const TYPE_STYLE: Record<string, { bar: string; badge: string }> = {
   PTO: { bar: 'bg-[#02ACC0]', badge: 'bg-[#e0f5f8] text-[#028a9e]' },
   Sick: { bar: 'bg-violet-500', badge: 'bg-violet-50 text-violet-700' },
@@ -200,7 +208,7 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
     <div className="bg-white rounded-xl border border-[#d4eef2] shadow-sm p-5">
       <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
         <div>
-          <p className="font-bold text-[15px] text-[#0b2b35] capitalize">{employeeName} — {item.category}{item.miles ? ` (${item.miles} mi)` : ''}</p>
+          <p className="font-bold text-[15px] text-[#0b2b35]">{employeeName} — {CATEGORY_LABELS[item.category] ?? item.category}{item.miles ? ` (${item.miles} mi)` : ''}</p>
           <p className="text-[12px] text-gray-400 mt-0.5">{item.expense_date} · ${Number(item.amount).toFixed(2)}{item.description ? ` · ${item.description}` : ''}</p>
         </div>
         {!confirming && (

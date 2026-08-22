@@ -20,6 +20,8 @@ const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
   { value: 'other', label: 'Other' },
 ]
 
+const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(CATEGORY_OPTIONS.map(c => [c.value, c.label]))
+
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
   approved: 'bg-emerald-100 text-emerald-700',
@@ -137,7 +139,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
             {expenses.map(exp => (
               <tr key={exp.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
                 <td className="px-4 py-3 text-gray-500">{exp.expense_date}</td>
-                <td className="px-4 py-3 text-gray-500 capitalize">{exp.category}{exp.category === 'mileage' && exp.miles ? ` (${exp.miles} mi)` : ''}</td>
+                <td className="px-4 py-3 text-gray-500">{CATEGORY_LABELS[exp.category] ?? exp.category}{exp.category === 'mileage' && exp.miles ? ` (${exp.miles} mi)` : ''}</td>
                 <td className="px-4 py-3 text-gray-500">{exp.description || '—'}</td>
                 <td className="px-4 py-3 font-medium text-[#0b2b35]">{currency(exp.amount)}</td>
                 <td className="px-4 py-3">
