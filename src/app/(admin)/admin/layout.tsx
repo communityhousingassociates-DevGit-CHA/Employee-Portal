@@ -3,6 +3,7 @@ import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import { getCurrentEmployee } from '@/lib/auth/session'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
@@ -27,6 +28,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role))
   const roleBadge = ROLE_BADGE[employee.role] ?? employee.role.toUpperCase()
+
+  // Only a superadmin can act on a pending import, so only they see the count.
+  let pendingImportCount = 0
+  if (employee.is_super_admin) {
+    const admin = createAdminClient()
+    const { count } = await admin.from('import_batches').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+    pendingImportCount = count ?? 0
+  }
 
   return (
     <ResponsiveShell
@@ -62,6 +71,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium mb-0.5 text-white/70 hover:bg-white/10 hover:text-white transition-colors">
                 <span className="w-5 text-center">{item.icon}</span>
                 {item.label}
+                {item.href === '/admin/import' && pendingImportCount > 0 && (
+                  <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {pendingImportCount}
+                  </span>
+                )}
               </Link>
             ))}
           </div>

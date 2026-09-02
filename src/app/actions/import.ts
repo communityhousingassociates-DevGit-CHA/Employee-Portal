@@ -59,6 +59,7 @@ export async function commitImport(payload: {
   employees: ParsedEmployeeRow[]
   balances: (ParsedBalanceRow & { matchedEmail: string | null })[]
   salaries: (ParsedSalaryRow & { matchedEmail: string | null })[]
+  batchId?: string
 }): Promise<{
   employeesCreated: number
   balancesCreated: number
@@ -170,10 +171,163 @@ export async function commitImport(payload: {
     salariesCreated = salaryRowsToInsert.length
   }
 
+  if (payload.batchId) {
+    const { error: batchError } = await admin
+      .from('import_batches')
+      .update({ status: 'committed', committed_by: actor.id, committed_at: new Date().toISOString() })
+      .eq('id', payload.batchId)
+    if (batchError) throw new Error(batchError.message)
+  }
+
   revalidatePath('/admin/users')
   revalidatePath('/admin/import')
   revalidatePath('/admin/salary')
   return { employeesCreated: inserted.length, balancesCreated, salariesCreated, skipped, createdEmployees: inserted }
+}
+
+/**
+ * Persists a validated (but not-yet-committed) import batch so a superadmin
+ * can review and commit it later, from any session — previously this state
+ * lived only in the preparing admin's browser tab. Re-validates server-side
+ * so nothing with unresolved errors can be queued for review.
+ */
+export async function submitImportForReview(payload: {
+  employees: ParsedEmployeeRow[]
+  balances: ParsedBalanceRow[]
+  salaries: ParsedSalaryRow[]
+  employeeFileName: string
+  balanceFileName: string
+  salaryFileName: string | null
+}): Promise<{ id: string }> {
+  const actor = await requireRole(['admin'])
+  const admin = createAdminClient()
+
+  const existing = await getExistingEmployees()
+  const preview = buildPreview(payload.employees, payload.balances, existing, payload.salaries)
+  if (preview.summary.errors > 0) {
+    throw new Error(`${preview.summary.errors} row(s) still have unresolved errors — resolve before submitting for review`)
+  }
+
+  const { data, error } = await admin
+    .from('import_batches')
+    .insert({
+      prepared_by: actor.id,
+      employee_file_name: payload.employeeFileName,
+      balance_file_name: payload.balanceFileName,
+      salary_file_name: payload.salaryFileName,
+      employee_rows: payload.employees,
+      balance_rows: payload.balances,
+      salary_rows: payload.salaries,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/admin/import')
+  return { id: data.id }
+}
+
+/** Lightweight count for the "Data Import" nav badge — superadmin-only, since only they can act on it. */
+export async function getPendingImportCount(): Promise<number> {
+  const me = await requireRole(['admin'])
+  if (!me.is_super_admin) return 0
+  const admin = createAdminClient()
+  const { count, error } = await admin
+    .from('import_batches')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'pending')
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+export async function getPendingImportBatches(): Promise<{
+  id: string
+  preparedByName: string | null
+  createdAt: string
+  employeeCount: number
+  balanceCount: number
+  salaryCount: number
+}[]> {
+  await requireSuperAdmin()
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('import_batches')
+    .select('id, created_at, employee_rows, balance_rows, salary_rows, preparer:employees!import_batches_prepared_by_fkey(name)')
+    .eq('status', 'pending')
+    .order('created_at')
+  if (error) throw new Error(error.message)
+
+  return (data ?? []).map(b => {
+    const preparer = b.preparer as unknown as { name: string } | { name: string }[] | null
+    const preparedByName = Array.isArray(preparer) ? preparer[0]?.name : preparer?.name
+    return {
+      id: b.id,
+      preparedByName: preparedByName ?? null,
+      createdAt: b.created_at,
+      employeeCount: Array.isArray(b.employee_rows) ? b.employee_rows.length : 0,
+      balanceCount: Array.isArray(b.balance_rows) ? b.balance_rows.length : 0,
+      salaryCount: Array.isArray(b.salary_rows) ? b.salary_rows.length : 0,
+    }
+  })
+}
+
+/** Loads one pending batch and re-validates it fresh (e.g. someone else may have added a matching employee since it was submitted). */
+export async function getPendingImportBatch(id: string): Promise<{
+  employees: ParsedEmployeeRow[]
+  balances: ParsedBalanceRow[]
+  salaries: ParsedSalaryRow[]
+  preview: ImportPreview
+  employeeFileName: string | null
+  balanceFileName: string | null
+  salaryFileName: string | null
+  preparedByName: string | null
+}> {
+  await requireSuperAdmin()
+  const admin = createAdminClient()
+  const { data: batch, error } = await admin
+    .from('import_batches')
+    .select('*, preparer:employees!import_batches_prepared_by_fkey(name)')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+
+  const employees = (batch.employee_rows ?? []) as ParsedEmployeeRow[]
+  const balances = (batch.balance_rows ?? []) as ParsedBalanceRow[]
+  const salaries = (batch.salary_rows ?? []) as ParsedSalaryRow[]
+
+  const existing = await getExistingEmployees()
+  const preview = buildPreview(employees, balances, existing, salaries)
+  const preparer = batch.preparer as unknown as { name: string } | { name: string }[] | null
+  const preparedByName = Array.isArray(preparer) ? preparer[0]?.name : preparer?.name
+
+  return {
+    employees,
+    balances,
+    salaries,
+    preview,
+    employeeFileName: batch.employee_file_name,
+    balanceFileName: batch.balance_file_name,
+    salaryFileName: batch.salary_file_name,
+    preparedByName: preparedByName ?? null,
+  }
+}
+
+/** Either the admin who submitted it, or a superadmin, can discard a batch instead of committing it. */
+export async function discardImportBatch(id: string): Promise<void> {
+  const actor = await requireRole(['admin'])
+  const admin = createAdminClient()
+  const { data: batch, error: fetchError } = await admin
+    .from('import_batches')
+    .select('prepared_by, status')
+    .eq('id', id)
+    .single()
+  if (fetchError) throw new Error(fetchError.message)
+  if (batch.status !== 'pending') throw new Error('This batch has already been resolved')
+  if (batch.prepared_by !== actor.id && !actor.is_super_admin) throw new Error('Forbidden')
+
+  const { error } = await admin.from('import_batches').update({ status: 'discarded' }).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/import')
 }
 
 export async function inviteEmployees(
