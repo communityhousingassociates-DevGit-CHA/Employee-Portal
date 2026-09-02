@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet } from '@/app/actions/timesheets'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
@@ -9,6 +9,7 @@ import type { Timesheet, TimesheetRow as TimesheetRowType, Expense } from '@/typ
 import type { PayPeriod } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
+const AUTOSAVE_DELAY_MS = 1500
 
 type EditableRow = TimesheetRowType & { dirty?: boolean }
 type Salary = { annual_salary: number; effective_date: string; note: string | null } | null
@@ -71,9 +72,10 @@ export default function TimesheetClient({
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
-  const [savedDraft, setSavedDraft] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const savingRef = useRef(false)
 
   const period = periods[periodIdx]
   const dueDate = addDays(period.end, 2)
@@ -89,6 +91,53 @@ export default function TimesheetClient({
   const employeeIdLabel = formatEmployeeId(employeeNumber)
   const weeklyGross = salary ? Number(salary.annual_salary) / 52 : null
   const periodGross = weeklyGross !== null ? weeklyGross * 2 : null
+  const hasUnsaved = rows.some(r => r.dirty)
+
+  /** Shared by the debounced autosave, the manual "Save" button, and pre-submit/pre-switch flushes, so every save path leaves rows/status consistent. */
+  async function persist(rowsSnapshot: EditableRow[]) {
+    if (savingRef.current) return
+    savingRef.current = true
+    setSaveStatus('saving')
+    try {
+      await saveTimesheetDraft(timesheet.id, rowsSnapshot.map(r => ({
+        id: r.id,
+        description: r.description,
+        regular_hours: Number(r.regular_hours),
+        leave_hours: Number(r.leave_hours),
+      })))
+      setRows(rs => rs.map(r => ({ ...r, dirty: false })))
+      setSaveStatus('idle')
+    } catch (e: unknown) {
+      setSaveStatus('error')
+      setError(e instanceof Error ? e.message : 'Failed to save changes')
+      throw e
+    } finally {
+      savingRef.current = false
+    }
+  }
+
+  // Autosave: debounce edits, then persist. Effect re-runs (and its cleanup
+  // clears the pending timer) on every keystroke, so only a pause in typing
+  // actually triggers a save.
+  useEffect(() => {
+    if (!rows.some(r => r.dirty)) return
+    const t = setTimeout(() => { void persist(rows) }, AUTOSAVE_DELAY_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
+
+  // Backstop for the brief window before autosave fires (or if it fails):
+  // warn on tab close/refresh so edits are never silently lost.
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (rows.some(r => r.dirty)) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [rows])
 
   async function switchPeriod(newIdx: number) {
     if (newIdx < 0 || newIdx >= periods.length || newIdx === periodIdx) return
@@ -96,6 +145,11 @@ export default function TimesheetClient({
     setError('')
     setSigned(false)
     try {
+      // Flush pending edits before navigating away — otherwise an in-flight
+      // debounce for the old period would fire after `rows` has already
+      // been replaced with the new period's data.
+      if (rows.some(r => r.dirty)) await persist(rows)
+
       const p = periods[newIdx]
       const [{ timesheet: ts, rows: r }, exp] = await Promise.all([
         getOrCreateTimesheet(p.start, p.end),
@@ -119,16 +173,9 @@ export default function TimesheetClient({
   async function saveDraft() {
     setError('')
     try {
-      await saveTimesheetDraft(timesheet.id, rows.map(r => ({
-        id: r.id,
-        description: r.description,
-        regular_hours: Number(r.regular_hours),
-        leave_hours: Number(r.leave_hours),
-      })))
-      setSavedDraft(true)
-      setTimeout(() => setSavedDraft(false), 2000)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save draft')
+      await persist(rows)
+    } catch {
+      // error already surfaced by persist()
     }
   }
 
@@ -136,12 +183,7 @@ export default function TimesheetClient({
     setSubmitting(true)
     setError('')
     try {
-      await saveTimesheetDraft(timesheet.id, rows.map(r => ({
-        id: r.id,
-        description: r.description,
-        regular_hours: Number(r.regular_hours),
-        leave_hours: Number(r.leave_hours),
-      })))
+      await persist(rows)
       await submitTimesheet(timesheet.id)
       setTimesheet(t => ({ ...t, status: 'submitted' }))
     } catch (e: unknown) {
@@ -250,9 +292,15 @@ export default function TimesheetClient({
             className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
             ⬇ Export PDF
           </button>
-          <button onClick={saveDraft}
-            className="border border-[#d4eef2] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
-            {savedDraft ? '✓ Saved' : 'Save Draft'}
+          <button
+            onClick={saveDraft}
+            disabled={saveStatus === 'saving'}
+            className={`text-[13px] font-semibold px-4 py-2 rounded-lg transition-colors border disabled:opacity-60 disabled:cursor-not-allowed ${
+              saveStatus === 'error' ? 'border-red-200 text-red-500 hover:bg-red-50'
+              : hasUnsaved ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
+              : 'border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8]'
+            }`}>
+            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Retry Save' : hasUnsaved ? 'Save Now' : '✓ All changes saved'}
           </button>
           <button
             disabled={!signed || submitting}
