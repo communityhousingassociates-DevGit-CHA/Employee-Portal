@@ -97,12 +97,36 @@ export async function deleteEmployee(id: string) {
   revalidatePath('/admin/users')
 }
 
+/**
+ * Sends a Supabase password-recovery email to an employee's own address —
+ * lets an admin/super admin unblock a locked-out user without ever seeing
+ * or setting their password directly. Employee sets the new password
+ * themselves via the same /set-password flow used for invites.
+ */
+export async function sendPasswordReset(id: string) {
+  await requireRole(['admin'])
+  const admin = createAdminClient()
+  const { data: employee, error } = await admin
+    .from('employees')
+    .select('email, user_id')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+  if (!employee.user_id) throw new Error('This employee has not been invited yet — no account to reset.')
+
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? ''
+  const { error: resetError } = await admin.auth.resetPasswordForEmail(employee.email, {
+    redirectTo: origin ? `${origin}/set-password` : undefined,
+  })
+  if (resetError) throw new Error(resetError.message)
+}
+
 export async function getEmployees() {
   await requireRole(['admin'])
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, user_id, grant_id, grant:grants(name)')
     .order('name')
   if (error) throw new Error(error.message)
   return (data ?? []).map(e => {

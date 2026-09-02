@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
+import Link from 'next/link'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
@@ -72,7 +73,10 @@ export default function LoginPage() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Password</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Password</label>
+              <Link href="/forgot-password" className="text-[11px] text-[#02ACC0] font-medium hover:underline">Forgot password?</Link>
+            </div>
             <input
               type="password"
               autoComplete="current-password"

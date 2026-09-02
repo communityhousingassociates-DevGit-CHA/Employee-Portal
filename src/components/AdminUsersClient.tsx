@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 type Employee = {
@@ -24,6 +24,7 @@ type Employee = {
   status: string
   grant_id: string | null
   grant_name: string | null
+  user_id: string | null
 }
 
 type Grant = { id: string; name: string }
@@ -108,6 +109,15 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
     showToast('Employee deleted')
   }
 
+  async function handleResetPassword(e: Employee) {
+    try {
+      await sendPasswordReset(e.id)
+      showToast(`Password reset link sent to ${e.email}`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send reset link')
+    }
+  }
+
   const inputCls = 'px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]'
 
   return (
@@ -179,6 +189,9 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => openEdit(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] hover:bg-[#f0f7f8]">Edit</button>
+                    {e.user_id && (
+                      <button onClick={() => handleResetPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-[#028a9e] hover:bg-[#f0f7f8]">Reset Password</button>
+                    )}
                     {e.status === 'active'
                       ? <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Archive</button>
                       : <button onClick={() => handleRestore(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50">Restore</button>
