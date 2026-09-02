@@ -116,7 +116,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Public routes — no auth required
-  if (pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password')) {
+  if (pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password') || pathname.startsWith('/forgot-password')) {
     return securityHeaders(supabaseResponse, csp)
   }
 
