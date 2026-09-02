@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
+import { distributeLeaveHours, applyLeaveToTimesheets } from '@/lib/leave-timesheet'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -192,9 +193,16 @@ export async function approveLeaveRequest(id: string) {
   }).eq('id', id)
   if (error) throw new Error(error.message)
 
+  // Push the approved days onto the employee's timesheet(s), creating a
+  // timesheet for any pay period they haven't opened yet. Pending/denied
+  // requests never reach this — only an approval touches the timesheet.
+  const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
+  await applyLeaveToTimesheets(admin, request.employee_id, request.leave_type as LeaveType, allocations)
+
   revalidatePath('/approvals')
   revalidatePath('/history')
   revalidatePath('/dashboard')
+  revalidatePath('/timesheet')
 }
 
 export async function denyLeaveRequest(id: string, reason: string) {

@@ -139,7 +139,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
         {confirming === 'approve' && (
           <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <p className="text-[13px] font-semibold text-emerald-800 mb-1">Confirm approval</p>
-            <p className="text-[12px] text-emerald-700 mb-3">By confirming, you approve this request and its balance will be deducted.</p>
+            <p className="text-[12px] text-emerald-700 mb-3">By confirming, you approve this request — its balance will be deducted and the requested day(s) will be logged as Leave on their timesheet automatically.</p>
             <div className="flex gap-2">
               <button onClick={submitApprove} disabled={busy} className="bg-emerald-600 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50">
                 {busy ? 'Confirming…' : '✓ Confirm & Sign'}
