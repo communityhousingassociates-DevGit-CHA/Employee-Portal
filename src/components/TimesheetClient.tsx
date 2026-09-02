@@ -29,6 +29,23 @@ function formatPeriodLabel(p: PayPeriod): string {
   return `${new Date(`${p.start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${p.end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 }
 
+const SALARIED_DAILY_HOURS = 8
+
+/**
+ * For salaried employees, Regular is a derived field, not an independent
+ * input: Leave (0.5-hr increments, capped at 8) always deducts from a fixed
+ * 8-hr day so Regular + Leave === 8 by construction. Normalizes rows on
+ * load too, so any pre-existing row saved before this rule (e.g.
+ * regular=8/leave=2) self-corrects the next time it's opened.
+ */
+function normalizeRows(rows: TimesheetRowType[], salaried: boolean): EditableRow[] {
+  if (!salaried) return rows
+  return rows.map(r => {
+    const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.leave_hours)))
+    return { ...r, leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave }
+  })
+}
+
 export default function TimesheetClient({
   employeeName,
   employeeNumber,
@@ -46,9 +63,11 @@ export default function TimesheetClient({
   initialExpenses: Expense[]
   salary: Salary
 }) {
+  const isSalaried = salary !== null
+
   const [periodIdx, setPeriodIdx] = useState(0)
   const [timesheet, setTimesheet] = useState<Timesheet>(initialTimesheet)
-  const [rows, setRows] = useState<EditableRow[]>(initialRows)
+  const [rows, setRows] = useState<EditableRow[]>(() => normalizeRows(initialRows, isSalaried))
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
@@ -84,7 +103,7 @@ export default function TimesheetClient({
       ])
       setPeriodIdx(newIdx)
       setTimesheet(ts)
-      setRows(r)
+      setRows(normalizeRows(r, isSalaried))
       setExpenses(exp)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load period')
@@ -248,9 +267,9 @@ export default function TimesheetClient({
         <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>
       )}
 
-      {salary !== null && (
+      {isSalaried && (
         <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
-          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. If you took sick, PTO, or other time off, lower <strong>Regular</strong> and log the hours under <strong>Leave</strong> for that day so your balances stay accurate.
+          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. Log any sick, PTO, or other time off under <strong>Leave</strong> — <strong>Regular</strong> adjusts automatically so each day still totals 8.
         </div>
       )}
 
@@ -290,7 +309,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
-        {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} />)}
+        {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
         <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-4 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -301,7 +320,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
-        {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} />)}
+        {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
         <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-4 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -361,13 +380,22 @@ export default function TimesheetClient({
   )
 }
 
-function TimesheetRowView({ row, onUpdate }: { row: EditableRow; onUpdate: (id: string, patch: Partial<EditableRow>) => void }) {
+function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean }) {
   const isLeave = Number(row.leave_hours) > 0
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours)
   const isEmpty = rowTotal === 0
   const d = new Date(`${row.work_date}T00:00:00`)
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
   const dayShort = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
+  function handleLeaveChange(v: number) {
+    if (isSalaried) {
+      const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS, v))
+      onUpdate(row.id, { leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave })
+    } else {
+      onUpdate(row.id, { leave_hours: v })
+    }
+  }
 
   return (
     <div className={`grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
@@ -387,8 +415,16 @@ function TimesheetRowView({ row, onUpdate }: { row: EditableRow; onUpdate: (id: 
         {isLeave && <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Leave</span>}
         {isEmpty && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Incomplete</span>}
       </div>
-      <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} />
-      <HoursInput value={Number(row.leave_hours)} onChange={v => onUpdate(row.id, { leave_hours: v })} />
+      {isSalaried ? (
+        <div
+          title="Calculated automatically as 8 minus Leave hours"
+          className="w-full text-center px-2 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
+          {Number(row.regular_hours)}
+        </div>
+      ) : (
+        <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} />
+      )}
+      <HoursInput value={Number(row.leave_hours)} onChange={handleLeaveChange} max={isSalaried ? SALARIED_DAILY_HOURS : 24} />
       <div className={`text-center font-bold ${rowTotal === 8 ? 'text-emerald-600' : rowTotal === 0 ? 'text-gray-300' : 'text-amber-600'}`}>
         {rowTotal > 0 ? rowTotal : '—'}
       </div>
@@ -396,13 +432,13 @@ function TimesheetRowView({ row, onUpdate }: { row: EditableRow; onUpdate: (id: 
   )
 }
 
-function HoursInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+function HoursInput({ value, onChange, max = 24 }: { value: number; onChange: (v: number) => void; max?: number }) {
   return (
     <input
-      type="number" min={0} max={24} step={0.5}
+      type="number" min={0} max={max} step={0.5}
       value={value || ''}
       placeholder="0"
-      onChange={e => onChange(Math.max(0, Math.min(24, Number(e.target.value))))}
+      onChange={e => onChange(Math.max(0, Math.min(max, Number(e.target.value))))}
       className="w-full text-center px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
     />
   )
