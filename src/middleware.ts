@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const SUPABASE_HOST = (() => {
   try {
@@ -143,6 +144,26 @@ export async function middleware(request: NextRequest) {
   // Redirect unauthenticated users to login
   if (!user && !pathname.startsWith('/login')) {
     return securityHeaders(NextResponse.redirect(new URL('/login', request.url)), csp)
+  }
+
+  // Forced password change — an admin set this employee's password directly
+  // (rather than emailing a self-service reset link), and they've now signed
+  // in 3+ times with it. Every route but /change-password itself is gated
+  // until they set their own password (see src/app/actions/auth.ts).
+  if (user && pathname !== '/change-password') {
+    try {
+      const admin = createAdminClient()
+      const { data: employee } = await admin
+        .from('employees')
+        .select('force_password_change, login_count')
+        .eq('user_id', user.id)
+        .single()
+      if (employee?.force_password_change && employee.login_count >= 3) {
+        return securityHeaders(NextResponse.redirect(new URL('/change-password', request.url)), csp)
+      }
+    } catch {
+      // Fail open — don't block portal access if this check itself errors.
+    }
   }
 
   // Redirect authenticated users away from login

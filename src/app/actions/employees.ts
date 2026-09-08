@@ -1,5 +1,6 @@
 'use server'
 
+import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { calcTier } from '@/lib/constants/accrual'
@@ -119,6 +120,38 @@ export async function sendPasswordReset(id: string) {
     redirectTo: origin ? `${origin}/set-password` : undefined,
   })
   if (resetError) throw new Error(resetError.message)
+}
+
+/**
+ * Sets a temporary password directly (instead of emailing a reset link) —
+ * for handing credentials to an employee out of band. Flags the account so
+ * the portal forces a real password change once they've signed in 3 times
+ * with it (see middleware.ts + /change-password). Returns the plaintext
+ * password once — it is never stored and cannot be retrieved again, so the
+ * caller must show it immediately and hand it to the employee securely.
+ */
+export async function setTemporaryPassword(id: string): Promise<string> {
+  await requireRole(['admin'])
+  const admin = createAdminClient()
+  const { data: employee, error } = await admin
+    .from('employees')
+    .select('user_id')
+    .eq('id', id)
+    .single()
+  if (error) throw new Error(error.message)
+  if (!employee.user_id) throw new Error('This employee has not been invited yet — no account to set a password for.')
+
+  const tempPassword = `CHA-${randomBytes(6).toString('hex')}!`
+  const { error: pwError } = await admin.auth.admin.updateUserById(employee.user_id, { password: tempPassword })
+  if (pwError) throw new Error(pwError.message)
+
+  const { error: flagError } = await admin
+    .from('employees')
+    .update({ force_password_change: true, login_count: 0 })
+    .eq('id', id)
+  if (flagError) throw new Error(flagError.message)
+
+  return tempPassword
 }
 
 export async function getEmployees() {

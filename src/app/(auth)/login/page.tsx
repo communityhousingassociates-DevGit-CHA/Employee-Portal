@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
+import { recordSuccessfulLogin } from '@/app/actions/auth'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
 const DEMO_PASSWORD = 'CHAdemo2026!'
@@ -36,6 +37,7 @@ export default function LoginPage() {
       setError(error.message)
       setLoading(false)
     } else {
+      await recordSuccessfulLogin()
       router.push('/dashboard')
       router.refresh()
     }

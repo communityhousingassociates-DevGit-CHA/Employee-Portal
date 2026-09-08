@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 type Employee = {
@@ -49,6 +49,8 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
+  const [tempPasswordResult, setTempPasswordResult] = useState<{ email: string; password: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const visible = employees.filter(e => filter === 'active' ? e.status === 'active' : e.status === 'archived')
 
@@ -115,6 +117,26 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
       showToast(`Password reset link sent to ${e.email}`)
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to send reset link')
+    }
+  }
+
+  async function handleSetTempPassword(e: Employee) {
+    try {
+      const password = await setTemporaryPassword(e.id)
+      setCopied(false)
+      setTempPasswordResult({ email: e.email, password })
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to set temporary password')
+    }
+  }
+
+  async function handleCopyTempPassword() {
+    if (!tempPasswordResult) return
+    try {
+      await navigator.clipboard.writeText(tempPasswordResult.password)
+      setCopied(true)
+    } catch {
+      // Clipboard API unavailable — password is still shown on screen to copy manually.
     }
   }
 
@@ -191,6 +213,9 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
                     <button onClick={() => openEdit(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] hover:bg-[#f0f7f8]">Edit</button>
                     {e.user_id && (
                       <button onClick={() => handleResetPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-[#028a9e] hover:bg-[#f0f7f8]">Reset Password</button>
+                    )}
+                    {e.user_id && (
+                      <button onClick={() => handleSetTempPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-amber-600 hover:bg-amber-50">Set Temp Password</button>
                     )}
                     {e.status === 'active'
                       ? <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Archive</button>
@@ -300,6 +325,30 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
               <button onClick={() => handleDelete(confirmDelete)} className="bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600">Yes, Delete</button>
               <button onClick={() => setConfirmDelete(null)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Temp password result */}
+      {tempPasswordResult && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-sm p-6 shadow-xl">
+            <h2 className="text-[16px] font-bold text-[#0b2b35] mb-1">Temporary Password Set</h2>
+            <p className="text-[13px] text-gray-500 mb-4">
+              For <strong>{tempPasswordResult.email}</strong>. This is shown once — copy it now and hand it to the employee securely (not over email or chat).
+            </p>
+            <div className="flex items-center gap-2 bg-[#f0f7f8] border border-[#d4eef2] rounded-lg px-3 py-2.5 mb-4">
+              <code className="text-[14px] font-mono text-[#0b2b35] flex-1 break-all">{tempPasswordResult.password}</code>
+              <button onClick={handleCopyTempPassword} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] bg-white hover:bg-[#f0f7f8] flex-shrink-0">
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-[12px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-5">
+              They'll be required to set their own password after their 3rd sign-in with this one.
+            </p>
+            <button onClick={() => setTempPasswordResult(null)} className="w-full bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e]">
+              Done
+            </button>
           </div>
         </div>
       )}

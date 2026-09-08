@@ -33,6 +33,8 @@ export interface Employee {
   avatar_url: string | null
   grant_id: string | null
   is_active: boolean
+  login_count: number
+  force_password_change: boolean
   created_at: string
 }
 
