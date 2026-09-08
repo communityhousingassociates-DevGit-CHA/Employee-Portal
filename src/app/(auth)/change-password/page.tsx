@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import { clearForcedPasswordChange } from '@/app/actions/auth'
+import PasswordInput from '@/components/PasswordInput'
 
 export default function ChangePasswordPage() {
   const router = useRouter()
@@ -52,26 +53,22 @@ export default function ChangePasswordPage() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">New Password</label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               placeholder="••••••••"
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0] transition-colors" />
+              onChange={setPassword}
+              required />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Confirm Password</label>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="new-password"
               placeholder="••••••••"
               value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              required
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0] transition-colors" />
+              onChange={setConfirm}
+              required />
           </div>
 
           {error && (

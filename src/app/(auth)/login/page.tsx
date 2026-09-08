@@ -7,6 +7,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 import { recordSuccessfulLogin } from '@/app/actions/auth'
+import PasswordInput from '@/components/PasswordInput'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
 const DEMO_PASSWORD = 'CHAdemo2026!'
@@ -85,14 +86,12 @@ export default function LoginPage() {
               <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Password</label>
               <Link href="/forgot-password" className="text-[11px] text-[#02ACC0] font-medium hover:underline">Forgot password?</Link>
             </div>
-            <input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               placeholder="••••••••"
               value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0] transition-colors" />
+              onChange={setPassword}
+              required />
           </div>
 
           {error && (

@@ -6,6 +6,7 @@ import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl 
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { buildFullName } from '@/lib/format-name'
 import { createClient } from '@/lib/supabase/client'
+import PasswordInput from '@/components/PasswordInput'
 
 type Profile = {
   id: string
@@ -257,15 +258,13 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">New Password</label>
-            <input type="password" autoComplete="new-password" placeholder="••••••••"
-              value={pwForm.newPassword} onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))}
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+            <PasswordInput autoComplete="new-password" placeholder="••••••••"
+              value={pwForm.newPassword} onChange={v => setPwForm(f => ({ ...f, newPassword: v }))} />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Confirm Password</label>
-            <input type="password" autoComplete="new-password" placeholder="••••••••"
-              value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
-              className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]" />
+            <PasswordInput autoComplete="new-password" placeholder="••••••••"
+              value={pwForm.confirm} onChange={v => setPwForm(f => ({ ...f, confirm: v }))} />
           </div>
         </div>
         <button onClick={handleChangePassword} disabled={pwSaving || !pwForm.newPassword || !pwForm.confirm}
