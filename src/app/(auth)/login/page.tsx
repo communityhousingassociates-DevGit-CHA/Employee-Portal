@@ -31,13 +31,19 @@ export default function LoginPage() {
     }
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
       setLoading(false)
     } else {
-      await recordSuccessfulLogin()
+      if (data.session?.access_token) {
+        try {
+          await recordSuccessfulLogin(data.session.access_token)
+        } catch {
+          // Don't block a successful sign-in on the login counter itself.
+        }
+      }
       router.push('/dashboard')
       router.refresh()
     }

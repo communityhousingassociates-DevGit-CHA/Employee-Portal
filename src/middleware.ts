@@ -150,19 +150,28 @@ export async function middleware(request: NextRequest) {
   // (rather than emailing a self-service reset link), and they've now signed
   // in 3+ times with it. Every route but /change-password itself is gated
   // until they set their own password (see src/app/actions/auth.ts).
+  //
+  // This runs on every authenticated request, so a slow or hung Supabase
+  // call here would stall the whole portal — bounded with a timeout so it
+  // can only ever add a small worst-case delay, never block navigation
+  // outright, matching the fail-open intent of the try/catch below.
   if (user && pathname !== '/change-password') {
     try {
       const admin = createAdminClient()
-      const { data: employee } = await admin
+      const query = admin
         .from('employees')
         .select('force_password_change, login_count')
         .eq('user_id', user.id)
         .single()
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('forced-password-change check timed out')), 3000)
+      )
+      const { data: employee } = await Promise.race([query, timeout])
       if (employee?.force_password_change && employee.login_count >= 3) {
         return securityHeaders(NextResponse.redirect(new URL('/change-password', request.url)), csp)
       }
     } catch {
-      // Fail open — don't block portal access if this check itself errors.
+      // Fail open — don't block portal access if this check itself errors or times out.
     }
   }
 
