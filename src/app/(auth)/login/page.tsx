@@ -40,11 +40,9 @@ export default function LoginPage() {
       if (data.session?.access_token) {
         try {
           await recordSuccessfulLogin(data.session.access_token)
-        } catch (e) {
-          console.error('[DEBUG recordSuccessfulLogin]', e)
+        } catch {
+          // Don't block a successful sign-in on the login counter itself.
         }
-      } else {
-        console.error('[DEBUG no access_token on data.session]', data)
       }
       router.push('/dashboard')
       router.refresh()

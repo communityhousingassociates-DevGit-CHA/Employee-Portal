@@ -116,6 +116,17 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Server Actions POST to the pathname of the component that invoked them
+  // (e.g. recordSuccessfulLogin() posts to /login, right as the user
+  // becomes authenticated there). The page-navigation redirects below are
+  // meant for full page loads, not these RPC-style calls — redirecting one
+  // instead of letting it reach its handler returns a plain redirect
+  // response where Next's client expects an action-result payload, which
+  // surfaces to the user as "An unexpected response was received from the
+  // server." Skip those redirects for any request carrying Next's
+  // server-action header.
+  const isServerAction = request.headers.has('next-action')
+
   // Public routes — no auth required
   if (pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password') || pathname.startsWith('/forgot-password')) {
     return securityHeaders(supabaseResponse, csp)
@@ -155,7 +166,7 @@ export async function middleware(request: NextRequest) {
   // call here would stall the whole portal — bounded with a timeout so it
   // can only ever add a small worst-case delay, never block navigation
   // outright, matching the fail-open intent of the try/catch below.
-  if (user && pathname !== '/change-password') {
+  if (user && pathname !== '/change-password' && !isServerAction) {
     try {
       const admin = createAdminClient()
       const query = admin
@@ -176,7 +187,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Redirect authenticated users away from login
-  if (user && pathname === '/login') {
+  if (user && pathname === '/login' && !isServerAction) {
     return securityHeaders(NextResponse.redirect(new URL('/dashboard', request.url)), csp)
   }
 
