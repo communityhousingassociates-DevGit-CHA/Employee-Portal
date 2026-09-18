@@ -338,7 +338,7 @@ export async function inviteEmployees(
 
   const { data: employees, error } = await admin
     .from('employees')
-    .select('id, email, user_id')
+    .select('id, email, first_name, user_id')
     .in('id', employeeIds)
   if (error) throw new Error(error.message)
 
@@ -349,6 +349,7 @@ export async function inviteEmployees(
   for (const emp of employees ?? []) {
     if (emp.user_id) continue // already has an account
     const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(emp.email, {
+      data: { first_name: emp.first_name }, // fills "Hello {{ .Data.first_name }}" in the invite email template
       redirectTo: origin ? `${origin}/set-password` : undefined,
     })
     if (inviteError || !data.user) {

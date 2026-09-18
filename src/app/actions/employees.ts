@@ -204,7 +204,7 @@ export async function sendInvites(
   const admin = createAdminClient()
   const { data: employees, error } = await admin
     .from('employees')
-    .select('id, email, user_id, is_active')
+    .select('id, email, first_name, user_id, is_active')
     .in('id', employeeIds)
   if (error) throw new Error(error.message)
 
@@ -232,6 +232,7 @@ export async function sendInvites(
     }
 
     const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(emp.email, {
+      data: { first_name: emp.first_name }, // fills "Hello {{ .Data.first_name }}" in the invite email template
       redirectTo: origin ? `${origin}/set-password` : undefined,
     })
     if (inviteError || !data.user) {
