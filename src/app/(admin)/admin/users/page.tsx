@@ -11,5 +11,5 @@ export default async function AdminUsersPage() {
   if (!employee || employee.role !== 'admin') redirect('/dashboard')
 
   const [employees, grants] = await Promise.all([getEmployees(), getGrants()])
-  return <AdminUsersClient initialEmployees={employees} grants={grants.filter(g => g.is_active)} />
+  return <AdminUsersClient initialEmployees={employees} grants={grants.filter(g => g.is_active)} isSuperAdmin={employee.is_super_admin} currentEmployeeId={employee.id} />
 }

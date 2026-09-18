@@ -8,9 +8,9 @@ import type { LeaveBalance, LeaveType } from '@/types'
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
 const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
-  { key: 'PTO', label: 'PTO / Vacation', icon: '🌴', desc: 'Paid time off', balanceKey: 'pto_hours' },
+  { key: 'PTO', label: 'PTO', icon: '🌴', desc: 'Personal time off', balanceKey: 'pto_hours' },
   { key: 'Sick', label: 'Sick Leave', icon: '🤒', desc: 'Illness or medical', balanceKey: 'sick_hours' },
-  { key: 'Personal', label: 'Personal Day', icon: '🗓', desc: 'Personal business', balanceKey: 'personal_hours' },
+  { key: 'Personal', label: 'Personal Day / Vacation', icon: '🗓', desc: 'Personal business or vacation', balanceKey: 'personal_hours' },
   { key: 'Bereavement', label: 'Bereavement', icon: '🕊', desc: 'Loss of a family member', balanceKey: null },
   { key: 'Jury Duty', label: 'Jury Duty', icon: '⚖️', desc: 'Court summons required', balanceKey: null },
 ]

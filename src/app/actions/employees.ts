@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { calcTier } from '@/lib/constants/accrual'
-import { requireRole } from '@/lib/auth/session'
+import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -154,19 +154,118 @@ export async function setTemporaryPassword(id: string): Promise<string> {
   return tempPassword
 }
 
+export type InviteStatus = 'not_invited' | 'invited' | 'active'
+
+/** Every auth user's id → whether they have ever signed in. */
+async function getSignInMap(): Promise<Map<string, boolean>> {
+  const admin = createAdminClient()
+  const map = new Map<string, boolean>()
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) throw new Error(error.message)
+    for (const u of data.users) map.set(u.id, !!u.last_sign_in_at)
+    if (data.users.length < 1000) break
+  }
+  return map
+}
+
 export async function getEmployees() {
   await requireRole(['admin'])
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, user_id, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, user_id, grant_id, grant:grants(name)')
     .order('name')
   if (error) throw new Error(error.message)
+  const signedIn = await getSignInMap()
   return (data ?? []).map(e => {
     const { tier, ptoRate } = calcTier(e.hire_date)
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
-    return { ...e, tier, accrual: ptoRate, status: e.is_active ? 'active' : 'archived', grant_name: grant?.name ?? null }
+    const invite_status: InviteStatus = !e.user_id ? 'not_invited' : signedIn.get(e.user_id) ? 'active' : 'invited'
+    return { ...e, tier, accrual: ptoRate, status: e.is_active ? 'active' : 'archived', grant_name: grant?.name ?? null, invite_status }
   })
+}
+
+/**
+ * Sends portal invite emails to employees who haven't signed in yet —
+ * first-time invites for people never invited, and re-sends for people whose
+ * invite went unused (expired, lost, or filtered as spam). Super admin only,
+ * same as the post-import invite step, since these are real emails.
+ *
+ * Re-sending: Supabase refuses to invite an email that already has an auth
+ * user, so an invited-but-never-signed-in account is replaced with a fresh
+ * one. That's only done after confirming via last_sign_in_at that the person
+ * has never signed in — an account that has been used is never touched.
+ */
+export async function sendInvites(
+  employeeIds: string[]
+): Promise<{ invited: string[]; failed: { email: string; error: string }[]; skipped: string[] }> {
+  await requireSuperAdmin()
+  const admin = createAdminClient()
+  const { data: employees, error } = await admin
+    .from('employees')
+    .select('id, email, user_id, is_active')
+    .in('id', employeeIds)
+  if (error) throw new Error(error.message)
+
+  const invited: string[] = []
+  const failed: { email: string; error: string }[] = []
+  const skipped: string[] = []
+  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? ''
+
+  for (const emp of employees ?? []) {
+    if (!emp.is_active) { skipped.push(emp.email); continue }
+
+    if (emp.user_id) {
+      const { data: existing, error: getError } = await admin.auth.admin.getUserById(emp.user_id)
+      if (getError) { failed.push({ email: emp.email, error: getError.message }); continue }
+      if (existing.user?.last_sign_in_at) { skipped.push(emp.email); continue } // already using the portal
+
+      const { error: unlinkError } = await admin.from('employees').update({ user_id: null }).eq('id', emp.id)
+      if (unlinkError) { failed.push({ email: emp.email, error: unlinkError.message }); continue }
+      const { error: deleteError } = await admin.auth.admin.deleteUser(emp.user_id)
+      if (deleteError) {
+        await admin.from('employees').update({ user_id: emp.user_id }).eq('id', emp.id)
+        failed.push({ email: emp.email, error: deleteError.message })
+        continue
+      }
+    }
+
+    const { data, error: inviteError } = await admin.auth.admin.inviteUserByEmail(emp.email, {
+      redirectTo: origin ? `${origin}/set-password` : undefined,
+    })
+    if (inviteError || !data.user) {
+      failed.push({ email: emp.email, error: inviteError?.message ?? 'Unknown error' })
+      continue
+    }
+    const { error: linkError } = await admin.from('employees').update({ user_id: data.user.id }).eq('id', emp.id)
+    if (linkError) {
+      failed.push({ email: emp.email, error: linkError.message })
+      continue
+    }
+    invited.push(emp.email)
+  }
+
+  revalidatePath('/admin/users')
+  return { invited, failed, skipped }
+}
+
+/** Bulk archive/restore. Never applies to the caller's own row, so an admin can't lock themself out. */
+export async function setEmployeesActive(ids: string[], active: boolean) {
+  const me = await requireRole(['admin'])
+  const admin = createAdminClient()
+  const { error } = await admin.from('employees').update({ is_active: active }).in('id', ids.filter(id => id !== me.id))
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
+}
+
+/** Bulk delete. Never applies to the caller's own row or to any super admin. */
+export async function deleteEmployees(ids: string[]) {
+  const me = await requireRole(['admin'])
+  const admin = createAdminClient()
+  const { error } = await admin.from('employees').delete().in('id', ids.filter(id => id !== me.id)).eq('is_super_admin', false)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
 }
 
 /**

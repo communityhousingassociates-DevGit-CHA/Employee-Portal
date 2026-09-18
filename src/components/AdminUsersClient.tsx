@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 type Employee = {
@@ -25,6 +25,8 @@ type Employee = {
   grant_id: string | null
   grant_name: string | null
   user_id: string | null
+  invite_status: 'not_invited' | 'invited' | 'active'
+  is_super_admin: boolean
 }
 
 type Grant = { id: string; name: string }
@@ -38,7 +40,18 @@ const staffCategoryOptions: { value: string; label: string }[] = [
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
 const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '' }
 
-export default function AdminUsersClient({ initialEmployees, grants }: { initialEmployees: Employee[]; grants: Grant[] }) {
+const inviteBadge: Record<Employee['invite_status'], { label: string; cls: string }> = {
+  not_invited: { label: 'Not invited', cls: 'bg-gray-100 text-gray-500' },
+  invited: { label: 'Invite pending', cls: 'bg-amber-100 text-amber-700' },
+  active: { label: 'Signed in', cls: 'bg-emerald-100 text-emerald-700' },
+}
+
+export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmin, currentEmployeeId }: {
+  initialEmployees: Employee[]
+  grants: Grant[]
+  isSuperAdmin: boolean
+  currentEmployeeId: string
+}) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
@@ -51,8 +64,34 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
   const [error, setError] = useState('')
   const [tempPasswordResult, setTempPasswordResult] = useState<{ email: string; password: string } | null>(null)
   const [copied, setCopied] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [confirmBulk, setConfirmBulk] = useState<'invite' | 'delete' | null>(null)
+  const [inviteSummary, setInviteSummary] = useState<{ invited: string[]; failed: { email: string; error: string }[]; skipped: string[] } | null>(null)
 
   const visible = employees.filter(e => filter === 'active' ? e.status === 'active' : e.status === 'archived')
+  const selectedEmployees = useMemo(() => employees.filter(e => selected.has(e.id)), [employees, selected])
+  // Anyone active who has never signed in can be (re)invited; people who have are left alone.
+  const invitable = selectedEmployees.filter(e => e.status === 'active' && e.invite_status !== 'active')
+  const deletable = selectedEmployees.filter(e => e.id !== currentEmployeeId && !e.is_super_admin)
+  const allVisibleSelected = visible.length > 0 && visible.every(e => selected.has(e.id))
+
+  function switchFilter(f: 'active' | 'archived') {
+    setFilter(f)
+    setSelected(new Set())
+  }
+
+  function toggleOne(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAllVisible() {
+    setSelected(allVisibleSelected ? new Set() : new Set(visible.map(e => e.id)))
+  }
 
   function showToast(msg: string) {
     setToast(msg)
@@ -111,6 +150,53 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
     showToast('Employee deleted')
   }
 
+  async function runInvites(ids: string[]) {
+    setBusy(true)
+    try {
+      const res = await sendInvites(ids)
+      setInviteSummary(res)
+      setSelected(new Set())
+      startTransition(() => router.refresh())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send invites')
+    } finally {
+      setBusy(false)
+      setConfirmBulk(null)
+    }
+  }
+
+  async function handleBulkActive(active: boolean) {
+    setBusy(true)
+    try {
+      const ids = selectedEmployees.filter(e => e.id !== currentEmployeeId).map(e => e.id)
+      await setEmployeesActive(ids, active)
+      setEmployees(es => es.map(e => ids.includes(e.id) ? { ...e, status: active ? 'active' : 'archived' } : e))
+      showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} ${active ? 'restored' : 'archived'}`)
+      setSelected(new Set())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    setBusy(true)
+    try {
+      const ids = deletable.map(e => e.id)
+      await deleteEmployees(ids)
+      setEmployees(es => es.filter(e => !ids.includes(e.id)))
+      startTransition(() => router.refresh())
+      showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} deleted`)
+      setSelected(new Set())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk delete failed')
+    } finally {
+      setBusy(false)
+      setConfirmBulk(null)
+    }
+  }
+
   async function handleResetPassword(e: Employee) {
     try {
       await sendPasswordReset(e.id)
@@ -163,7 +249,7 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
       {/* Filter tabs */}
       <div className="flex gap-2 mb-4">
         {(['active', 'archived'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
+          <button key={f} onClick={() => switchFilter(f)}
             className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors capitalize
               ${filter === f ? 'bg-[#0b2b35] text-white' : 'bg-white border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8]'}`}>
             {f} ({employees.filter(e => f === 'active' ? e.status === 'active' : e.status === 'archived').length})
@@ -171,46 +257,81 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
         ))}
       </div>
 
-      {/* Table */}
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div className="bg-[#0b2b35] text-white rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-semibold mr-2">{selected.size} selected</span>
+          {isSuperAdmin && (
+            <button onClick={() => setConfirmBulk('invite')} disabled={busy || invitable.length === 0}
+              className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-[#02ACC0] hover:bg-[#028a9e] disabled:opacity-40 disabled:cursor-not-allowed">
+              ✉️ Send / Resend Invite ({invitable.length})
+            </button>
+          )}
+          {filter === 'active'
+            ? <button onClick={() => handleBulkActive(false)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Archive</button>
+            : <button onClick={() => handleBulkActive(true)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Restore</button>}
+          <button onClick={() => setConfirmBulk('delete')} disabled={busy || deletable.length === 0}
+            className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
+            Delete ({deletable.length})
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-[12px] text-white/60 hover:text-white ml-auto">Clear selection</button>
+        </div>
+      )}
+
+      {/* Table — columns size to their content; the wrapper scrolls horizontally if the window is narrower */}
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[980px]">
+        <table className="w-full text-[13px]">
           <thead>
             <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'Accrual Tier', 'Status', 'Actions'].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
+              <th className="pl-4 pr-2 py-2.5 w-8">
+                <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all" className="accent-[#02ACC0] w-4 h-4 cursor-pointer" />
+              </th>
+              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'Accrual Tier', 'Invite', 'Status', 'Actions'].map(h => (
+                <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={11} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
+              <tr><td colSpan={13} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
             )}
             {visible.map(e => (
-              <tr key={e.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
-                <td className="px-4 py-3 text-gray-400 font-mono text-[12px]">{formatEmployeeId(e.employee_number)}</td>
-                <td className="px-4 py-3 font-medium text-[#0b2b35]">{e.name}</td>
-                <td className="px-4 py-3 text-gray-400">{e.email}</td>
-                <td className="px-4 py-3 text-gray-500 capitalize">{e.role.replace('_', ' ')}</td>
-                <td className="px-4 py-3 text-gray-500 capitalize">{e.employee_type}</td>
-                <td className="px-4 py-3">
+              <tr key={e.id} className={`border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors ${selected.has(e.id) ? 'bg-[#f0fafb]' : ''}`}>
+                <td className="pl-4 pr-2 py-3">
+                  <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleOne(e.id)} aria-label={`Select ${e.name}`} className="accent-[#02ACC0] w-4 h-4 cursor-pointer" />
+                </td>
+                <td className="px-4 py-3 text-gray-400 font-mono text-[12px] whitespace-nowrap">{formatEmployeeId(e.employee_number)}</td>
+                <td className="px-4 py-3 font-medium text-[#0b2b35] whitespace-nowrap">{e.name}</td>
+                <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{e.email}</td>
+                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.role.replace('_', ' ')}</td>
+                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.employee_type}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
                   {e.staff_category === 'resident_advocate'
                     ? <span className="bg-violet-100 text-violet-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">Resident Advocate</span>
                     : <span className="text-gray-400">CHA Employee</span>}
                 </td>
-                <td className="px-4 py-3 text-gray-500">{e.grant_name || '—'}</td>
-                <td className="px-4 py-3 text-gray-500">{e.hire_date}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.grant_name || '—'}</td>
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.hire_date}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
                   <span className="bg-[#e0f5f8] text-[#028a9e] text-[11px] font-semibold px-2 py-0.5 rounded-full">{e.tier}</span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${inviteBadge[e.invite_status].cls}`}>{inviteBadge[e.invite_status].label}</span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                     {e.status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
                     <button onClick={() => openEdit(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] hover:bg-[#f0f7f8]">Edit</button>
+                    {isSuperAdmin && e.status === 'active' && e.invite_status !== 'active' && (
+                      <button onClick={() => runInvites([e.id])} disabled={busy} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#02ACC0] text-[#028a9e] hover:bg-[#e0f5f8] disabled:opacity-40">
+                        {e.invite_status === 'invited' ? 'Resend Invite' : 'Send Invite'}
+                      </button>
+                    )}
                     {e.user_id && (
                       <button onClick={() => handleResetPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-[#028a9e] hover:bg-[#f0f7f8]">Reset Password</button>
                     )}
@@ -325,6 +446,53 @@ export default function AdminUsersClient({ initialEmployees, grants }: { initial
               <button onClick={() => handleDelete(confirmDelete)} className="bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600">Yes, Delete</button>
               <button onClick={() => setConfirmDelete(null)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk invite confirmation */}
+      {confirmBulk === 'invite' && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-sm p-6 shadow-xl text-center">
+            <div className="text-4xl mb-3">✉️</div>
+            <h2 className="text-[16px] font-bold text-[#0b2b35] mb-2">Send {invitable.length} invite{invitable.length === 1 ? '' : 's'}?</h2>
+            <p className="text-[13px] text-gray-500 mb-5">
+              This emails real portal invite links. People with a pending invite get a fresh link (the old one stops working). Anyone who has already signed in is skipped.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={() => runInvites(invitable.map(e => e.id))} disabled={busy} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{busy ? 'Sending…' : 'Send Invites'}</button>
+              <button onClick={() => setConfirmBulk(null)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation */}
+      {confirmBulk === 'delete' && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-sm p-6 shadow-xl text-center">
+            <div className="text-4xl mb-3">⚠️</div>
+            <h2 className="text-[16px] font-bold text-[#0b2b35] mb-2">Delete {deletable.length} employee{deletable.length === 1 ? '' : 's'}?</h2>
+            <p className="text-[13px] text-gray-500 mb-5">
+              This permanently removes them and all their leave history. Consider <strong>Archive</strong> instead to preserve records. Your own account and super admins are never deleted.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={handleBulkDelete} disabled={busy} className="bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600 disabled:opacity-40">{busy ? 'Deleting…' : 'Yes, Delete'}</button>
+              <button onClick={() => setConfirmBulk(null)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite results */}
+      {inviteSummary && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-[16px] font-bold text-[#0b2b35] mb-3">Invites sent</h2>
+            <p className="text-[13px] text-emerald-700 mb-2">Invited: {inviteSummary.invited.length ? inviteSummary.invited.join(', ') : 'none'}</p>
+            {inviteSummary.skipped.length > 0 && <p className="text-[13px] text-gray-500 mb-2">Skipped (already signed in or archived): {inviteSummary.skipped.join(', ')}</p>}
+            {inviteSummary.failed.length > 0 && <p className="text-[13px] text-red-600 mb-2">Failed: {inviteSummary.failed.map(f => `${f.email} (${f.error})`).join(', ')}</p>}
+            <button onClick={() => setInviteSummary(null)} className="w-full mt-3 bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e]">Done</button>
           </div>
         </div>
       )}
