@@ -214,8 +214,9 @@ secure_password_change = false
 max_frequency = "1m0s"
 # Number of characters used in the email OTP.
 otp_length = 8
-# Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Number of seconds before the email OTP / invite link expires. 24 hours (the
+# platform maximum) so employees have a full day to open their invite.
+otp_expiry = 86400
 
 # Use a production-ready SMTP server
 [auth.email.smtp]
@@ -227,10 +228,10 @@ pass = "env(RESEND_API_KEY)"
 admin_email = "notifications@communityhousingassociates.org"
 sender_name = "CHA Employee Portal"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# Branded invite email (logo, parallel-run explanation, 24-hour link).
+[auth.email.template.invite]
+subject = "You're invited: CHA's new Employee Portal"
+content_path = "./supabase/templates/invite.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]
