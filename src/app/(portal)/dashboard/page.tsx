@@ -9,10 +9,11 @@ import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
 import { getBaltimoreWeather } from '@/lib/weather'
 
-// Policy docs live in Claude Docs, not in the portal itself — linked here so
-// staff/admins always land on the current version rather than a stale export.
+// Policy docs (SOPs) live in Claude Docs, not in the portal itself, linked
+// here so admins always land on the current version rather than a stale
+// export. The How-To Guide is a real in-app page (/guide) instead — no
+// external account needed for something every employee has to open.
 const DOCS = {
-  howTo: 'https://claude.ai/artifact/9afhTWbQfFg98XZey84CCw',
   staffSop: 'https://claude.ai/artifact/NfM3Qmbd18iq8fxdjzPU5r',
   adminSop: 'https://claude.ai/artifact/Mk7pz8oSEXNfoMwx3Aeta4',
 }
@@ -332,16 +333,22 @@ export default async function DashboardPage() {
             </div>
             <div className="divide-y divide-[#f0f7f8]">
               {[
-                { href: DOCS.howTo, label: 'How-To Guide', icon: '📘' },
-                { href: DOCS.staffSop, label: 'Staff SOP', icon: '📄' },
-                ...(isManager ? [{ href: DOCS.adminSop, label: 'Admin & Leadership SOP', icon: '📋' }] : []),
-              ].map(item => (
+                { href: '/guide', label: 'How-To Guide', icon: '📘', external: false },
+                { href: DOCS.staffSop, label: 'Staff SOP', icon: '📄', external: true },
+                ...(isManager ? [{ href: DOCS.adminSop, label: 'Admin & Leadership SOP', icon: '📋', external: true }] : []),
+              ].map(item => item.external ? (
                 <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
                   className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
                   <span className="text-[14px]">{item.icon}</span>
                   <span className="text-[12px] font-medium text-[#0b2b35]">{item.label}</span>
                   <span className="ml-auto text-gray-300 text-[11px]">↗</span>
                 </a>
+              ) : (
+                <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
+                  <span className="text-[14px]">{item.icon}</span>
+                  <span className="text-[12px] font-medium text-[#0b2b35]">{item.label}</span>
+                  <span className="ml-auto text-gray-300 text-[11px]">›</span>
+                </Link>
               ))}
             </div>
           </div>

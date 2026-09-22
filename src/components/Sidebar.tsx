@@ -100,6 +100,9 @@ export default function Sidebar({ role = 'employee', openIssueCount = 0 }: { rol
       )}
 
       <div className="mt-auto border-t border-[#d4eef2] p-3">
+        <Link href="/guide" className={linkCls('/guide')}>
+          <span className="w-5 text-center">📘</span> How-To Guide
+        </Link>
         <Link href="/report-issue" className={linkCls('/report-issue')}>
           <span className="w-5 text-center">🆘</span> Report an Issue
         </Link>
