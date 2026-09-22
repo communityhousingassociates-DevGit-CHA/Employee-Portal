@@ -1,9 +1,10 @@
 // Bi-weekly pay period helpers.
 //
-// OPEN ITEM: PAY_PERIOD_ANCHOR below is a placeholder. Confirm CHA's actual
-// bi-weekly cycle start date before relying on this for the accrual cron or
-// any employee-facing "current pay period" display.
-const PAY_PERIOD_ANCHOR = '2026-01-05'
+// Anchor confirmed 2026-09-22 against CHA's actual payroll cutoff: cutoff for
+// the period ending 2026-09-22 is 2026-09-24 (the standing "2 days after
+// period end" rule), which requires a period boundary on 2026-09-09. Any date
+// 14*n days from 2026-01-14 lands on that boundary.
+const PAY_PERIOD_ANCHOR = '2026-01-14'
 const PERIOD_DAYS = 14
 
 export interface PayPeriod {
@@ -69,6 +70,21 @@ export function getPeriodsSince(sinceDate: string, anchorDate: string = PAY_PERI
   const since = new Date(`${sinceDate}T00:00:00Z`)
   const count = Math.min(Math.max(Math.floor((currentStart.getTime() - since.getTime()) / (PERIOD_DAYS * 86400000)) + 1, 1), 130)
   return getRecentPeriods(count, anchorDate, asOf)
+}
+
+/** Returns the pay period immediately before the one containing `asOf`. */
+export function getPreviousPeriod(anchorDate: string = PAY_PERIOD_ANCHOR, asOf: Date = new Date()): PayPeriod {
+  const current = getCurrentPeriod(anchorDate, asOf)
+  const currentStart = new Date(`${current.start}T00:00:00Z`)
+  const start = addDays(currentStart, -PERIOD_DAYS)
+  const end = addDays(start, PERIOD_DAYS - 1)
+  return { start: toDateOnly(start), end: toDateOnly(end) }
+}
+
+/** Timesheet submission cutoff for a period — 2 calendar days after it ends (confirmed policy). */
+export function getTimesheetDueDate(period: PayPeriod): string {
+  const end = new Date(`${period.end}T00:00:00Z`)
+  return toDateOnly(addDays(end, 2))
 }
 
 /** True if `dateStr` (YYYY-MM-DD) is the start date of a pay period relative to `anchorDate`. */

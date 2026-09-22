@@ -3,8 +3,8 @@ import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import DashboardGreeting from '@/components/DashboardGreeting'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
-import { getOrCreateTimesheet } from '@/app/actions/timesheets'
-import { getCurrentPeriod } from '@/lib/pay-periods'
+import { getOrCreateTimesheet, getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 
 const PERSONAL_CAP = 24
@@ -44,12 +44,14 @@ export default async function DashboardPage() {
   const firstName = employee.name.split(' ')[0] || 'there'
 
   const period = getCurrentPeriod()
-  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals] = await Promise.all([
+  const previousPeriod = getPreviousPeriod()
+  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, previousTimesheet] = await Promise.all([
     getMyBalance(),
     getMyRecentRequests(4),
     getNextApprovedLeave(),
     getOrCreateTimesheet(period.start, period.end),
     isManager ? getPendingLeaveApprovals() : Promise.resolve([]),
+    getTimesheetForEmployeePeriod(employee.id, previousPeriod.start, previousPeriod.end),
   ])
 
   const pendingCount = pendingApprovals.length
@@ -79,6 +81,29 @@ export default async function DashboardPage() {
   const tsRemaining = Math.max(tsTarget - tsTotal, 0)
   const dueSoon = timesheet.status === 'draft'
 
+  const todayStr = now.toISOString().slice(0, 10)
+  const daysUntil = (dateStr: string) =>
+    Math.round((new Date(`${dateStr}T00:00:00Z`).getTime() - new Date(`${todayStr}T00:00:00Z`).getTime()) / 86400000)
+
+  const currentDue = getTimesheetDueDate(period)
+  const previousDue = getTimesheetDueDate(previousPeriod)
+  const currentDaysUntilDue = daysUntil(currentDue)
+  const previousDaysUntilDue = daysUntil(previousDue)
+  const previousUnsubmitted =
+    employee.hire_date <= previousPeriod.end &&
+    (!previousTimesheet.timesheet || previousTimesheet.timesheet.status === 'draft')
+  const currentUnsubmitted = timesheet.status === 'draft'
+
+  // Whichever period's cutoff is 1–2 days out and still unsubmitted — the cutoff
+  // (period end + 2 days) usually falls inside the *next* period's date range,
+  // so "1 day out" often means checking the previous period, not the current one.
+  const timesheetReminder =
+    previousUnsubmitted && (previousDaysUntilDue === 1 || previousDaysUntilDue === 2)
+      ? { period: previousPeriod, due: previousDue, daysUntil: previousDaysUntilDue }
+      : currentUnsubmitted && (currentDaysUntilDue === 1 || currentDaysUntilDue === 2)
+      ? { period, due: currentDue, daysUntil: currentDaysUntilDue }
+      : null
+
   return (
     <div className="space-y-6">
       {isManager && pendingCount > 0 && (
@@ -91,6 +116,23 @@ export default async function DashboardPage() {
             </div>
           </div>
           <Link href="/approvals" className="bg-amber-500 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg hover:bg-amber-600 transition-colors flex-shrink-0">Review Now →</Link>
+        </div>
+      )}
+
+      {timesheetReminder && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-600 text-[15px] flex-shrink-0">⏰</div>
+            <div>
+              <p className="text-[13px] font-semibold text-red-800">
+                Timesheet due {timesheetReminder.daysUntil === 1 ? 'tomorrow' : `in ${timesheetReminder.daysUntil} days`} — {fmtDate(timesheetReminder.due)}
+              </p>
+              <p className="text-[11px] text-red-600 mt-0.5">
+                For {fmtDate(timesheetReminder.period.start)} – {fmtDate(timesheetReminder.period.end)}. Submit and sign before the cutoff.
+              </p>
+            </div>
+          </div>
+          <Link href="/timesheet" className="bg-red-500 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg hover:bg-red-600 transition-colors flex-shrink-0">Go to Timesheet →</Link>
         </div>
       )}
 
