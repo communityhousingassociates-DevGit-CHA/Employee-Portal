@@ -1,7 +1,10 @@
-// CHA's house date format is numeric day-month-year (e.g. 22-09-2026), not
-// the US month-first convention. Use these everywhere a date is displayed as
-// text — native <input type="date"> pickers are unaffected (the browser
-// controls their display; the underlying value stays ISO yyyy-mm-dd either way).
+// CHA's house date format is numeric month-day-year (e.g. 09-22-2026) — plain
+// digits, no spelled-out month/weekday, for easier scanning and search/filter
+// matching against how CHA's own records are formatted. Use these everywhere
+// a date is displayed as text — native <input type="date"> pickers are
+// unaffected (the browser controls their display; the underlying value stays
+// ISO yyyy-mm-dd either way). The Dashboard's prose greeting is a deliberate
+// exception — it stays spelled out ("Tuesday, September 22, 2026").
 
 function pad(n: number): string {
   return String(n).padStart(2, '0')
@@ -16,26 +19,26 @@ function toLocalDate(value: string | Date): Date {
   return new Date(value.length <= 10 ? `${value}T00:00:00` : value)
 }
 
-/** "22-09-2026" */
+/** "09-22-2026" */
 export function fmtDate(value: string | Date): string {
   const d = toLocalDate(value)
-  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${d.getFullYear()}`
 }
 
-/** "22-09" — no year, for ranges and pickers where the year is already clear from context. */
+/** "09-22" — no year, for ranges and pickers where the year is already clear from context. */
 export function fmtDateShort(value: string | Date): string {
   const d = toLocalDate(value)
-  return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}`
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-/** "22-09-2026, 3:45 PM" — date plus time, for timestamps. */
+/** "09-22-2026, 3:45 PM" — date plus time, for timestamps. */
 export function fmtDateTime(value: string | Date): string {
   const d = toLocalDate(value)
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   return `${fmtDate(d)}, ${time}`
 }
 
-/** "22-09-2026 – 05-10-2026" */
+/** "09-22-2026 – 10-05-2026" */
 export function fmtDateRange(start: string | Date, end: string | Date): string {
   return `${fmtDate(start)} – ${fmtDate(end)}`
 }

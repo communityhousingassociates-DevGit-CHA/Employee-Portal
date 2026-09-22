@@ -1,12 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { markIssuesSeen } from '@/app/actions/report-issue'
 
 export default function IssueAlertBell({ initialUnseenCount }: { initialUnseenCount: number }) {
   const [unseenCount, setUnseenCount] = useState(initialUnseenCount)
   const [dismissing, setDismissing] = useState(false)
+
+  // The layout re-renders with a fresh count after markIssuesSeen() revalidates
+  // it, but this component's own state doesn't reset just because its prop
+  // did — sync it explicitly, otherwise the badge can lag by one navigation.
+  useEffect(() => setUnseenCount(initialUnseenCount), [initialUnseenCount])
 
   if (unseenCount <= 0) return null
 
@@ -27,6 +32,7 @@ export default function IssueAlertBell({ initialUnseenCount }: { initialUnseenCo
   return (
     <Link
       href="/issues"
+      onClick={() => setUnseenCount(0)}
       aria-label={`${unseenCount} new issue report${unseenCount === 1 ? '' : 's'}`}
       className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/10 transition-colors mr-1 flex-shrink-0 group"
     >
