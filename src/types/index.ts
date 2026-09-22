@@ -38,6 +38,7 @@ export interface Employee {
   login_count: number
   force_password_change: boolean
   issues_seen_at: string | null
+  pto_uncapped: boolean
   created_at: string
 }
 

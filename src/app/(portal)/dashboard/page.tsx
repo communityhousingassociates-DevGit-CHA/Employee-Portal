@@ -161,13 +161,22 @@ export default async function DashboardPage() {
             <p className="text-[13px] text-gray-400 mb-1.5">hrs</p>
           </div>
           <p className="text-[12px] text-gray-400 mb-3">≈ {ptoDays} working days</p>
-          <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
-            <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${Math.min((ptoHours / PTO_CARRYOVER_CAP) * 100, 100)}%` }} />
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] text-gray-400">{ptoHours} / {PTO_CARRYOVER_CAP} hr cap</p>
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
-          </div>
+          {employee.pto_uncapped ? (
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-semibold text-amber-600">∞ No carryover cap (exception)</p>
+              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
+            </div>
+          ) : (
+            <>
+              <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
+                <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${Math.min((ptoHours / PTO_CARRYOVER_CAP) * 100, 100)}%` }} />
+              </div>
+              <div className="flex justify-between items-center">
+                <p className="text-[10px] text-gray-400">{ptoHours} / {PTO_CARRYOVER_CAP} hr cap</p>
+                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">

@@ -21,6 +21,7 @@ export async function addEmployee(data: {
   job_title: string
   hire_date: string
   grant_id: string | null
+  pto_uncapped?: boolean
 }) {
   await requireRole(['admin'])
   const admin = createAdminClient()
@@ -36,6 +37,7 @@ export async function addEmployee(data: {
     job_title: data.job_title || null,
     hire_date: data.hire_date,
     grant_id: data.grant_id,
+    pto_uncapped: data.pto_uncapped ?? false,
     is_active: true,
   })
   if (error) throw new Error(error.message)
@@ -54,6 +56,7 @@ export async function editEmployee(id: string, data: {
   job_title: string
   hire_date: string
   grant_id: string | null
+  pto_uncapped?: boolean
 }) {
   await requireRole(['admin'])
   const admin = createAdminClient()
@@ -69,6 +72,7 @@ export async function editEmployee(id: string, data: {
     job_title: data.job_title || null,
     hire_date: data.hire_date,
     grant_id: data.grant_id,
+    pto_uncapped: data.pto_uncapped ?? false,
   }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
@@ -174,7 +178,7 @@ export async function getEmployees() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, user_id, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, pto_uncapped, user_id, grant_id, grant:grants(name)')
     .order('name')
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()
@@ -280,7 +284,7 @@ export async function getEmployeeSummary(id: string) {
   const admin = createAdminClient()
   const { data: e, error } = await admin
     .from('employees')
-    .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, leave_balances(pto_hours, sick_hours, personal_hours)')
+    .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
@@ -302,7 +306,7 @@ export async function getEmployeeDirectory() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, leave_balances(pto_hours, sick_hours, personal_hours)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
     .order('name')
   if (error) throw new Error(error.message)
   return (data ?? []).map(e => {

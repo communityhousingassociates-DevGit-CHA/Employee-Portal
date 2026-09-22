@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const { data: employees, error: empError } = await admin
     .from('employees')
-    .select('id, hire_date')
+    .select('id, hire_date, pto_uncapped')
     .eq('is_active', true)
   if (empError) return NextResponse.json({ error: empError.message }, { status: 500 })
 
@@ -55,7 +55,9 @@ export async function GET(request: NextRequest) {
       continue
     }
 
-    const newPto = Math.min(Number(balance.pto_hours) + ptoRate, PTO_CARRYOVER_CAP)
+    const newPto = emp.pto_uncapped
+      ? Number(balance.pto_hours) + ptoRate
+      : Math.min(Number(balance.pto_hours) + ptoRate, PTO_CARRYOVER_CAP)
     const newSick = Number(balance.sick_hours) + SICK_RATE_PER_PERIOD
 
     const logRows = []

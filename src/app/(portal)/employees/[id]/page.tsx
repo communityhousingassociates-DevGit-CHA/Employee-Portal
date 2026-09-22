@@ -46,7 +46,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">PTO Balance</p>
+          <div className="flex items-center gap-1.5 mb-1">
+            <p className="text-[10px] uppercase tracking-widest text-gray-400">PTO Balance</p>
+            {employee.pto_uncapped && <span title="Exempt from the 400-hour carryover cap" className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">∞ Uncapped</span>}
+          </div>
           <p className="text-[20px] font-black text-[#0b2b35] leading-none">{employee.pto_bal} <span className="text-[12px] font-normal text-gray-400">hrs</span></p>
         </div>
         <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4">

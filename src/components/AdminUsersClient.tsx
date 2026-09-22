@@ -27,6 +27,7 @@ type Employee = {
   user_id: string | null
   invite_status: 'not_invited' | 'invited' | 'active'
   is_super_admin: boolean
+  pto_uncapped: boolean
 }
 
 type Grant = { id: string; name: string }
@@ -38,7 +39,7 @@ const staffCategoryOptions: { value: string; label: string }[] = [
   { value: 'resident_advocate', label: 'Resident Advocate' },
 ]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '' }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '', pto_uncapped: false }
 
 const inviteBadge: Record<Employee['invite_status'], { label: string; cls: string }> = {
   not_invited: { label: 'Not invited', cls: 'bg-gray-100 text-gray-500' },
@@ -107,7 +108,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '' })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped })
     setError('')
     setShowForm(true)
   }
@@ -118,10 +119,10 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const grant_id = form.grant_id || null
       const middle_initial = form.middle_initial || null
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped })
         showToast('Employee updated')
       } else {
-        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -304,7 +305,10 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <td className="px-4 py-3 text-gray-400 font-mono text-[12px] whitespace-nowrap">{formatEmployeeId(e.employee_number)}</td>
                 <td className="px-4 py-3 font-medium text-[#0b2b35] whitespace-nowrap">{e.name}</td>
                 <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{e.email}</td>
-                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.role.replace('_', ' ')}</td>
+                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">
+                  {e.role.replace('_', ' ')}
+                  {e.pto_uncapped && <span title="PTO Uncapped exception" className="ml-1.5 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full normal-case">∞ PTO</span>}
+                </td>
                 <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.employee_type}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   {e.staff_category === 'resident_advocate'
@@ -418,6 +422,14 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Hire Date</label>
                 <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className={inputCls} />
                 <span className="text-[11px] text-gray-400">Accrual tier and 90-day waiting period are calculated from this date</span>
+              </div>
+              <div className="sm:col-span-2 flex items-start gap-2.5 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-3 py-2.5">
+                <input type="checkbox" id="pto_uncapped" checked={form.pto_uncapped} onChange={e => setForm(f => ({ ...f, pto_uncapped: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 accent-[#02ACC0] cursor-pointer flex-shrink-0" />
+                <label htmlFor="pto_uncapped" className="cursor-pointer">
+                  <span className="text-[13px] font-semibold text-[#0b2b35]">PTO Uncapped</span>
+                  <span className="block text-[11px] text-gray-400">Exempts this employee from the standard 400-hour PTO carryover cap (e.g. an executive exception). Sick and Vacation caps are unaffected.</span>
+                </label>
               </div>
             </div>
             <div className="flex gap-3 px-6 pb-6">

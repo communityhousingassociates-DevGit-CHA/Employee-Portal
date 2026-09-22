@@ -20,6 +20,7 @@ type Employee = {
   pto_bal: number
   sick_bal: number
   personal_bal: number
+  pto_uncapped: boolean
 }
 
 const AVATAR_COLORS = ['#02ACC0', '#7c3aed', '#0d9488', '#b45309', '#4f46e5', '#be185d', '#059669', '#9333ea']
@@ -67,10 +68,16 @@ function EmployeeDetail({ e }: { e: Employee }) {
           </div>
           <p className="text-[24px] font-black text-[#0b2b35] leading-none">{e.pto_bal}</p>
           <p className="text-[11px] text-gray-400 mt-0.5 mb-2">hrs available</p>
-          <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
-            <div className={`h-full rounded-full ${capPct >= 75 ? 'bg-amber-400' : 'bg-[#02ACC0]'}`} style={{ width: `${capPct}%` }} />
-          </div>
-          <p className="text-[10px] text-gray-400">{capPct}% of 400 hr cap{capPct >= 75 ? ' — approaching cap' : ''}</p>
+          {e.pto_uncapped ? (
+            <p className="text-[10px] font-semibold text-amber-600">∞ No carryover cap (exception)</p>
+          ) : (
+            <>
+              <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
+                <div className={`h-full rounded-full ${capPct >= 75 ? 'bg-amber-400' : 'bg-[#02ACC0]'}`} style={{ width: `${capPct}%` }} />
+              </div>
+              <p className="text-[10px] text-gray-400">{capPct}% of 400 hr cap{capPct >= 75 ? ' — approaching cap' : ''}</p>
+            </>
+          )}
         </div>
 
         <div className="bg-white rounded-xl border border-[#d4eef2] p-4">
