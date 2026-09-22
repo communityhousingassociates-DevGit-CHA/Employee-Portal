@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireSelfOrRole } from '@/lib/auth/session'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -82,4 +83,58 @@ export async function submitTimesheet(timesheetId: string) {
     .eq('id', timesheetId)
   if (error) throw new Error(error.message)
   revalidatePath('/timesheet')
+}
+
+export type TimesheetReminder = { periodStart: string; periodEnd: string; due: string; daysUntil: number } | null
+
+/**
+ * Whichever period's submission cutoff is 1–2 days out and still
+ * unsubmitted, or null. Read-only (uses getTimesheetForEmployeePeriod, never
+ * getOrCreateTimesheet) since this runs in the portal layout on every page
+ * load — it must never silently create a draft timesheet just by rendering
+ * the topbar alert.
+ *
+ * The cutoff (period end + 2 days) usually falls inside the *next* period's
+ * date range, so "1 day out" often means checking the previous period, not
+ * whichever period contains today.
+ */
+export async function getTimesheetReminderStatus(): Promise<TimesheetReminder> {
+  const employee = await getCurrentEmployee()
+  if (!employee) return null
+
+  const period = getCurrentPeriod()
+  const previousPeriod = getPreviousPeriod()
+  const [{ timesheet }, { timesheet: previousTimesheet }] = await Promise.all([
+    getTimesheetForEmployeePeriod(employee.id, period.start, period.end),
+    getTimesheetForEmployeePeriod(employee.id, previousPeriod.start, previousPeriod.end),
+  ])
+
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const daysUntil = (dateStr: string) =>
+    Math.round((new Date(`${dateStr}T00:00:00Z`).getTime() - new Date(`${todayStr}T00:00:00Z`).getTime()) / 86400000)
+
+  const currentDue = getTimesheetDueDate(period)
+  const previousDue = getTimesheetDueDate(previousPeriod)
+  const currentDaysUntilDue = daysUntil(currentDue)
+  const previousDaysUntilDue = daysUntil(previousDue)
+  const previousUnsubmitted = employee.hire_date <= previousPeriod.end && (!previousTimesheet || previousTimesheet.status === 'draft')
+  const currentUnsubmitted = !timesheet || timesheet.status === 'draft'
+
+  if (previousUnsubmitted && (previousDaysUntilDue === 1 || previousDaysUntilDue === 2)) {
+    return { periodStart: previousPeriod.start, periodEnd: previousPeriod.end, due: previousDue, daysUntil: previousDaysUntilDue }
+  }
+  if (currentUnsubmitted && (currentDaysUntilDue === 1 || currentDaysUntilDue === 2)) {
+    return { periodStart: period.start, periodEnd: period.end, due: currentDue, daysUntil: currentDaysUntilDue }
+  }
+  return null
+}
+
+/** Dismisses the topbar timesheet alert for today only — a fresh reminder can still show tomorrow. */
+export async function dismissTimesheetReminder() {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const { error } = await admin.from('employees').update({ timesheet_reminder_dismissed_at: new Date().toISOString() }).eq('id', employee.id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/', 'layout')
 }

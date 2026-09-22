@@ -39,6 +39,7 @@ export interface Employee {
   force_password_change: boolean
   issues_seen_at: string | null
   pto_uncapped: boolean
+  timesheet_reminder_dismissed_at: string | null
   created_at: string
 }
 
