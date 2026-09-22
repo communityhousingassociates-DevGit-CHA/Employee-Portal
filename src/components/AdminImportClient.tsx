@@ -6,6 +6,7 @@ import {
   submitImportForReview, getPendingImportBatch, discardImportBatch,
 } from '@/app/actions/import'
 import type { ParsedEmployeeRow, ParsedBalanceRow, ParsedSalaryRow, ImportPreview } from '@/lib/import/types'
+import { fmtDateTime } from '@/lib/format-date'
 import { buildFullName } from '@/lib/format-name'
 
 type PendingBatch = {
@@ -18,7 +19,7 @@ type PendingBatch = {
 }
 
 function formatSubmitted(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return fmtDateTime(iso)
 }
 
 type Step = 'upload' | 'review' | 'done'

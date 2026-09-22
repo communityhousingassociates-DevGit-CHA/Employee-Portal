@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
+import { fmtDate } from '@/lib/format-date'
 import type { LeaveRequest, Expense } from '@/types'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
@@ -23,10 +24,6 @@ const TYPE_STYLE: Record<string, { bar: string; badge: string }> = {
   Personal: { bar: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700' },
   Bereavement: { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
   'Jury Duty': { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function daysAgo(iso: string) {

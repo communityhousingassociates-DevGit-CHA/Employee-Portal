@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
+import { fmtDateRange, fmtDateShort } from '@/lib/format-date'
 import type { Timesheet, TimesheetRow } from '@/types'
 import type { PayPeriod } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 
 function formatPeriodLabel(p: PayPeriod): string {
-  return `${new Date(`${p.start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${p.end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  return fmtDateRange(p.start, p.end)
 }
 
 // Read-only mirror of TimesheetClient's grid — managers drilling into an
@@ -122,7 +123,7 @@ export default function EmployeeTimesheetView({
                         <div key={row.id} className={`grid grid-cols-[90px_1fr_80px_80px] gap-3 px-4 py-2 border-b border-[#f0f7f8] items-center text-[13px] ${Number(row.leave_hours) > 0 ? 'bg-violet-50/40' : ''}`}>
                           <div>
                             <p className="font-semibold text-[#0b2b35] text-[12px]">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
-                            <p className="text-[10px] text-gray-400">{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                            <p className="text-[10px] text-gray-400">{fmtDateShort(d)}</p>
                           </div>
                           <span className="text-gray-500 truncate">{row.description || '—'}</span>
                           <span className="text-center font-medium text-[#0b2b35]">{row.regular_hours}</span>

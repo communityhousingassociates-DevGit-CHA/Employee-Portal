@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { submitExpense, getReceiptUploadUrl, getReceiptViewUrl } from '@/app/actions/expenses'
+import { fmtDate } from '@/lib/format-date'
 import type { Expense, ExpenseCategory } from '@/types'
 
 const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
@@ -138,7 +139,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
             )}
             {expenses.map(exp => (
               <tr key={exp.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
-                <td className="px-4 py-3 text-gray-500">{exp.expense_date}</td>
+                <td className="px-4 py-3 text-gray-500">{fmtDate(exp.expense_date)}</td>
                 <td className="px-4 py-3 text-gray-500">{CATEGORY_LABELS[exp.category] ?? exp.category}{exp.category === 'mileage' && exp.miles ? ` (${exp.miles} mi)` : ''}</td>
                 <td className="px-4 py-3 text-gray-500">{exp.description || '—'}</td>
                 <td className="px-4 py-3 font-medium text-[#0b2b35]">{currency(exp.amount)}</td>

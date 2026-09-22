@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
+import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
@@ -26,10 +27,6 @@ function workdaysBetween(start: string, end: string): number {
     cur.setDate(cur.getDate() + 1)
   }
   return count
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function RequestClient({
@@ -227,7 +224,7 @@ export default function RequestClient({
               {signed ? (
                 <div>
                   <p className="font-[cursive] text-[22px] text-[#0b2b35]">{employeeName}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel} · {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel} · {fmtDate(new Date())}</p>
                 </div>
               ) : <p className="text-gray-300 text-[13px]">Click here to sign</p>}
             </div>

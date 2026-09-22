@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { setMileageRate } from '@/app/actions/mileage-rates'
+import { fmtDate } from '@/lib/format-date'
 
 type Rate = { id: string; year: number; rate_per_mile: number; updated_at: string }
 
@@ -82,7 +83,7 @@ export default function MileageRateClient({ initialRates, canEdit }: { initialRa
               <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0">
                 <td className="px-4 py-3 font-medium text-[#0b2b35]">{r.year}</td>
                 <td className="px-4 py-3 text-gray-500">${r.rate_per_mile.toFixed(3)}</td>
-                <td className="px-4 py-3 text-gray-400">{new Date(r.updated_at).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-gray-400">{fmtDate(r.updated_at)}</td>
               </tr>
             ))}
           </tbody>

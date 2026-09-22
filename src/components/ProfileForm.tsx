@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl } from '@/app/actions/profile'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { buildFullName } from '@/lib/format-name'
+import { fmtDate } from '@/lib/format-date'
 import { createClient } from '@/lib/supabase/client'
 import PasswordInput from '@/components/PasswordInput'
 
@@ -227,7 +228,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
             { label: 'Email', value: profile.email },
             { label: 'Role', value: ROLE_LABELS[profile.role] || profile.role },
             { label: 'Employee Type', value: profile.employee_type },
-            { label: 'Hire Date', value: new Date(profile.hire_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) },
+            { label: 'Hire Date', value: fmtDate(profile.hire_date) },
           ].map(f => (
             <div key={f.label} className="flex flex-col gap-1">
               <span className="text-[11px] uppercase tracking-wide font-semibold text-gray-400">{f.label}</span>

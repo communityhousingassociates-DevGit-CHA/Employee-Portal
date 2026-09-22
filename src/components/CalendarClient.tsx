@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getLeaveEventsInRange } from '@/app/actions/calendar'
 import { buildCalendarGrid, calendarGridRange } from '@/lib/calendar-grid'
 import { holidayOn } from '@/lib/holidays'
+import { fmtDateShort } from '@/lib/format-date'
 
 type LeaveEvent = {
   id: string
@@ -45,10 +46,7 @@ function short(name: string, mine: boolean) {
 }
 
 function fmtRange(start: string, end: string) {
-  const s = new Date(start + 'T00:00:00')
-  const e = new Date(end + 'T00:00:00')
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  return start === end ? fmt(s) : `${fmt(s)}–${e.getDate()}`
+  return start === end ? fmtDateShort(start) : `${fmtDateShort(start)}–${fmtDateShort(end)}`
 }
 
 function eventsForDay(events: LeaveEvent[], iso: string) {

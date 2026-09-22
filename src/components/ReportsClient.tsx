@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { getReportSummary } from '@/app/actions/reports'
+import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
@@ -23,7 +24,7 @@ function toInitials(name: string) {
 }
 
 function formatPeriodLabel(p: PayPeriod): string {
-  return `${new Date(`${p.start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${p.end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  return fmtDateRange(p.start, p.end)
 }
 
 export default function ReportsClient({
@@ -126,7 +127,7 @@ export default function ReportsClient({
         <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>{tabLabel} — {formatPeriodLabel(selectedPeriod)}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
           {!isManager && filteredRows[0] ? `${filteredRows[0].name} · Employee ID ${filteredRows[0].id} · ` : ''}
-          Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          Community Housing Associates · Generated {fmtDate(new Date())}
         </p>
       </div>
 

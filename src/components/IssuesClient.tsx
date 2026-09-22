@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { markIssueReviewed, markIssueFixed, markIssuesSeen, getIssueAttachmentViewUrl } from '@/app/actions/report-issue'
+import { fmtDate } from '@/lib/format-date'
 import type { IssueReport, IssueCategory } from '@/types'
 
 type IssueRow = IssueReport & {
@@ -24,10 +25,6 @@ function daysAgo(iso: string) {
   if (diff === 0) return 'Today'
   if (diff === 1) return 'Yesterday'
   return `${diff}d ago`
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function IssuesClient({ initialIssues }: { initialIssues: IssueRow[] }) {

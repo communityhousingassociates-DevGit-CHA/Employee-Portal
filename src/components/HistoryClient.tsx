@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
+import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { LeaveRequest } from '@/types'
 
 type Request = LeaveRequest & { approver_name: string | null }
@@ -21,18 +22,8 @@ const STATUS_STYLE: Record<string, string> = {
   denied: 'bg-red-100 text-red-700',
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
 function fmtRange(start: string, end: string) {
-  if (start === end) return fmtDate(start)
-  const s = new Date(start + 'T00:00:00')
-  const e = new Date(end + 'T00:00:00')
-  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
-    return `${s.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${e.getDate()}, ${e.getFullYear()}`
-  }
-  return `${fmtDate(start)} – ${fmtDate(end)}`
+  return start === end ? fmtDate(start) : fmtDateRange(start, end)
 }
 
 function daysAgo(iso: string) {

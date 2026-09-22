@@ -6,6 +6,7 @@ import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeav
 import { getOrCreateTimesheet, getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
+import { fmtDateShort as fmtDate } from '@/lib/format-date'
 
 const PERSONAL_CAP = 24
 
@@ -21,10 +22,6 @@ const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-emerald-100 text-emerald-700',
   denied: 'bg-red-100 text-red-700',
-}
-
-function fmtDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function daysAgo(iso: string) {

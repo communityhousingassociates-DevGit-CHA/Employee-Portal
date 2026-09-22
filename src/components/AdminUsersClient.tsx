@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
+import { fmtDate } from '@/lib/format-date'
 
 type Employee = {
   id: string
@@ -28,6 +29,11 @@ type Employee = {
   invite_status: 'not_invited' | 'invited' | 'active'
   is_super_admin: boolean
   pto_uncapped: boolean
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
 }
 
 type Grant = { id: string; name: string }
@@ -39,7 +45,7 @@ const staffCategoryOptions: { value: string; label: string }[] = [
   { value: 'resident_advocate', label: 'Resident Advocate' },
 ]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '', pto_uncapped: false }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '', pto_uncapped: false, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
 
 const inviteBadge: Record<Employee['invite_status'], { label: string; cls: string }> = {
   not_invited: { label: 'Not invited', cls: 'bg-gray-100 text-gray-500' },
@@ -108,7 +114,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
     setError('')
     setShowForm(true)
   }
@@ -118,11 +124,12 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
     try {
       const grant_id = form.grant_id || null
       const middle_initial = form.middle_initial || null
+      const address = { address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code }
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
         showToast('Employee updated')
       } else {
-        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -316,7 +323,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                     : <span className="text-gray-400">CHA Employee</span>}
                 </td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.grant_name || '—'}</td>
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.hire_date}</td>
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(e.hire_date)}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className="bg-[#e0f5f8] text-[#028a9e] text-[11px] font-semibold px-2 py-0.5 rounded-full">{e.tier}</span>
                 </td>
@@ -422,6 +429,26 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Hire Date</label>
                 <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className={inputCls} />
                 <span className="text-[11px] text-gray-400">Accrual tier and 90-day waiting period are calculated from this date</span>
+              </div>
+              <div className="sm:col-span-2 flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Address Line 1</label>
+                <input value={form.address_line1} onChange={e => setForm(f => ({ ...f, address_line1: e.target.value }))} placeholder="123 Main St" className={inputCls} />
+              </div>
+              <div className="sm:col-span-2 flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Address Line 2 <span className="normal-case text-gray-400">(optional)</span></label>
+                <input value={form.address_line2} onChange={e => setForm(f => ({ ...f, address_line2: e.target.value }))} placeholder="Apt, suite, unit" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">City</label>
+                <input value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="Baltimore" className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">State</label>
+                <input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value.slice(0, 2).toUpperCase() }))} placeholder="MD" maxLength={2} className={inputCls} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Postal Code</label>
+                <input value={form.postal_code} onChange={e => setForm(f => ({ ...f, postal_code: e.target.value }))} placeholder="21201" className={inputCls} />
               </div>
               <div className="sm:col-span-2 flex items-start gap-2.5 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-3 py-2.5">
                 <input type="checkbox" id="pto_uncapped" checked={form.pto_uncapped} onChange={e => setForm(f => ({ ...f, pto_uncapped: e.target.checked }))}

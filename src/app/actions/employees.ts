@@ -22,6 +22,11 @@ export async function addEmployee(data: {
   hire_date: string
   grant_id: string | null
   pto_uncapped?: boolean
+  address_line1?: string
+  address_line2?: string
+  city?: string
+  state?: string
+  postal_code?: string
 }) {
   await requireRole(['admin'])
   const admin = createAdminClient()
@@ -38,6 +43,11 @@ export async function addEmployee(data: {
     hire_date: data.hire_date,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
+    address_line1: data.address_line1 || null,
+    address_line2: data.address_line2 || null,
+    city: data.city || null,
+    state: data.state || null,
+    postal_code: data.postal_code || null,
     is_active: true,
   })
   if (error) throw new Error(error.message)
@@ -57,6 +67,11 @@ export async function editEmployee(id: string, data: {
   hire_date: string
   grant_id: string | null
   pto_uncapped?: boolean
+  address_line1?: string
+  address_line2?: string
+  city?: string
+  state?: string
+  postal_code?: string
 }) {
   await requireRole(['admin'])
   const admin = createAdminClient()
@@ -73,6 +88,11 @@ export async function editEmployee(id: string, data: {
     hire_date: data.hire_date,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
+    address_line1: data.address_line1 || null,
+    address_line2: data.address_line2 || null,
+    city: data.city || null,
+    state: data.state || null,
+    postal_code: data.postal_code || null,
   }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
@@ -178,7 +198,7 @@ export async function getEmployees() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, pto_uncapped, user_id, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name)')
     .order('name')
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()

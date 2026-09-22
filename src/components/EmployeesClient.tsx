@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
+import { fmtDate as fmtHireDate } from '@/lib/format-date'
 
 type Employee = {
   id: string
@@ -46,9 +47,6 @@ function tenure(hire_date: string) {
   return `${months} mo`
 }
 
-function fmtHireDate(iso: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-}
 
 const TYPE_LABEL: Record<string, string> = { 'full-time': 'Full-time', 'part-time': 'Part-time', consultant: 'Consultant' }
 const TYPE_STYLE: Record<string, string> = { 'full-time': 'bg-emerald-50 text-emerald-700', 'part-time': 'bg-sky-50 text-sky-700', consultant: 'bg-gray-100 text-gray-600' }

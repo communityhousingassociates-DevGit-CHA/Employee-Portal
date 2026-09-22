@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet } from '@/app/actions/timesheets'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
+import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense } from '@/types'
 import type { PayPeriod } from '@/lib/pay-periods'
 
@@ -23,11 +24,11 @@ function addDays(d: string, days: number): string {
 }
 
 function formatShort(d: string): string {
-  return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return fmtDateShort(d)
 }
 
 function formatPeriodLabel(p: PayPeriod): string {
-  return `${new Date(`${p.start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${p.end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  return fmtDateRange(p.start, p.end)
 }
 
 const SALARIED_DAILY_HOURS = 8
@@ -256,7 +257,7 @@ export default function TimesheetClient({
         <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
         <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>Timesheet — {formatPeriodLabel(period)}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-          {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {fmtDate(new Date())}
         </p>
       </div>
 
@@ -410,7 +411,7 @@ export default function TimesheetClient({
           {signed ? (
             <div>
               <p className="font-[cursive] text-[22px] text-[#0b2b35] mb-1">{employeeName}</p>
-              <p className="text-[11px] text-gray-400">{employeeName} · Employee ID {employeeIdLabel} · Signed {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              <p className="text-[11px] text-gray-400">{employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(new Date())}</p>
             </div>
           ) : (
             <p className="text-gray-300 text-[13px]">Click here to sign</p>
@@ -434,7 +435,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
   const isEmpty = rowTotal === 0
   const d = new Date(`${row.work_date}T00:00:00`)
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
-  const dayShort = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const dayShort = fmtDateShort(d)
 
   function handleLeaveChange(v: number) {
     if (isSalaried) {

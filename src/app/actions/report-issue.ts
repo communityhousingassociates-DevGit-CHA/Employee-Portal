@@ -42,7 +42,9 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   // so a delivery hiccup here shouldn't make the report look like it failed.
   try {
     const categoryLabel = CATEGORY_LABELS[data.category] ?? 'Something else'
-    const submittedAt = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })
+    const submittedDate = new Date().toLocaleDateString('en-GB', { timeZone: 'America/New_York', day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-')
+    const submittedTime = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })
+    const submittedAt = `${submittedDate}, ${submittedTime}`
 
     let attachmentLink: string | null = null
     if (data.attachment_path) {

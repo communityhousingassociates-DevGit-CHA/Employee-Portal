@@ -17,6 +17,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     .from('employees')
     .select('id, name, hire_date')
     .eq('is_active', true)
+    .eq('is_test_account', false)
     .order('name')
   if (empError) throw new Error(empError.message)
 
