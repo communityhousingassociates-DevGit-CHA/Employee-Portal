@@ -13,6 +13,15 @@ body {
   color: #1f2937;
 }
 
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  10% { transform: rotate(-12deg); }
+  20% { transform: rotate(10deg); }
+  30% { transform: rotate(-8deg); }
+  40% { transform: rotate(6deg); }
+  50% { transform: rotate(0deg); }
+}
+
 @media print {
   nav, header, aside, .print\:hidden { display: none !important; }
   main { padding: 0 !important; overflow: visible !important; }

@@ -24,16 +24,19 @@ type AdminItem = { href: string; icon: string; label: string; badge?: number; ro
 
 const adminItems: AdminItem[] = [
   { href: '/approvals',     icon: '✅', label: 'Approvals',      badge: 2, roles: ['accounting_manager', 'ceo', 'admin'] },
+  { href: '/issues',        icon: '🎫', label: 'Issue Reports',            roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/reports',       icon: '📊', label: 'Reports',                  roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/employees',     icon: '👥', label: 'Employees',                roles: ['ceo', 'admin'] },
   { href: '/admin',         icon: '🛡️', label: 'Admin Console',            roles: ['admin', 'ceo', 'accounting_manager'] },
 ]
 
-export default function Sidebar({ role = 'employee' }: { role?: Role }) {
+export default function Sidebar({ role = 'employee', openIssueCount = 0 }: { role?: Role; openIssueCount?: number }) {
   const pathname = usePathname()
   const router = useRouter()
 
-  const visibleAdminItems = adminItems.filter(item => item.roles.includes(role))
+  const visibleAdminItems = adminItems
+    .filter(item => item.roles.includes(role))
+    .map(item => item.href === '/issues' ? { ...item, badge: openIssueCount || undefined } : item)
 
   async function signOut() {
     await fetch('/api/demo-logout', { method: 'POST' })

@@ -6,6 +6,8 @@ export type StaffCategory = 'cha_employee' | 'resident_advocate'
 export type TimesheetStatus = 'draft' | 'submitted' | 'approved'
 export type ExpenseCategory = 'mileage' | 'hotel' | 'airline' | 'meals' | 'entertainment' | 'cash_advance' | 'tolls' | 'conference_fees' | 'rental_car' | 'gratuities' | 'parking' | 'other'
 export type ExpenseStatus = 'pending' | 'approved' | 'denied'
+export type IssueCategory = 'login' | 'pay_balance' | 'timesheet' | 'leave_request' | 'expense' | 'other'
+export type IssueStatus = 'open' | 'reviewed'
 
 // DB-shaped types — mirror supabase-schema.sql columns exactly.
 
@@ -35,6 +37,7 @@ export interface Employee {
   is_active: boolean
   login_count: number
   force_password_change: boolean
+  issues_seen_at: string | null
   created_at: string
 }
 
@@ -78,6 +81,18 @@ export interface Expense {
   approver_id: string | null
   approved_at: string | null
   deny_reason: string | null
+  created_at: string
+}
+
+export interface IssueReport {
+  id: string
+  employee_id: string
+  category: IssueCategory
+  description: string
+  page_url: string | null
+  status: IssueStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
   created_at: string
 }
 

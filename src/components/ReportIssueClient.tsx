@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { reportIssue, type IssueCategory } from '@/app/actions/report-issue'
+import { reportIssue } from '@/app/actions/report-issue'
+import type { IssueCategory } from '@/types'
 
 const CATEGORY_OPTIONS: { value: IssueCategory; label: string }[] = [
   { value: 'login', label: "Account / login trouble" },
@@ -39,9 +40,9 @@ export default function ReportIssueClient({ employeeName, employeeEmail }: { emp
   if (sent) {
     return (
       <div className="max-w-lg">
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-3 flex items-center gap-2">
-          ✅ Report sent — Carrileen Edwards (Accounting Manager) and Globalist Pro have been notified. If it&apos;s urgent, you can also email
-          <a href="mailto:communityhousingassociates@gmail.com" className="underline font-semibold">communityhousingassociates@gmail.com</a> directly.
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-3">
+          <span className="mr-1.5">✅</span>
+          Report sent and logged — your Accounting Manager and the admin team have been notified and will follow up.
         </div>
         <button
           onClick={() => { setSent(false); setDescription(''); setCategory('other') }}
