@@ -123,7 +123,7 @@ export function validateBalanceRows(
     for (const [field, label, value] of [
       ['ptoBalance', 'PTO', row.ptoBalance],
       ['sickBalance', 'Sick', row.sickBalance],
-      ['personalBalance', 'Personal', row.personalBalance],
+      ['personalBalance', 'Vacation', row.personalBalance],
     ] as const) {
       if (value === null) {
         issues.push({ severity: 'warning', field, message: `${label} balance not filled in — will be seeded as 0`, rowIndex: row.rowIndex })

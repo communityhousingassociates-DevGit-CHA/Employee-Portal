@@ -363,7 +363,7 @@ export default function AdminImportClient({
               <table className="w-full text-[13px] min-w-[760px]">
                 <thead>
                   <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                    {['Row', 'Name', 'Matched Email', 'PTO', 'Sick', 'Personal', 'Status', 'Issues'].map(h => (
+                    {['Row', 'Name', 'Matched Email', 'PTO', 'Sick', 'Vacation', 'Status', 'Issues'].map(h => (
                       <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
                     ))}
                   </tr>

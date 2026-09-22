@@ -154,7 +154,7 @@ export default function PortalSettingsClient({
         <Field label="Sick Accrual (hrs/pay period)" hint="Fixed rate — same for all employees">
           <input type="number" step="0.01" value={settings.sick_rate_per_pp} onChange={e => set('sick_rate_per_pp', Number(e.target.value))} className={inputCls} />
         </Field>
-        <Field label="Personal Days (per calendar year)">
+        <Field label="Vacation Days (per calendar year)">
           <input type="number" value={settings.personal_days_per_year} onChange={e => set('personal_days_per_year', Number(e.target.value))} className={inputCls} />
         </Field>
         <Field label="PTO Carryover Cap (hours)" hint="Set 0 to allow unlimited carryover">

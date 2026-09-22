@@ -54,7 +54,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           <p className="text-[20px] font-black text-[#0b2b35] leading-none">{employee.sick_bal} <span className="text-[12px] font-normal text-gray-400">hrs</span></p>
         </div>
         <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Personal</p>
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vacation</p>
           <p className="text-[20px] font-black text-[#0b2b35] leading-none">{employee.personal_bal} <span className="text-[12px] font-normal text-gray-400">hrs</span></p>
         </div>
       </div>

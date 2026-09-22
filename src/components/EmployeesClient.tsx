@@ -88,7 +88,7 @@ function EmployeeDetail({ e }: { e: Employee }) {
 
         <div className="bg-white rounded-xl border border-[#d4eef2] p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400">Personal Days</p>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400">Vacation Days</p>
             <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Resets Jan 1</span>
           </div>
           <p className="text-[24px] font-black text-[#0b2b35] leading-none">{personalDays}</p>

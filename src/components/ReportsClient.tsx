@@ -56,7 +56,7 @@ export default function ReportsClient({
   const filteredRows = useMemo(() => {
     if (typeFilter === 'PTO') return leaveRows.filter(r => r.pto_used > 0)
     if (typeFilter === 'Sick') return leaveRows.filter(r => r.sick_used > 0)
-    if (typeFilter === 'Personal') return leaveRows.filter(r => r.personal_used > 0)
+    if (typeFilter === 'Vacation') return leaveRows.filter(r => r.personal_used > 0)
     return leaveRows
   }, [leaveRows, typeFilter])
 
@@ -76,7 +76,7 @@ export default function ReportsClient({
   const expCount = expenseRows.reduce((s, r) => s + r.count, 0)
 
   function exportLeaveCsv() {
-    const headers = ['Employee', 'Employee ID', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Personal Remaining (hrs)', 'Accrual/Pay Period (hrs)']
+    const headers = ['Employee', 'Employee ID', 'PTO Used (hrs)', 'PTO Balance (hrs)', 'PTO Cap %', 'Sick Used (hrs)', 'Sick Balance (hrs)', 'Vacation Remaining (hrs)', 'Accrual/Pay Period (hrs)']
     const csvRows = filteredRows.map(r => [r.name, r.id, r.pto_used, r.pto_bal, `${Math.min(Math.round((r.pto_bal / 400) * 100), 100)}%`, r.sick_used, r.sick_bal, r.personal_bal, r.accrual])
     downloadCsv(headers, csvRows, `CHA-Leave-Report-${selectedPeriod.start}.csv`)
   }
@@ -160,7 +160,7 @@ export default function ReportsClient({
           </select>
           {tab === 'leave' && (
             <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1">
-              {['All', 'PTO', 'Sick', 'Personal'].map(t => (
+              {['All', 'PTO', 'Sick', 'Vacation'].map(t => (
                 <button key={t} onClick={() => setTypeFilter(t)}
                   className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors ${typeFilter === t ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
                   {t}
@@ -290,7 +290,7 @@ export default function ReportsClient({
             {[
               { label: 'PTO Hours Used', value: `${totalPto} hrs`, color: '#02ACC0' },
               { label: 'Sick Hours Used', value: `${totalSick} hrs`, color: '#7c3aed' },
-              { label: 'Personal Hours Used', value: `${totalPersonal} hrs`, color: '#f59e0b' },
+              { label: 'Vacation Hours Used', value: `${totalPersonal} hrs`, color: '#f59e0b' },
               { label: isManager ? 'Employees Reported' : 'Pay Period', value: isManager ? filteredRows.length : selectedPeriod.start, color: '#0b2b35' },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
@@ -318,7 +318,7 @@ export default function ReportsClient({
                       <div className="flex-1 flex gap-0.5 h-7 rounded-lg overflow-hidden bg-[#f8fcfd]">
                         {r.pto_used > 0 && <div style={{ width: `${ptoW}%`, backgroundColor: '#02ACC0' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`PTO: ${r.pto_used}h`}>{r.pto_used}</div>}
                         {r.sick_used > 0 && <div style={{ width: `${sickW}%`, backgroundColor: '#7c3aed' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`Sick: ${r.sick_used}h`}>{r.sick_used}</div>}
-                        {r.personal_used > 0 && <div style={{ width: `${persW}%`, backgroundColor: '#f59e0b' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`Personal: ${r.personal_used}h`}>{r.personal_used}</div>}
+                        {r.personal_used > 0 && <div style={{ width: `${persW}%`, backgroundColor: '#f59e0b' }} className="flex items-center justify-center text-white text-[10px] font-bold transition-all" title={`Vacation: ${r.personal_used}h`}>{r.personal_used}</div>}
                       </div>
                       <span className="text-[12px] text-gray-400 w-12 text-right flex-shrink-0">{total} hrs</span>
                     </div>
@@ -326,7 +326,7 @@ export default function ReportsClient({
                 })}
               </div>
               <div className="flex gap-5 mt-4 pt-4 border-t border-[#f0f7f8]">
-                {([['#02ACC0', 'PTO'], ['#7c3aed', 'Sick'], ['#f59e0b', 'Personal']] as const).map(([color, label]) => (
+                {([['#02ACC0', 'PTO'], ['#7c3aed', 'Sick'], ['#f59e0b', 'Vacation']] as const).map(([color, label]) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: color }} />
                     <span className="text-[11px] text-gray-400">{label}</span>
@@ -355,7 +355,7 @@ export default function ReportsClient({
                     <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Cap</th>
                     <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Used</th>
                     <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Sick Balance</th>
-                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Personal Rem.</th>
+                    <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Vacation Rem.</th>
                     <th className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold no-print">Accrual/PP</th>
                   </tr>
                 </thead>

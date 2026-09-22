@@ -147,7 +147,7 @@ export default async function DashboardPage() {
 
         <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-amber-400 rounded-t-xl" />
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">Personal Days</p>
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">Vacation Days</p>
           <div className="flex items-end gap-2 mb-0.5">
             <p className="text-[38px] font-black text-[#0b2b35] leading-none">{personalDays}</p>
             <p className="text-[13px] text-gray-400 mb-1.5">days</p>

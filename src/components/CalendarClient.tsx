@@ -22,7 +22,7 @@ type UpcomingEvent = Omit<LeaveEvent, 'employee_id'>
 const TYPE_STYLE: Record<string, { cell: string; dot: string; label: string }> = {
   pto: { cell: 'bg-[#e0f5f8] text-[#028a9e]', dot: 'bg-[#02ACC0]', label: 'PTO' },
   sick: { cell: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500', label: 'Sick' },
-  personal: { cell: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400', label: 'Personal' },
+  personal: { cell: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400', label: 'Vacation' },
   bereavement: { cell: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400', label: 'Bereavement' },
   'jury duty': { cell: 'bg-blue-100 text-blue-700', dot: 'bg-blue-400', label: 'Jury Duty' },
   holiday: { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Holiday' },
