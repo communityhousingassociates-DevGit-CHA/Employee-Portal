@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
-import { recordSuccessfulLogin } from '@/app/actions/auth'
+import { recordSuccessfulLogin, checkLoginAllowed, recordFailedLogin } from '@/app/actions/auth'
 import PasswordInput from '@/components/PasswordInput'
 
 const DEMO_EMAIL = 'demo@communityhousingassociates.org'
@@ -31,12 +31,20 @@ export default function LoginPage() {
       return
     }
 
+    const gate = await checkLoginAllowed(email).catch(() => ({ allowed: true as const }))
+    if (!gate.allowed) {
+      setError(gate.message ?? 'Too many failed attempts. Try again shortly.')
+      setLoading(false)
+      return
+    }
+
     const supabase = createClient()
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
       setLoading(false)
+      recordFailedLogin(email).catch(() => {})
     } else {
       if (data.session?.access_token) {
         try {
