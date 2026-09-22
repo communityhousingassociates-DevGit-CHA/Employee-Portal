@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { markIssueReviewed } from '@/app/actions/report-issue'
+import { markIssueReviewed, markIssuesSeen } from '@/app/actions/report-issue'
 import type { IssueReport, IssueCategory } from '@/types'
 
 type IssueRow = IssueReport & {
@@ -32,6 +32,11 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
   const [filter, setFilter] = useState<'open' | 'all'>('open')
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
+
+  // Dismiss the topbar alert bell now that the manager is actually looking at the list.
+  // Done client-side on mount (not during the page's server render) — markIssuesSeen()
+  // calls revalidatePath, which Next.js only allows from an action, not from render.
+  useEffect(() => { markIssuesSeen().catch(() => {}) }, [])
 
   const issues = filter === 'open' ? initialIssues.filter(i => i.status === 'open') : initialIssues
   const openCount = initialIssues.filter(i => i.status === 'open').length
