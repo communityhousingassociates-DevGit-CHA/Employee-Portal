@@ -245,6 +245,7 @@ export default async function DashboardPage() {
               { href: '/calendar', label: 'Team Leave Calendar', icon: '📅' },
               { href: '/expenses', label: 'My Expenses', icon: '🧾' },
               ...(isManager ? [{ href: '/approvals', label: `Pending Approvals (${pendingCount})`, icon: '✅' }] : []),
+              { href: '/report-issue', label: 'Report an Issue', icon: '🆘' },
             ].map(item => (
               <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
                 <span className="text-[14px]">{item.icon}</span>
