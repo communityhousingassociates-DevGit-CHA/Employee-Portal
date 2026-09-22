@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { createLeaveRequest, getTeamConflicts } from '@/app/actions/leave-requests'
+import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import type { LeaveBalance, LeaveType } from '@/types'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
@@ -10,7 +10,7 @@ type Conflict = { start_date: string; end_date: string; employee_name?: string }
 const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
   { key: 'PTO', label: 'PTO', icon: '🌴', desc: 'Personal time off', balanceKey: 'pto_hours' },
   { key: 'Sick', label: 'Sick Leave', icon: '🤒', desc: 'Illness or medical', balanceKey: 'sick_hours' },
-  { key: 'Personal', label: 'Personal Day / Vacation', icon: '🗓', desc: 'Personal business or vacation', balanceKey: 'personal_hours' },
+  { key: 'Personal', label: 'Vacation', icon: '🗓', desc: 'Vacation time off', balanceKey: 'personal_hours' },
   { key: 'Bereavement', label: 'Bereavement', icon: '🕊', desc: 'Loss of a family member', balanceKey: null },
   { key: 'Jury Duty', label: 'Jury Duty', icon: '⚖️', desc: 'Court summons required', balanceKey: null },
 ]
@@ -46,6 +46,8 @@ export default function RequestClient({
   const [end, setEnd] = useState('')
   const [hours, setHours] = useState('')
   const [note, setNote] = useState('')
+  const [attachment, setAttachment] = useState<File | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [signed, setSigned] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -54,6 +56,7 @@ export default function RequestClient({
 
   const selectedType = LEAVE_TYPES.find(t => t.key === leaveType)!
   const selectedBalance = selectedType.balanceKey && balance ? Number(balance[selectedType.balanceKey]) : null
+  const attachmentRequired = leaveType === 'Jury Duty'
 
   useEffect(() => {
     if (!start || !end) { setConflicts([]); return }
@@ -78,7 +81,7 @@ export default function RequestClient({
   const hoursNum = Number(hours) || 0
   const balAfter = selectedBalance !== null ? selectedBalance - hoursNum : null
   const isNegative = balAfter !== null && balAfter < 0
-  const canSubmit = signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting
+  const canSubmit = signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
   const today = new Date().toISOString().slice(0, 10)
 
@@ -86,7 +89,14 @@ export default function RequestClient({
     setSubmitting(true)
     setError('')
     try {
-      await createLeaveRequest({ leave_type: leaveType, start_date: start, end_date: end, hours: hoursNum, note })
+      let attachment_path: string | undefined
+      if (attachment) {
+        const { signedUrl, path } = await getLeaveAttachmentUploadUrl(attachment.name)
+        const res = await fetch(signedUrl, { method: 'PUT', body: attachment, headers: { 'Content-Type': attachment.type } })
+        if (!res.ok) throw new Error('Attachment upload failed — please try again')
+        attachment_path = path
+      }
+      await createLeaveRequest({ leave_type: leaveType, start_date: start, end_date: end, hours: hoursNum, note, attachment_path })
       setSubmitted(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to submit request')
@@ -108,7 +118,7 @@ export default function RequestClient({
           <p className="text-[13px] text-gray-500 mb-6">A manager will be notified to review and approve.</p>
           <div className="flex flex-col gap-2">
             <Link href="/history" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">View My Requests</Link>
-            <button onClick={() => { setSubmitted(false); setSigned(false); setStart(''); setEnd(''); setHours(''); setNote('') }}
+            <button onClick={() => { setSubmitted(false); setSigned(false); setStart(''); setEnd(''); setHours(''); setNote(''); setAttachment(null) }}
               className="text-[13px] text-[#02ACC0] font-semibold hover:underline">Submit another request</button>
           </div>
         </div>
@@ -185,6 +195,31 @@ export default function RequestClient({
           </div>
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
+            <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
+              Attachment {attachmentRequired
+                ? <span className="normal-case font-normal text-red-500">(required — attach the jury summons)</span>
+                : <span className="normal-case font-normal">(optional)</span>}
+            </p>
+            <p className="text-[12px] text-gray-400 mb-3">
+              {attachmentRequired ? 'Jury Duty requests need the summons attached before they can be submitted.' : 'e.g. a doctor’s note or other supporting document.'}
+            </p>
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className={`text-[13px] font-semibold px-3 py-2 rounded-lg border transition-colors w-fit ${
+                attachmentRequired && !attachment ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-[#d4eef2] hover:bg-[#f0f7f8]'
+              }`}>
+              {attachment ? attachment.name : 'Attach File'}
+            </button>
+            {attachment && (
+              <button type="button" onClick={() => { setAttachment(null); if (fileRef.current) fileRef.current.value = '' }}
+                className="ml-3 text-[11px] text-gray-400 hover:text-red-500">
+                Remove
+              </button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
+              onChange={e => setAttachment(e.target.files?.[0] ?? null)} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">Employee Signature</p>
             <p className="text-[12px] text-gray-400 mb-4">By signing, you confirm this request is accurate and that leave requires approval before it is taken.</p>
             <div onClick={() => setSigned(true)}
@@ -208,7 +243,10 @@ export default function RequestClient({
 
           {!canSubmit && (start || end || hoursNum > 0) && (
             <p className="text-[12px] text-gray-400">
-              {!start || !end ? 'Select start and end dates.' : hoursNum === 0 ? 'Enter total hours.' : !signed ? 'Sign the form to enable submission.' : ''}
+              {!start || !end ? 'Select start and end dates.'
+                : hoursNum === 0 ? 'Enter total hours.'
+                : attachmentRequired && !attachment ? 'Attach the jury summons to enable submission.'
+                : !signed ? 'Sign the form to enable submission.' : ''}
             </p>
           )}
         </div>
@@ -279,7 +317,7 @@ export default function RequestClient({
 
           <div className="bg-[#f8fcfd] rounded-xl border border-[#e8f4f7] p-4 space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Policy Reminders</p>
-            {['Leave requires approval before it is taken.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Personal days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
+            {['Leave requires approval before it is taken.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Vacation days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
               <div key={tip} className="flex gap-2 text-[11px] text-gray-500"><span className="text-[#02ACC0] flex-shrink-0 mt-0.5">·</span>{tip}</div>
             ))}
           </div>

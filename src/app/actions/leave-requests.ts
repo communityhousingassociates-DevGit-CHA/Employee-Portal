@@ -21,9 +21,13 @@ export async function createLeaveRequest(data: {
   end_date: string
   hours: number
   note: string
+  attachment_path?: string
 }) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
+  if (data.leave_type === 'Jury Duty' && !data.attachment_path) {
+    throw new Error('Jury Duty requests require the summons attached.')
+  }
   const admin = createAdminClient()
   const { error } = await admin.from('leave_requests').insert({
     employee_id: employee.id,
@@ -32,6 +36,7 @@ export async function createLeaveRequest(data: {
     end_date: data.end_date,
     hours: data.hours,
     note: data.note || null,
+    attachment_url: data.attachment_path || null,
     status: 'pending',
     employee_signed_at: new Date().toISOString(),
   })
@@ -39,6 +44,30 @@ export async function createLeaveRequest(data: {
   revalidatePath('/request')
   revalidatePath('/history')
   revalidatePath('/dashboard')
+}
+
+export async function getLeaveAttachmentUploadUrl(fileName: string) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const ext = fileName.split('.').pop()
+  const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
+  const { data, error } = await admin.storage.from('leave-attachments').createSignedUploadUrl(path)
+  if (error) throw new Error(error.message)
+  return { signedUrl: data.signedUrl, path, token: data.token }
+}
+
+export async function getLeaveAttachmentViewUrl(requestId: string) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const { data: request, error: fetchError } = await admin.from('leave_requests').select('employee_id, attachment_url').eq('id', requestId).single()
+  if (fetchError) throw new Error(fetchError.message)
+  if (!request.attachment_url) return null
+  if (request.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new Error('Forbidden')
+  const { data, error } = await admin.storage.from('leave-attachments').createSignedUrl(request.attachment_url, 60 * 10)
+  if (error) throw new Error(error.message)
+  return data.signedUrl
 }
 
 export async function getLeaveHistory(employeeId?: string) {

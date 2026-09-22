@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { approveLeaveRequest, denyLeaveRequest } from '@/app/actions/leave-requests'
+import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
 import type { LeaveRequest, Expense } from '@/types'
 
@@ -79,6 +79,15 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
     }
   }
 
+  async function viewAttachment() {
+    try {
+      const url = await getLeaveAttachmentViewUrl(item.id)
+      if (url) window.open(url, '_blank')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to open attachment')
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border border-[#d4eef2] shadow-sm overflow-hidden">
       <div className={`h-1 ${tc.bar}`} />
@@ -134,6 +143,15 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
             <div className="w-0.5 bg-[#d4eef2] rounded-full flex-shrink-0" />
             <p className="text-[13px] text-gray-500 italic">&ldquo;{item.note}&rdquo;</p>
           </div>
+        )}
+
+        {item.attachment_url && (
+          <button onClick={viewAttachment} className="flex items-center gap-1.5 text-[12px] font-semibold text-[#02ACC0] hover:underline mb-4">
+            📎 {item.leave_type === 'Jury Duty' ? 'View summons' : 'View attachment'}
+          </button>
+        )}
+        {item.leave_type === 'Jury Duty' && !item.attachment_url && (
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-red-500 mb-4">⚠️ No summons attached</div>
         )}
 
         {confirming === 'approve' && (

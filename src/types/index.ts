@@ -117,6 +117,7 @@ export interface LeaveRequest {
   end_date: string
   hours: number
   note: string | null
+  attachment_url: string | null
   deny_reason: string | null
   status: LeaveStatus
   approver_id: string | null

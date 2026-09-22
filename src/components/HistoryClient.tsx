@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import type { LeaveRequest } from '@/types'
 
 type Request = LeaveRequest & { approver_name: string | null }
@@ -45,7 +46,17 @@ function daysAgo(iso: string) {
 
 function RequestRow({ r, expanded, onToggle }: { r: Request; expanded: boolean; onToggle: () => void }) {
   const tc = TYPE_STYLE[r.leave_type] || TYPE_STYLE.PTO
-  const hasNote = !!(r.note || (r.status === 'denied' && r.deny_reason))
+  const hasNote = !!(r.note || r.attachment_url || (r.status === 'denied' && r.deny_reason))
+
+  async function viewAttachment(e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      const url = await getLeaveAttachmentViewUrl(r.id)
+      if (url) window.open(url, '_blank')
+    } catch {
+      // best-effort — no inline error UI in this row-based view
+    }
+  }
 
   return (
     <div>
@@ -88,6 +99,11 @@ function RequestRow({ r, expanded, onToggle }: { r: Request; expanded: boolean; 
                 <p className="text-[13px] text-red-600">&ldquo;{r.deny_reason}&rdquo;</p>
               </div>
             </div>
+          )}
+          {r.attachment_url && (
+            <button onClick={viewAttachment} className="flex items-center gap-1.5 text-[12px] font-semibold text-[#02ACC0] hover:underline">
+              📎 {r.leave_type === 'Jury Duty' ? 'View summons' : 'View attachment'}
+            </button>
           )}
         </div>
       )}
