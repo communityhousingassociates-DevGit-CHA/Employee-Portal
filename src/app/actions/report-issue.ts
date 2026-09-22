@@ -36,7 +36,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   const resend = new Resend(process.env.RESEND_API_KEY!)
 
   const { error } = await resend.emails.send({
-    from: 'CHA Employee Portal <notify@globalist.pro>',
+    from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
     to: REPORT_TO,
     cc: REPORT_CC,
     replyTo: employee.email,
