@@ -26,11 +26,17 @@ function daysAgo(iso: string) {
   return `${diff}d ago`
 }
 
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 export default function IssuesClient({ initialIssues }: { initialIssues: IssueRow[] }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [filter, setFilter] = useState<'open' | 'all'>('open')
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [fixingId, setFixingId] = useState<string | null>(null)
+  const [fixNotes, setFixNotes] = useState('')
   const [error, setError] = useState('')
 
   // Dismiss the topbar alert bell now that the manager is actually looking at the list.
@@ -41,11 +47,31 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
   const issues = filter === 'open' ? initialIssues.filter(i => i.status !== 'fixed') : initialIssues
   const openCount = initialIssues.filter(i => i.status !== 'fixed').length
 
-  async function handleAction(id: string, action: 'review' | 'fix') {
+  async function handleReview(id: string) {
     setError('')
     setBusyId(id)
     try {
-      await (action === 'review' ? markIssueReviewed(id) : markIssueFixed(id))
+      await markIssueReviewed(id)
+      startTransition(() => router.refresh())
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function startFixing(id: string) {
+    setError('')
+    setFixNotes('')
+    setFixingId(id)
+  }
+
+  async function confirmFixed(id: string) {
+    setError('')
+    setBusyId(id)
+    try {
+      await markIssueFixed(id, fixNotes)
+      setFixingId(null)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
@@ -122,25 +148,56 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
                       }`}>
                         {issue.status}
                       </span>
+                      {issue.status === 'fixed' && issue.fixed_at && (
+                        <div className="text-[11px] text-gray-400 mt-1">Fixed {fmtDate(issue.fixed_at)}</div>
+                      )}
+                      {issue.status === 'fixed' && issue.fix_notes && (
+                        <div className="text-[11px] text-gray-500 mt-0.5 max-w-[220px]">{issue.fix_notes}</div>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-4 py-3 text-right">
                       {issue.status === 'open' && (
                         <button
-                          onClick={() => handleAction(issue.id, 'review')}
+                          onClick={() => handleReview(issue.id)}
                           disabled={busyId === issue.id || isPending}
-                          className="text-[12px] font-semibold text-[#02ACC0] hover:underline disabled:opacity-40"
+                          className="text-[12px] font-semibold text-[#02ACC0] hover:underline disabled:opacity-40 whitespace-nowrap"
                         >
                           {busyId === issue.id ? 'Marking…' : 'Mark Reviewed'}
                         </button>
                       )}
-                      {issue.status === 'reviewed' && (
+                      {issue.status === 'reviewed' && fixingId !== issue.id && (
                         <button
-                          onClick={() => handleAction(issue.id, 'fix')}
-                          disabled={busyId === issue.id || isPending}
-                          className="text-[12px] font-semibold text-emerald-600 hover:underline disabled:opacity-40"
+                          onClick={() => startFixing(issue.id)}
+                          className="text-[12px] font-semibold text-emerald-600 hover:underline whitespace-nowrap"
                         >
-                          {busyId === issue.id ? 'Marking…' : 'Mark Fixed'}
+                          Mark Fixed
                         </button>
+                      )}
+                      {issue.status === 'reviewed' && fixingId === issue.id && (
+                        <div className="flex flex-col gap-1.5 items-end w-[220px] ml-auto text-left">
+                          <textarea
+                            value={fixNotes}
+                            onChange={e => setFixNotes(e.target.value)}
+                            rows={2}
+                            placeholder="What was done to fix it? (optional)"
+                            className="w-full px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[12px] focus:outline-none focus:border-[#02ACC0]"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => confirmFixed(issue.id)}
+                              disabled={busyId === issue.id}
+                              className="text-[12px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-md px-2.5 py-1 disabled:opacity-40"
+                            >
+                              {busyId === issue.id ? 'Saving…' : 'Confirm'}
+                            </button>
+                            <button
+                              onClick={() => setFixingId(null)}
+                              className="text-[12px] font-semibold text-gray-400 hover:text-gray-600 px-1"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
                       )}
                     </td>
                   </tr>

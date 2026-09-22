@@ -130,13 +130,14 @@ export async function markIssueReviewed(id: string) {
 }
 
 /** Reviewed and actually remediated — the terminal state, distinct from just "seen." */
-export async function markIssueFixed(id: string) {
+export async function markIssueFixed(id: string, notes?: string) {
   const actor = await requireRole(MANAGER_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('issue_reports').update({
     status: 'fixed',
     fixed_by: actor.id,
     fixed_at: new Date().toISOString(),
+    fix_notes: notes?.trim() || null,
   }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/issues')

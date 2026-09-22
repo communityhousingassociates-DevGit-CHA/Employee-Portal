@@ -96,6 +96,7 @@ export interface IssueReport {
   reviewed_at: string | null
   fixed_by: string | null
   fixed_at: string | null
+  fix_notes: string | null
   created_at: string
 }
 
