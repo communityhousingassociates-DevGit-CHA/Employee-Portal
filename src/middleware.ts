@@ -31,7 +31,7 @@ function buildCsp() {
     `default-src 'self'`,
     `script-src 'self' 'unsafe-inline'`,
     `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' blob: data:${SUPABASE_HOST ? ` https://${SUPABASE_HOST}` : ''}`,
+    `img-src 'self' blob: data: https://api.weather.gov${SUPABASE_HOST ? ` https://${SUPABASE_HOST}` : ''}`,
     `font-src 'self'`,
     `connect-src 'self'${SUPABASE_HOST ? ` https://${SUPABASE_HOST} wss://${SUPABASE_HOST}` : ''}`,
     `object-src 'none'`,

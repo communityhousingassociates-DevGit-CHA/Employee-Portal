@@ -7,6 +7,15 @@ import { getOrCreateTimesheet, getTimesheetForEmployeePeriod } from '@/app/actio
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
+import { getBaltimoreWeather } from '@/lib/weather'
+
+// Policy docs live in Claude Docs, not in the portal itself — linked here so
+// staff/admins always land on the current version rather than a stale export.
+const DOCS = {
+  howTo: 'https://claude.ai/artifact/9afhTWbQfFg98XZey84CCw',
+  staffSop: 'https://claude.ai/artifact/NfM3Qmbd18iq8fxdjzPU5r',
+  adminSop: 'https://claude.ai/artifact/Mk7pz8oSEXNfoMwx3Aeta4',
+}
 
 const PERSONAL_CAP = 24
 
@@ -42,13 +51,14 @@ export default async function DashboardPage() {
 
   const period = getCurrentPeriod()
   const previousPeriod = getPreviousPeriod()
-  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, previousTimesheet] = await Promise.all([
+  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, previousTimesheet, weather] = await Promise.all([
     getMyBalance(),
     getMyRecentRequests(4),
     getNextApprovedLeave(),
     getOrCreateTimesheet(period.start, period.end),
     isManager ? getPendingLeaveApprovals() : Promise.resolve([]),
     getTimesheetForEmployeePeriod(employee.id, previousPeriod.start, previousPeriod.end),
+    getBaltimoreWeather(),
   ])
 
   const pendingCount = pendingApprovals.length
@@ -267,6 +277,19 @@ export default async function DashboardPage() {
             </div>
           </div>
 
+          {weather && (
+            <div className="bg-white rounded-xl border border-[#d4eef2] px-4 py-3 flex items-center gap-3">
+              <img src={weather.icon} alt={weather.shortForecast} className="w-10 h-10 flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[20px] font-black text-[#0b2b35]">{weather.tempF}°</span>
+                  <span className="text-[12px] text-gray-400 truncate">{weather.shortForecast}</span>
+                </div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400">Baltimore, MD</p>
+              </div>
+            </div>
+          )}
+
           {nextLeave ? (
             <div className="bg-[#0b2b35] rounded-xl p-4">
               <p className="text-[10px] uppercase tracking-widest text-[#02ACC0] mb-2">Upcoming Leave</p>
@@ -301,6 +324,26 @@ export default async function DashboardPage() {
                 <span className="ml-auto text-gray-300 text-[11px]">›</span>
               </Link>
             ))}
+          </div>
+
+          <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#d4eef2]">
+              <p className="text-[12px] font-bold text-[#0b2b35]">Documentation</p>
+            </div>
+            <div className="divide-y divide-[#f0f7f8]">
+              {[
+                { href: DOCS.howTo, label: 'How-To Guide', icon: '📘' },
+                { href: DOCS.staffSop, label: 'Staff SOP', icon: '📄' },
+                ...(isManager ? [{ href: DOCS.adminSop, label: 'Admin & Leadership SOP', icon: '📋' }] : []),
+              ].map(item => (
+                <a key={item.href} href={item.href} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
+                  <span className="text-[14px]">{item.icon}</span>
+                  <span className="text-[12px] font-medium text-[#0b2b35]">{item.label}</span>
+                  <span className="ml-auto text-gray-300 text-[11px]">↗</span>
+                </a>
+              ))}
+            </div>
           </div>
         </div>
       </div>
