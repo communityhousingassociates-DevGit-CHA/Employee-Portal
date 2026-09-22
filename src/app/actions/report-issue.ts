@@ -20,7 +20,7 @@ const CATEGORY_LABELS: Record<IssueCategory, string> = {
 const REPORT_TO = 'communityhousingassociates@gmail.com'
 const REPORT_CC = 'advisor@globalist.pro'
 
-export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string }) {
+export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string }) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
 
@@ -33,6 +33,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
     category: data.category,
     description,
     page_url: data.page_url || null,
+    attachment_url: data.attachment_path || null,
   })
   if (insertError) throw new Error(insertError.message)
 
@@ -42,6 +43,13 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   try {
     const categoryLabel = CATEGORY_LABELS[data.category] ?? 'Something else'
     const submittedAt = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' })
+
+    let attachmentLink: string | null = null
+    if (data.attachment_path) {
+      const { data: signed } = await admin.storage.from('issue-attachments').createSignedUrl(data.attachment_path, 60 * 60 * 24 * 7)
+      attachmentLink = signed?.signedUrl ?? null
+    }
+
     const resend = new Resend(process.env.RESEND_API_KEY!)
     await resend.emails.send({
       from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
@@ -61,9 +69,10 @@ export async function reportIssue(data: { category: IssueCategory; description: 
               <tr><td style="padding:3px 0;color:#6b7280">Category</td><td style="padding:3px 0;font-weight:600">${categoryLabel}</td></tr>
               <tr><td style="padding:3px 0;color:#6b7280">Submitted</td><td style="padding:3px 0">${submittedAt} ET</td></tr>
               ${data.page_url ? `<tr><td style="padding:3px 0;color:#6b7280">Page</td><td style="padding:3px 0">${data.page_url}</td></tr>` : ''}
+              ${attachmentLink ? `<tr><td style="padding:3px 0;color:#6b7280">Screenshot</td><td style="padding:3px 0"><a href="${attachmentLink}" style="color:#02ACC0">View attachment</a> (link expires in 7 days)</td></tr>` : ''}
             </table>
             <div style="background:#f9fefe;border:1px solid #f0f7f8;border-radius:8px;padding:12px 14px;font-size:13px;color:#0b2b35;white-space:pre-wrap">${description}</div>
-            <p style="font-size:11px;color:#9ca3af;margin-top:16px">Reply to this email to respond directly to ${employee.name}.</p>
+            <p style="font-size:11px;color:#9ca3af;margin-top:16px">Reply to this email to respond directly to ${employee.name}. Full ticket, including the attachment, stays available in the portal's Issue Reports admin page.</p>
           </div>
         </div>
       `,
@@ -71,6 +80,30 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   } catch (e) {
     console.error('reportIssue: email notification failed (ticket still logged)', e)
   }
+}
+
+export async function getIssueAttachmentUploadUrl(fileName: string) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const ext = fileName.split('.').pop()
+  const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
+  const { data, error } = await admin.storage.from('issue-attachments').createSignedUploadUrl(path)
+  if (error) throw new Error(error.message)
+  return { signedUrl: data.signedUrl, path, token: data.token }
+}
+
+export async function getIssueAttachmentViewUrl(issueId: string) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const { data: issue, error: fetchError } = await admin.from('issue_reports').select('employee_id, attachment_url').eq('id', issueId).single()
+  if (fetchError) throw new Error(fetchError.message)
+  if (!issue.attachment_url) return null
+  if (issue.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new Error('Forbidden')
+  const { data, error } = await admin.storage.from('issue-attachments').createSignedUrl(issue.attachment_url, 60 * 10)
+  if (error) throw new Error(error.message)
+  return data.signedUrl
 }
 
 export async function getIssueReports() {
@@ -96,22 +129,35 @@ export async function markIssueReviewed(id: string) {
   revalidatePath('/issues')
 }
 
-/** Total open tickets, regardless of whether this manager has "seen" them — drives the sidebar badge. */
+/** Reviewed and actually remediated — the terminal state, distinct from just "seen." */
+export async function markIssueFixed(id: string) {
+  const actor = await requireRole(MANAGER_ROLES)
+  const admin = createAdminClient()
+  const { error } = await admin.from('issue_reports').update({
+    status: 'fixed',
+    fixed_by: actor.id,
+    fixed_at: new Date().toISOString(),
+  }).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/issues')
+}
+
+/** Tickets not yet fixed (open or reviewed) — drives the sidebar badge. */
 export async function getOpenIssueCount() {
   const employee = await getCurrentEmployee()
   if (!employee || !MANAGER_ROLES.includes(employee.role)) return 0
   const admin = createAdminClient()
-  const { count, error } = await admin.from('issue_reports').select('id', { count: 'exact', head: true }).eq('status', 'open')
+  const { count, error } = await admin.from('issue_reports').select('id', { count: 'exact', head: true }).neq('status', 'fixed')
   if (error) throw new Error(error.message)
   return count ?? 0
 }
 
-/** Open tickets created since this manager last saw the alert bell — drives its badge/animation. */
+/** Unfixed tickets created since this manager last saw the alert bell — drives its badge/animation. */
 export async function getUnseenIssueCount() {
   const employee = await getCurrentEmployee()
   if (!employee || !MANAGER_ROLES.includes(employee.role)) return 0
   const admin = createAdminClient()
-  let query = admin.from('issue_reports').select('id', { count: 'exact', head: true }).eq('status', 'open')
+  let query = admin.from('issue_reports').select('id', { count: 'exact', head: true }).neq('status', 'fixed')
   if (employee.issues_seen_at) query = query.gt('created_at', employee.issues_seen_at)
   const { count, error } = await query
   if (error) throw new Error(error.message)

@@ -7,7 +7,7 @@ export type TimesheetStatus = 'draft' | 'submitted' | 'approved'
 export type ExpenseCategory = 'mileage' | 'hotel' | 'airline' | 'meals' | 'entertainment' | 'cash_advance' | 'tolls' | 'conference_fees' | 'rental_car' | 'gratuities' | 'parking' | 'other'
 export type ExpenseStatus = 'pending' | 'approved' | 'denied'
 export type IssueCategory = 'login' | 'pay_balance' | 'timesheet' | 'leave_request' | 'expense' | 'other'
-export type IssueStatus = 'open' | 'reviewed'
+export type IssueStatus = 'open' | 'reviewed' | 'fixed'
 
 // DB-shaped types — mirror supabase-schema.sql columns exactly.
 
@@ -90,9 +90,12 @@ export interface IssueReport {
   category: IssueCategory
   description: string
   page_url: string | null
+  attachment_url: string | null
   status: IssueStatus
   reviewed_by: string | null
   reviewed_at: string | null
+  fixed_by: string | null
+  fixed_at: string | null
   created_at: string
 }
 

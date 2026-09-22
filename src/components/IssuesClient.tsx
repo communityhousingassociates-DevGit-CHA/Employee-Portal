@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { markIssueReviewed, markIssuesSeen } from '@/app/actions/report-issue'
+import { markIssueReviewed, markIssueFixed, markIssuesSeen, getIssueAttachmentViewUrl } from '@/app/actions/report-issue'
 import type { IssueReport, IssueCategory } from '@/types'
 
 type IssueRow = IssueReport & {
@@ -38,19 +38,28 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
   // calls revalidatePath, which Next.js only allows from an action, not from render.
   useEffect(() => { markIssuesSeen().catch(() => {}) }, [])
 
-  const issues = filter === 'open' ? initialIssues.filter(i => i.status === 'open') : initialIssues
-  const openCount = initialIssues.filter(i => i.status === 'open').length
+  const issues = filter === 'open' ? initialIssues.filter(i => i.status !== 'fixed') : initialIssues
+  const openCount = initialIssues.filter(i => i.status !== 'fixed').length
 
-  async function handleReview(id: string) {
+  async function handleAction(id: string, action: 'review' | 'fix') {
     setError('')
     setBusyId(id)
     try {
-      await markIssueReviewed(id)
+      await (action === 'review' ? markIssueReviewed(id) : markIssueFixed(id))
       startTransition(() => router.refresh())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function handleViewAttachment(id: string) {
+    try {
+      const url = await getIssueAttachmentViewUrl(id)
+      if (url) window.open(url, '_blank')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to open attachment')
     }
   }
 
@@ -78,14 +87,14 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
           <table className="w-full text-[13px] min-w-[760px]">
             <thead>
               <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                {['Reported', 'Employee', 'Category', 'Description', 'Status', ''].map(h => (
+                {['Reported', 'Employee', 'Category', 'Description', 'Attachment', 'Status', ''].map(h => (
                   <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {issues.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">
+                <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">
                   {filter === 'open' ? 'No open issues — nice.' : 'No issues reported yet'}
                 </td></tr>
               )}
@@ -101,18 +110,36 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{CATEGORY_LABELS[issue.category] ?? issue.category}</td>
                     <td className="px-4 py-3 text-gray-600 max-w-[360px]">{issue.description}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${issue.status === 'open' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {issue.attachment_url ? (
+                        <button onClick={() => handleViewAttachment(issue.id)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">View</button>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
+                        issue.status === 'open' ? 'bg-amber-100 text-amber-700'
+                        : issue.status === 'reviewed' ? 'bg-[#e0f5f8] text-[#028a9e]'
+                        : 'bg-emerald-100 text-emerald-700'
+                      }`}>
                         {issue.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       {issue.status === 'open' && (
                         <button
-                          onClick={() => handleReview(issue.id)}
+                          onClick={() => handleAction(issue.id, 'review')}
                           disabled={busyId === issue.id || isPending}
                           className="text-[12px] font-semibold text-[#02ACC0] hover:underline disabled:opacity-40"
                         >
                           {busyId === issue.id ? 'Marking…' : 'Mark Reviewed'}
+                        </button>
+                      )}
+                      {issue.status === 'reviewed' && (
+                        <button
+                          onClick={() => handleAction(issue.id, 'fix')}
+                          disabled={busyId === issue.id || isPending}
+                          className="text-[12px] font-semibold text-emerald-600 hover:underline disabled:opacity-40"
+                        >
+                          {busyId === issue.id ? 'Marking…' : 'Mark Fixed'}
                         </button>
                       )}
                     </td>
