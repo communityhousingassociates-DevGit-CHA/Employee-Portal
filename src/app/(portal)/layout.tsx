@@ -1,11 +1,9 @@
 import Sidebar from '@/components/Sidebar'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import IssueAlertBell from '@/components/IssueAlertBell'
-import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUnseenIssueCount, getOpenIssueCount } from '@/app/actions/report-issue'
-import { getTimesheetReminderStatus } from '@/app/actions/timesheets'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -34,7 +32,6 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const unseenIssueCount = await getUnseenIssueCount().catch(() => 0)
   const openIssueCount = await getOpenIssueCount().catch(() => 0)
-  const timesheetReminder = await getTimesheetReminderStatus().catch(() => null)
 
   return (
     <ResponsiveShell
@@ -49,7 +46,6 @@ export default async function PortalLayout({ children }: { children: React.React
       topbarRight={
         <>
         <IssueAlertBell initialUnseenCount={unseenIssueCount} />
-        <TimesheetAlertBell active={!!timesheetReminder} />
         <Link href="/profile" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors min-w-0">
           {avatarUrl ? (
             <Image src={avatarUrl} alt={displayName} width={28} height={28} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />

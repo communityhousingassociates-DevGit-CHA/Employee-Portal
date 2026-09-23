@@ -3,8 +3,9 @@ import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import DashboardGreeting from '@/components/DashboardGreeting'
 import WeatherBadge from '@/components/WeatherBadge'
+import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
-import { getOrCreateTimesheet, getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
+import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus } from '@/app/actions/timesheets'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
@@ -52,13 +53,14 @@ export default async function DashboardPage() {
   const firstName = employee.name.split(' ')[0] || 'there'
 
   const period = getCurrentPeriod()
-  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather] = await Promise.all([
+  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder] = await Promise.all([
     getMyBalance(),
     getMyRecentRequests(4),
     getNextApprovedLeave(),
     getOrCreateTimesheet(period.start, period.end),
     isManager ? getPendingLeaveApprovals() : Promise.resolve([]),
     getBaltimoreWeather(),
+    getTimesheetReminderStatus(),
   ])
 
   const pendingCount = pendingApprovals.length
@@ -115,6 +117,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <WeatherBadge weather={weather} />
+          <TimesheetAlertBell active={!!timesheetReminder} />
           <Link href="/calendar" className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8] transition-colors">Calendar</Link>
           <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request Leave</Link>
         </div>
