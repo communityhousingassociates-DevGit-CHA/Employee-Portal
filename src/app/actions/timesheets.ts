@@ -102,6 +102,9 @@ export async function getTimesheetReminderStatus(): Promise<TimesheetReminder> {
   const employee = await getCurrentEmployee()
   if (!employee) return null
 
+  const todayStr = new Date().toISOString().slice(0, 10)
+  if (employee.timesheet_reminder_dismissed_at?.slice(0, 10) === todayStr) return null
+
   const period = getCurrentPeriod()
   const previousPeriod = getPreviousPeriod()
   const [{ timesheet }, { timesheet: previousTimesheet }] = await Promise.all([
@@ -109,7 +112,6 @@ export async function getTimesheetReminderStatus(): Promise<TimesheetReminder> {
     getTimesheetForEmployeePeriod(employee.id, previousPeriod.start, previousPeriod.end),
   ])
 
-  const todayStr = new Date().toISOString().slice(0, 10)
   const daysUntil = (dateStr: string) =>
     Math.round((new Date(`${dateStr}T00:00:00Z`).getTime() - new Date(`${todayStr}T00:00:00Z`).getTime()) / 86400000)
 
