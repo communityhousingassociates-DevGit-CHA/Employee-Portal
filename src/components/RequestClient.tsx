@@ -55,7 +55,7 @@ export default function RequestClient({
   const [conflicts, setConflicts] = useState<Conflict[]>([])
 
   const selectedType = LEAVE_TYPES.find(t => t.key === leaveType)!
-  const selectedBalance = selectedType.balanceKey && balance ? Number(balance[selectedType.balanceKey]) : null
+  const selectedBalance = selectedType.balanceKey ? Number(balance?.[selectedType.balanceKey] ?? 0) : null
   const attachmentRequired = leaveType === 'Jury Duty'
 
   useEffect(() => {
@@ -150,14 +150,29 @@ export default function RequestClient({
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Leave Type</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {LEAVE_TYPES.map(t => {
-                const bal = t.balanceKey && balance ? Number(balance[t.balanceKey]) : null
+                // A missing balance row means nothing has been loaded yet — show 0, not a blank card.
+                const bal = t.balanceKey ? Number(balance?.[t.balanceKey] ?? 0) : null
+                const isSel = leaveType === t.key
+                const after = isSel && bal !== null && hoursNum > 0 ? bal - hoursNum : null
                 return (
                   <button key={t.key} onClick={() => { setLeaveType(t.key); setHours('') }}
                     className={`text-left p-3 rounded-xl border-2 transition-all ${leaveType === t.key ? 'border-[#02ACC0] bg-[#f0fbfc]' : 'border-[#e8f4f7] hover:border-[#d4eef2]'}`}>
                     <div className="text-[18px] mb-1">{t.icon}</div>
                     <p className={`text-[12px] font-bold ${leaveType === t.key ? 'text-[#028a9e]' : 'text-[#0b2b35]'}`}>{t.label}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{t.desc}</p>
-                    {bal !== null && <p className={`text-[10px] font-semibold mt-1.5 ${leaveType === t.key ? 'text-[#02ACC0]' : 'text-gray-400'}`}>{bal} hrs avail.</p>}
+                    {bal !== null && (
+                      <div className="mt-2 pt-2 border-t border-[#e8f4f7]">
+                        <p className={`text-[16px] font-black leading-none ${bal <= 0 ? 'text-red-500' : 'text-[#0b2b35]'}`}>
+                          {Number(bal.toFixed(2))} <span className="text-[10px] font-semibold text-gray-400">hrs available</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">≈ {(bal / 8).toFixed(1)} days</p>
+                        {after !== null && (
+                          <p className={`text-[10px] font-semibold mt-1 ${after < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                            {Number(after.toFixed(2))} hrs after this request
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </button>
                 )
               })}
