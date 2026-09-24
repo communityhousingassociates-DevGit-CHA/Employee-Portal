@@ -113,8 +113,8 @@ export default async function AdminSopPage() {
               head={['Role', 'Portal role', 'Responsibilities']}
               rows={[
                 ['All staff', 'employee', 'Log time each pay period, submit leave requests before taking time off, submit expenses/mileage with supporting detail, keep profile info current, report discrepancies promptly'],
-                ['Accounting Manager — Carrileen Edwards (cedwards@communityhousingmd.org)', 'admin', 'Reviews and approves/denies leave and expense requests, sets the annual mileage rate, manages employee records via the Admin Console, first point of contact for pay/balance discrepancies'],
-                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Final approver in the workflow; reviews leave/expense requests alongside the Accounting Manager'],
+                ['Accounting Manager — Carrileen Edwards (cedwards@communityhousingmd.org)', 'admin', 'Reviews and approves or returns timesheets (not leave requests or expenses — those are approved by the CEO only), sets the annual mileage rate, manages employee records via the Admin Console, first point of contact for pay/balance discrepancies'],
+                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Sole approver for all leave requests and expenses — including his own and everyone else&apos;s; also reviews timesheets'],
                 ['System Administrator', 'Globalist Pro (portal vendor)', 'Technical support: account provisioning, resets, bug fixes, system-level issues'],
               ]}
             />
@@ -128,8 +128,8 @@ export default async function AdminSopPage() {
               <><strong className="text-[#0b2b35]">Save frequently.</strong> The system autosaves during entry; employees may also save manually at any point before submitting.</>,
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. Employees are responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if the timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, the employee must electronically sign, certifying the hours logged are accurate and complete.</>,
-              <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further employee edits and routed for approval.</>,
-              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> An employee who discovers an error in a submitted or approved timesheet must contact their approver (Accounting Manager) directly — self-service correction is not available once a timesheet has been submitted.</>,
+              <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further employee edits. Approvers are notified by email and in the portal and must approve it in the portal (Approvals → Timesheets). The employee is notified of the outcome by email and in the portal: if approved, the timesheet is marked <strong>Approved</strong>; if returned for correction, it unlocks with the approver&apos;s reason and the employee must resubmit. An approver cannot approve their own timesheet — another approver reviews it.</>,
+              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> An employee who discovers an error in a timesheet that is awaiting review or already approved must contact their approver (Accounting Manager) directly — self-service correction is not available once a timesheet has been submitted, unless the approver returns it via <strong>Return for correction</strong>.</>,
             ]} />
           </Section>
 
@@ -141,7 +141,7 @@ export default async function AdminSopPage() {
               'Leave is recorded in hourly increments; 8 hours = 1 full workday.',
               'Employees should check the Team Leave Calendar for overlapping team absences before submitting.',
               <>The request must be electronically signed by the employee before submission. An attachment is optional for every leave type except Jury Duty, where the summons is required — the portal blocks submission without it.</>,
-              <>Submitted requests are status <strong>Pending</strong> until an approver acts; no leave should be taken on the assumption of approval until status changes to <strong>Approved</strong>.</>,
+              <>Submitted requests are status <strong>Pending</strong> until an approver acts in the portal; no leave should be taken on the assumption of approval until status changes to <strong>Approved</strong>. The employee receives an email and a portal notification when the request is approved or denied.</>,
             ]} />
             <p className="font-semibold text-[#0b2b35]">Accrual policy</p>
             <Table
@@ -167,16 +167,17 @@ export default async function AdminSopPage() {
             <p><strong className="text-[#0b2b35]">Eligible categories:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, Parking, Other.</p>
             <p><strong className="text-[#0b2b35]">Mileage</strong> is reimbursed at the current rate per mile, set annually by the Accounting Manager or Admin in Portal Settings. If a rate hasn&apos;t been set for the current year, mileage expenses cannot be calculated until one is added — employees should flag this to the Accounting Manager rather than estimate.</p>
             <p><strong className="text-[#0b2b35]">Receipts</strong> are optional in the system but should be attached (image or PDF) whenever available, consistent with CHA&apos;s standard expense documentation practice.</p>
-            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO Approvals queue, the same as leave requests, and show status Pending → Approved/Denied. A denied expense includes a reason where one was provided.</p>
+            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO Approvals queue, the same as leave requests, and show status Pending → Approved/Denied. The employee receives an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
           </Section>
 
           <Section id="approvals" title="6. Procedure — Approvals">
-            <p>Applies to the Accounting Manager, CEO, and Admin roles.</p>
+            <p><strong>Leave requests and expenses:</strong> approved or denied by the President/CEO only. <strong>Timesheets:</strong> reviewed by the Accounting Manager, CEO, or Admin — never by their own author (the CEO&apos;s own timesheet is reviewed by another approver). This policy is set by CHA and changes only when leadership changes it.</p>
             <Numbered items={[
-              <>Approvers should review the <strong>Approvals</strong> queue regularly — there is no email notification when a new request arrives, so a routine check-in cadence is the employee&apos;s only guarantee of timely review.</>,
+              <><strong>Notification and action.</strong> Every submitted leave request, expense, and timesheet sends an email alert to the people who approve it — the President/CEO for leave requests and expenses, or the Accounting Manager, CEO, and Admin for timesheets (never the person who submitted it) — and appears in their portal bell, Dashboard banner, and <strong>Approvals</strong> queue. The email is an alert only: the approval or denial must be recorded in the portal, and replying to the email does not count as a decision.</>,
               <><strong>Approving a leave request</strong> automatically deducts the requested hours from the employee&apos;s balance and logs the approved day(s) as Leave on their timesheet — no separate manual entry is needed.</>,
-              <><strong>Denying</strong> a request should include a reason so the employee understands the decision; the reason is visible to the employee in their History.</>,
+              <><strong>Denying</strong> a request should include a reason so the employee understands the decision; the reason is included in the employee&apos;s email and portal notification and is visible in their History. The employee is notified by email and in the portal of every approval and denial.</>,
               <><strong>Expense approvals/denials</strong> work the same way, on a separate queue from leave.</>,
+              <><strong>Timesheets</strong> are reviewed in the <strong>Timesheets</strong> tab: <strong>Approve</strong> marks the timesheet Approved; <strong>Return for correction</strong> (a reason is required) unlocks it so the employee can fix and resubmit. The employee is notified either way. You cannot review your own timesheet.</>,
               <>Decisions are final once confirmed — there is no un-approve/un-deny function. Approvers should verify details before confirming. Issue reports (from Report an Issue) follow their own workflow on the Issue Reports page: Open → Reviewed → Fixed, with an optional note recorded when something is marked Fixed describing what was done.</>,
             ]} />
           </Section>

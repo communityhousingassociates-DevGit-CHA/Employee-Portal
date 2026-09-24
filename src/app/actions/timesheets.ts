@@ -2,9 +2,12 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getCurrentEmployee, requireSelfOrRole } from '@/lib/auth/session'
+import { getCurrentEmployee, requireRole, requireSelfOrRole } from '@/lib/auth/session'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
+import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
+import { fmtDateRange } from '@/lib/format-date'
+import { TIMESHEET_APPROVER_ROLES } from '@/lib/constants/approvals'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -63,6 +66,10 @@ export async function saveTimesheetDraft(
 ) {
   await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
+  // Once submitted (or approved) the sheet is locked — the reviewer must be looking at what the employee signed.
+  const { data: current, error: statusError } = await admin.from('timesheets').select('status').eq('id', timesheetId).single()
+  if (statusError) throw new Error(statusError.message)
+  if (current.status !== 'draft') throw new Error('This timesheet has been submitted and can no longer be edited')
   for (const row of rows) {
     const { error } = await admin
       .from('timesheet_rows')
@@ -75,13 +82,101 @@ export async function saveTimesheetDraft(
 }
 
 export async function submitTimesheet(timesheetId: string) {
-  await requireOwnTimesheet(timesheetId)
+  const employee = await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
+  const { data: timesheet, error } = await admin
+    .from('timesheets')
+    .update({ status: 'submitted', employee_signed_at: new Date().toISOString(), return_reason: null })
+    .eq('id', timesheetId)
+    .select('period_start, period_end')
+    .single()
+  if (error) throw new Error(error.message)
+
+  await notifyApprovers(admin, employee.id, TIMESHEET_APPROVER_ROLES, {
+    title: `Timesheet from ${employee.name}`,
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)} was submitted and is waiting for your review.`,
+  })
+
+  revalidatePath('/timesheet')
+  revalidatePath('/approvals')
+}
+
+/** Submitted timesheets awaiting review, oldest first. Never includes the caller's own — a timesheet can't be approved by its own author. */
+export async function getPendingTimesheetApprovals() {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('timesheets')
+    .select('*, employee:employees!timesheets_employee_id_fkey(name, employee_number), timesheet_rows(*)')
+    .eq('status', 'submitted')
+    .neq('employee_id', actor.id)
+    .order('employee_signed_at')
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(t => {
+    const emp = t.employee as unknown as { name: string } | { name: string }[]
+    const rows = ((t.timesheet_rows ?? []) as { work_date: string; regular_hours: number; leave_hours: number; description: string | null }[])
+      .slice()
+      .sort((a, b) => a.work_date.localeCompare(b.work_date))
+    return { ...t, timesheet_rows: rows, employee_name: (Array.isArray(emp) ? emp[0]?.name : emp?.name) ?? 'Unknown' }
+  })
+}
+
+async function getSubmittedTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actorId: string) {
+  const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end').eq('id', id).single()
+  if (error) throw new Error(error.message)
+  if (data.employee_id === actorId) throw new Error("You can't review your own timesheet — another approver needs to.")
+  if (data.status !== 'submitted') throw new Error('This timesheet is no longer awaiting review')
+  return data
+}
+
+export async function approveTimesheet(id: string) {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const admin = createAdminClient()
+  const timesheet = await getSubmittedTimesheet(admin, id, actor.id)
   const { error } = await admin
     .from('timesheets')
-    .update({ status: 'submitted', employee_signed_at: new Date().toISOString() })
-    .eq('id', timesheetId)
+    .update({ status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null })
+    .eq('id', id)
   if (error) throw new Error(error.message)
+
+  await notifyEmployee(admin, timesheet.employee_id, {
+    kind: 'approved',
+    title: 'Your timesheet was approved',
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nApproved by ${actor.name}.`,
+    link: '/timesheet',
+    cta: 'View Timesheet',
+  })
+
+  revalidatePath('/approvals')
+  revalidatePath('/timesheet')
+}
+
+/**
+ * Denies a submitted timesheet by sending it back for correction: status returns
+ * to 'draft' so the employee can edit and resubmit, and the reason is shown to
+ * them on the timesheet. A reason is required — they need to know what to fix.
+ */
+export async function returnTimesheet(id: string, reason: string) {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const trimmed = reason.trim()
+  if (!trimmed) throw new Error('Add a reason so the employee knows what to correct')
+  const admin = createAdminClient()
+  const timesheet = await getSubmittedTimesheet(admin, id, actor.id)
+  const { error } = await admin
+    .from('timesheets')
+    .update({ status: 'draft', approver_id: actor.id, approved_at: null, return_reason: trimmed })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+
+  await notifyEmployee(admin, timesheet.employee_id, {
+    kind: 'returned',
+    title: 'Your timesheet was returned for correction',
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nReturned by ${actor.name}.\nReason: ${trimmed}\nPlease fix it and resubmit.`,
+    link: '/timesheet',
+    cta: 'Open Timesheet',
+  })
+
+  revalidatePath('/approvals')
   revalidatePath('/timesheet')
 }
 

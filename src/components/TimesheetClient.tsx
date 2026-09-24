@@ -186,7 +186,7 @@ export default function TimesheetClient({
     try {
       await persist(rows)
       await submitTimesheet(timesheet.id)
-      setTimesheet(t => ({ ...t, status: 'submitted' }))
+      setTimesheet(t => ({ ...t, status: 'submitted', return_reason: null }))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to submit timesheet')
     } finally {
@@ -217,9 +217,13 @@ export default function TimesheetClient({
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✅</div>
-          <h2 className="text-[20px] font-bold text-[#0b2b35] mb-2">Timesheet Submitted</h2>
+          <h2 className="text-[20px] font-bold text-[#0b2b35] mb-2">{timesheet.status === 'approved' ? 'Timesheet Approved' : 'Timesheet Submitted'}</h2>
           <p className="text-[13px] text-gray-500 mb-1">{formatPeriodLabel(period)}</p>
-          <p className="text-[13px] text-gray-500 mb-5">Sent for approval. You&apos;ll be notified when it&apos;s reviewed.</p>
+          <p className="text-[13px] text-gray-500 mb-5">
+            {timesheet.status === 'approved'
+              ? 'Your approver has reviewed and approved this timesheet.'
+              : 'Sent for approval. You\u2019ll get an email and a portal notification when it\u2019s reviewed.'}
+          </p>
           <div className="bg-[#f8fcfd] border border-[#d4eef2] rounded-xl p-4 text-left text-[12px] text-gray-500 mb-5">
             <div className="flex justify-between mb-1"><span>Regular hours</span><strong className="text-[#0b2b35]">{totalReg} hrs</strong></div>
             <div className="flex justify-between mb-1"><span>Leave hours</span><strong className="text-[#0b2b35]">{totalLeave} hrs</strong></div>
@@ -260,6 +264,14 @@ export default function TimesheetClient({
           {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {fmtDate(new Date())}
         </p>
       </div>
+
+      {timesheet.return_reason && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 no-print">
+          <p className="text-[13px] font-semibold text-amber-800">Returned for correction</p>
+          <p className="text-[13px] text-amber-700 mt-1 whitespace-pre-line">{timesheet.return_reason}</p>
+          <p className="text-[12px] text-amber-600 mt-2">Update your entries, then sign and submit again.</p>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6 no-print">
         <div>

@@ -104,7 +104,7 @@ export default async function StaffSopPage() {
         <div className="space-y-5">
           <Section id="purpose" title="1. Purpose & Scope">
             <p>This SOP defines how Community Housing Associates (CHA) staff are expected to record time worked, request leave, submit reimbursable expenses, and report errors or discrepancies using the <strong className="text-[#0b2b35]">CHA Employee Portal</strong> (<code className="bg-[#f0f7f8] px-1.5 py-0.5 rounded text-[12px]">portal.communityhousingassociates.org</code>). It applies to every employee with a portal account.</p>
-            <p>Step-by-step click-through instructions live in the portal itself — sidebar → <Link href="/guide" className="text-[#02ACC0] hover:underline">How-To Guide</Link>. This document sets the policy those steps follow. Accounting Manager and CEO responsibilities (approvals, admin settings) are covered in a separate, expanded Admin &amp; Leadership SOP — this edition covers what applies to every employee.</p>
+            <p>Step-by-step click-through instructions live in the portal itself — sidebar → <Link href="/guide" className="text-[#02ACC0] hover:underline">How-To Guide</Link>. This document sets the policy those steps follow. Accounting Manager and CEO responsibilities (timesheet review, approvals, admin settings) are covered in a separate, expanded Admin &amp; Leadership SOP — this edition covers what applies to every employee.</p>
             <p><strong className="text-[#0b2b35]">Current status:</strong> the portal is running in <strong>parallel</strong> with CHA&apos;s existing time and leave system for a trial period. It is not yet the system of record — continue following existing CHA processes alongside portal use until leadership confirms cutover.</p>
           </Section>
 
@@ -126,8 +126,8 @@ export default async function StaffSopPage() {
               <><strong className="text-[#0b2b35]">Save frequently.</strong> The system autosaves during entry; you may also save manually at any point before submitting.</>,
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. You&apos;re responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if your timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, you must electronically sign, certifying the hours logged are accurate and complete.</>,
-              <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further edits and routed for approval.</>,
-              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error in a submitted or approved timesheet, contact your approver (Accounting Manager) directly — self-service correction isn&apos;t available once submitted.</>,
+              <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further edits. Your approver is notified by email and in the portal, and must approve it in the portal. You are notified of the outcome the same way: if approved, it is marked <strong>Approved</strong>; if returned for correction, it unlocks with the reason shown at the top of the timesheet, and you must fix it and resubmit.</>,
+              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error in a timesheet that is still awaiting review or already approved, contact your approver (Accounting Manager) directly — self-service correction isn&apos;t available once it has been submitted, unless the approver returns it to you.</>,
             ]} />
           </Section>
 
@@ -139,7 +139,7 @@ export default async function StaffSopPage() {
               'Leave is recorded in hourly increments; 8 hours = 1 full workday.',
               'Check the Team Leave Calendar for overlapping team absences before submitting.',
               <>The request must be electronically signed before submission. An attachment is optional for every leave type except Jury Duty, where the summons is required — the portal blocks submission without it.</>,
-              <>Submitted requests are status <strong>Pending</strong> until an approver acts; don&apos;t take leave on the assumption of approval until status changes to <strong>Approved</strong>.</>,
+              <>Submitting a request notifies your approvers by email and in the portal. It stays <strong>Pending</strong> until an approver acts in the portal; don&apos;t take leave on the assumption of approval until status changes to <strong>Approved</strong>. When the request is approved or denied you receive an email and a portal notification (the bell icon in the top bar); a denial includes the approver&apos;s reason if one was given.</>,
             ]} />
             <p className="font-semibold text-[#0b2b35]">Accrual policy</p>
             <Table
@@ -165,7 +165,7 @@ export default async function StaffSopPage() {
             <p><strong className="text-[#0b2b35]">Eligible categories:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, Parking, Other.</p>
             <p><strong className="text-[#0b2b35]">Mileage</strong> is reimbursed at the current rate per mile, set annually by the Accounting Manager. If a rate hasn&apos;t been set for the current year, flag it to the Accounting Manager rather than estimate.</p>
             <p><strong className="text-[#0b2b35]">Receipts</strong> are optional in the system but should be attached (image or PDF) whenever available, consistent with CHA&apos;s standard expense documentation practice.</p>
-            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO for review and show status Pending → Approved/Denied. A denied expense includes a reason where one was provided.</p>
+            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses are approved by the President/CEO, who is notified by email and in the portal, and show status Pending → Approved/Denied. You receive an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
           </Section>
 
           <Section id="payroll" title="6. Payroll Cutoff & Pay Dates">

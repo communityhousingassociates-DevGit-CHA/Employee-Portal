@@ -5,7 +5,9 @@ import DashboardGreeting from '@/components/DashboardGreeting'
 import WeatherBadge from '@/components/WeatherBadge'
 import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
-import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus } from '@/app/actions/timesheets'
+import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
+import { getPendingExpenseApprovals } from '@/app/actions/expenses'
+import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
@@ -41,21 +43,35 @@ export default async function DashboardPage() {
   if (!employee) redirect('/login')
 
   const isManager = MANAGER_ROLES.includes(employee.role)
+  // Leave requests and expenses are approved by the CEO only; other managers just review timesheets.
+  const canApproveLeaveExpenses = LEAVE_EXPENSE_APPROVER_ROLES.includes(employee.role)
   const firstName = employee.name.split(' ')[0] || 'there'
 
   const period = getCurrentPeriod()
-  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder] = await Promise.all([
+  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder, pendingExpenses, pendingTimesheets] = await Promise.all([
     getMyBalance(),
     getMyRecentRequests(4),
     getNextApprovedLeave(),
     getOrCreateTimesheet(period.start, period.end),
-    isManager ? getPendingLeaveApprovals() : Promise.resolve([]),
+    canApproveLeaveExpenses ? getPendingLeaveApprovals() : Promise.resolve([]),
     getBaltimoreWeather(),
     getTimesheetReminderStatus(),
+    canApproveLeaveExpenses ? getPendingExpenseApprovals() : Promise.resolve([]),
+    isManager ? getPendingTimesheetApprovals() : Promise.resolve([]),
   ])
 
-  const pendingCount = pendingApprovals.length
-  const oldestPending = pendingApprovals.reduce<string | null>((min, a) => (!min || a.created_at < min ? a.created_at : min), null)
+  const pendingCount = pendingApprovals.length + pendingExpenses.length + pendingTimesheets.length
+  const pendingBreakdown = [
+    pendingApprovals.length > 0 && `${pendingApprovals.length} leave`,
+    pendingExpenses.length > 0 && `${pendingExpenses.length} expense${pendingExpenses.length > 1 ? 's' : ''}`,
+    pendingTimesheets.length > 0 && `${pendingTimesheets.length} timesheet${pendingTimesheets.length > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ')
+  const pendingDates = [
+    ...pendingApprovals.map(a => a.created_at),
+    ...pendingExpenses.map(e => e.created_at),
+    ...pendingTimesheets.flatMap(t => (t.employee_signed_at ? [t.employee_signed_at] : [])),
+  ]
+  const oldestPending = pendingDates.reduce<string | null>((min, d) => (!min || d < min ? d : min), null)
 
   const now = new Date()
 
@@ -88,8 +104,8 @@ export default async function DashboardPage() {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center text-amber-600 font-bold text-[13px] flex-shrink-0">{pendingCount}</div>
             <div>
-              <p className="text-[13px] font-semibold text-amber-800">{pendingCount} leave request{pendingCount > 1 ? 's' : ''} awaiting your approval</p>
-              {oldestPending && <p className="text-[11px] text-amber-600 mt-0.5">Oldest request submitted {daysAgo(oldestPending)} · review before pay period ends</p>}
+              <p className="text-[13px] font-semibold text-amber-800">{pendingCount} item{pendingCount > 1 ? 's' : ''} awaiting your approval <span className="font-normal text-amber-700">({pendingBreakdown})</span></p>
+              {oldestPending && <p className="text-[11px] text-amber-600 mt-0.5">Oldest submitted {daysAgo(oldestPending)} · review before pay period ends</p>}
             </div>
           </div>
           <Link href="/approvals" className="bg-amber-500 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg hover:bg-amber-600 transition-colors flex-shrink-0">Review Now →</Link>

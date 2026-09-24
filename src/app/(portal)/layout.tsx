@@ -1,9 +1,11 @@
 import Sidebar from '@/components/Sidebar'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import IssueAlertBell from '@/components/IssueAlertBell'
+import NotificationBell from '@/components/NotificationBell'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUnseenIssueCount, getOpenIssueCount } from '@/app/actions/report-issue'
+import { getMyNotifications } from '@/app/actions/notifications'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -32,6 +34,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const unseenIssueCount = await getUnseenIssueCount().catch(() => 0)
   const openIssueCount = await getOpenIssueCount().catch(() => 0)
+  const notifications = await getMyNotifications().catch(() => ({ items: [], unreadCount: 0 }))
 
   return (
     <ResponsiveShell
@@ -45,6 +48,7 @@ export default async function PortalLayout({ children }: { children: React.React
       }
       topbarRight={
         <>
+        <NotificationBell items={notifications.items} unreadCount={notifications.unreadCount} />
         <IssueAlertBell initialUnseenCount={unseenIssueCount} />
         <Link href="/profile" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors min-w-0">
           {avatarUrl ? (

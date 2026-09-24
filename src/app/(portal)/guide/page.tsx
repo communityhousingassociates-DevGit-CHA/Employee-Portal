@@ -110,7 +110,7 @@ export default async function GuidePage() {
               <><strong className="text-[#0b2b35]">Upcoming Leave</strong> — your next approved time off.</>,
               <><strong className="text-[#0b2b35]">Quick links</strong> — My Request History, Team Leave Calendar, My Expenses (and Pending Approvals, if you&apos;re an approver).</>,
             ]} />
-            <p>If you&apos;re an Accounting Manager, CEO, or Admin, an amber banner appears at the top whenever leave requests are waiting on your review.</p>
+            <p>If you&apos;re an Accounting Manager, CEO, or Admin, an amber banner appears at the top whenever items are waiting on your review — timesheets for all three roles, and leave requests and expenses for the CEO, who is the only approver for those. You also receive an email alert for each new submission you need to review.</p>
           </Section>
 
           <Section id="timesheet" title="3. Logging Your Time (Timesheet)">
@@ -131,7 +131,7 @@ export default async function GuidePage() {
               'Click inside the signature box and sign your name to certify the hours are accurate.',
               <>Click <strong>Submit &amp; Sign</strong>.</>,
             ]} />
-            <p>Once submitted, the timesheet <strong>locks</strong> — you can&apos;t edit it yourself after that. For a correction on a submitted or approved timesheet, contact your approver directly.</p>
+            <p>Once submitted, the timesheet <strong>locks</strong> — you can&apos;t edit it yourself after that. Your approver is notified by email and in the portal. When they review it you&apos;re notified the same way (the 🔔 in the top bar): it shows as <strong>Approved</strong>, or it&apos;s <strong>returned for correction</strong> with their reason at the top of the timesheet — fix it and submit again. For any other correction on a submitted or approved timesheet, contact your approver directly.</p>
             <p><strong className="text-[#0b2b35]">Exporting.</strong> Use <strong>Export CSV</strong> or <strong>Export PDF</strong> at any time to download or print the current period&apos;s timesheet.</p>
           </Section>
 
@@ -155,7 +155,7 @@ export default async function GuidePage() {
               <><strong>3. Check the Balance Preview.</strong> Shows your current balance, what this request subtracts, and what would remain. A negative result still allows submission, flagged for manager approval.</>,
               <><strong>4. Check Team Coverage.</strong> Shows if anyone else already has leave overlapping your dates — informational, doesn&apos;t block your request.</>,
               <><strong>5. Add a note</strong> (optional) for your approver. Attach a file if you have one — <strong>required for Jury Duty</strong> (the summons), optional for every other type — then sign in the signature box.</>,
-              <><strong>6. Click Submit Request.</strong> Your approver is notified and your request shows as <strong>Pending</strong> until they decide.</>,
+              <><strong>6. Click Submit Request.</strong> Your approvers are notified by email and in the portal, and your request shows as <strong>Pending</strong> until they decide. You&apos;ll get an email and a 🔔 notification when it&apos;s approved or denied.</>,
             ]} />
           </Section>
 
@@ -189,7 +189,9 @@ export default async function GuidePage() {
           {isManager && (
             <Section id="approvers" title="9. For Approvers (Accounting Manager, CEO, Admin)">
               <p><strong>Approvals</strong> appears in your sidebar, and a banner appears on your Dashboard whenever items are waiting.</p>
-              <p>The Approvals page has two tabs — <strong>Leave Requests</strong> and <strong>Expenses</strong> — each split into Pending and Reviewed.</p>
+              <p>Every new item you need to review sends you an email alert and shows in the 🔔 in the top bar. Approving or denying must be done here in the portal — replying to the email isn&apos;t enough.</p>
+              <p><strong>Who approves what:</strong> the President/CEO is the only approver for leave requests and expenses. Timesheets are reviewed by the Accounting Manager, CEO, or Admin — never by the person who submitted them.</p>
+              <p>The Approvals page has up to three tabs — <strong>Leave Requests</strong> and <strong>Expenses</strong> (CEO only) and <strong>Timesheets</strong>. Leave Requests is split into Pending and Reviewed.</p>
               <p className="font-semibold text-[#0b2b35]">Reviewing a leave request</p>
               <Bullets items={[
                 'Each card shows the employee, leave type, date range, hours requested, balance after the request, any note, and a link to view any attachment — including the required summons on a Jury Duty request.',
@@ -197,6 +199,8 @@ export default async function GuidePage() {
                 <>Click <strong>Deny</strong>, optionally add a reason, then <strong>Confirm Denial</strong>.</>,
               ]} />
               <p><strong className="text-[#0b2b35]">Reviewing an expense</strong> works the same way, in the Expenses tab.</p>
+              <p><strong className="text-[#0b2b35]">Reviewing a timesheet:</strong> open the Timesheets tab, use <strong>Show daily entries</strong> to check the hours, then click <strong>✓ Approve</strong>, or <strong>Return for correction</strong> with a reason (required) to unlock it for the employee. You can&apos;t review your own timesheet — another approver does.</p>
+              <p>The employee is emailed and notified in the portal of every approval, denial, or return.</p>
               <p>Decisions are final once confirmed. Issue reports (from Report an Issue) follow their own workflow on the Issue Reports page: Open → Reviewed → Fixed, with an optional note when marked Fixed.</p>
             </Section>
           )}

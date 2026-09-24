@@ -1,0 +1,124 @@
+import { Resend } from 'resend'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { NotificationKind, Role } from '@/types'
+
+const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
+
+export type Recipient = { id: string; email: string; name: string }
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function siteUrl(): string {
+  return (process.env.NEXT_PUBLIC_SITE_URL || 'https://portal.communityhousingassociates.org').replace(/\/$/, '')
+}
+
+const ACCENT: Record<NotificationKind, string> = {
+  approval_needed: '#02ACC0',
+  approved: '#059669',
+  denied: '#dc2626',
+  returned: '#d97706',
+}
+
+function renderEmail(recipient: Recipient, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string }) {
+  const firstName = escapeHtml(recipient.name.split(' ')[0] || 'there')
+  return `
+    <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
+      <div style="background:#0b2b35;padding:16px 20px;border-radius:12px 12px 0 0">
+        <span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal</span>
+      </div>
+      <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px;color:#0b2b35">
+        <p style="font-size:14px;margin:0 0 12px">Hi ${firstName},</p>
+        <p style="font-size:16px;font-weight:700;margin:0 0 8px;color:${ACCENT[n.kind]}">${escapeHtml(n.title)}</p>
+        <div style="background:#f9fefe;border:1px solid #f0f7f8;border-radius:8px;padding:12px 14px;font-size:13px;white-space:pre-wrap">${escapeHtml(n.body)}</div>
+        <p style="margin:20px 0 0"><a href="${siteUrl()}${n.link}" style="background:#02ACC0;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;display:inline-block">${escapeHtml(n.cta)}</a></p>
+        <p style="font-size:11px;color:#9ca3af;margin-top:20px">You're receiving this because of activity on your Community Housing Associates employee portal account.</p>
+      </div>
+    </div>`
+}
+
+/**
+ * Notifies each recipient in-portal (a `notifications` row, shown in the topbar
+ * bell) and by email. Best-effort by design: the request/expense/timesheet the
+ * caller just saved is the source of truth, so a delivery failure here is
+ * logged and swallowed — it must never make the underlying action look failed.
+ */
+export async function notify(
+  admin: SupabaseClient,
+  recipients: Recipient[],
+  n: { kind: NotificationKind; title: string; body: string; link: string; cta?: string },
+) {
+  if (recipients.length === 0) return
+  const cta = n.cta ?? 'Open in Portal'
+
+  try {
+    const { error } = await admin.from('notifications').insert(
+      recipients.map(r => ({ employee_id: r.id, kind: n.kind, title: n.title, body: n.body, link: n.link })),
+    )
+    if (error) console.error('notify: failed to save in-portal notification', error.message)
+  } catch (e) {
+    console.error('notify: failed to save in-portal notification', e)
+  }
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error('notify: RESEND_API_KEY not set — skipping email')
+    return
+  }
+  const resend = new Resend(process.env.RESEND_API_KEY)
+  const results = await Promise.allSettled(
+    recipients.map(r =>
+      resend.emails.send({
+        from: FROM,
+        to: r.email,
+        subject: `[CHA Portal] ${n.title}`,
+        html: renderEmail(r, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta }),
+      }),
+    ),
+  )
+  results.forEach((res, i) => {
+    if (res.status === 'rejected') console.error(`notify: email to ${recipients[i].email} failed`, res.reason)
+    else if (res.value.error) console.error(`notify: email to ${recipients[i].email} failed`, res.value.error)
+  })
+}
+
+/**
+ * Everyone holding one of the approver roles, minus the person who just
+ * submitted and minus dev/test accounts. If that leaves nobody, fall back to
+ * including test accounts (same roles) so a submission is never silently unrouted.
+ */
+export async function getApprovers(admin: SupabaseClient, excludeEmployeeId: string, roles: Role[]): Promise<Recipient[]> {
+  const base = () =>
+    admin.from('employees').select('id, email, name').in('role', roles).eq('is_active', true).neq('id', excludeEmployeeId)
+  const { data } = await base().eq('is_test_account', false)
+  if (data && data.length > 0) return data as Recipient[]
+  const { data: fallback } = await base()
+  return (fallback ?? []) as Recipient[]
+}
+
+export async function getRecipient(admin: SupabaseClient, employeeId: string): Promise<Recipient | null> {
+  const { data } = await admin.from('employees').select('id, email, name').eq('id', employeeId).maybeSingle()
+  return (data as Recipient | null) ?? null
+}
+
+type Payload = { kind: NotificationKind; title: string; body: string; link: string; cta?: string }
+
+/** Tells every approver holding one of `roles` (except the submitter) that something is waiting in their Approvals queue. Never throws. */
+export async function notifyApprovers(admin: SupabaseClient, submitterId: string, roles: Role[], payload: Omit<Payload, 'kind' | 'link'>) {
+  try {
+    const approvers = await getApprovers(admin, submitterId, roles)
+    await notify(admin, approvers, { ...payload, kind: 'approval_needed', link: '/approvals', cta: payload.cta ?? 'Review in Portal' })
+  } catch (e) {
+    console.error('notifyApprovers failed', e)
+  }
+}
+
+/** Tells one employee the outcome of something they submitted. Never throws. */
+export async function notifyEmployee(admin: SupabaseClient, employeeId: string, payload: Payload) {
+  try {
+    const recipient = await getRecipient(admin, employeeId)
+    if (recipient) await notify(admin, [recipient], payload)
+  } catch (e) {
+    console.error('notifyEmployee failed', e)
+  }
+}

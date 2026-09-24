@@ -4,9 +4,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { distributeLeaveHours, applyLeaveToTimesheets } from '@/lib/leave-timesheet'
+import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
+import { fmtDate } from '@/lib/format-date'
+import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
+
+function rangeLabel(start: string, end: string) {
+  return start === end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`
+}
 
 function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'personal_hours' | null {
   if (leaveType === 'PTO') return 'pto_hours'
@@ -41,6 +48,12 @@ export async function createLeaveRequest(data: {
     employee_signed_at: new Date().toISOString(),
   })
   if (error) throw new Error(error.message)
+
+  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+    title: `Leave request from ${employee.name}`,
+    body: `${data.leave_type} · ${rangeLabel(data.start_date, data.end_date)} · ${data.hours} hrs${data.note ? `\nNote: ${data.note}` : ''}`,
+  })
+
   revalidatePath('/request')
   revalidatePath('/history')
   revalidatePath('/dashboard')
@@ -153,7 +166,7 @@ export async function getNextApprovedLeave() {
 }
 
 export async function getPendingLeaveApprovals() {
-  await requireRole(MANAGER_ROLES)
+  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
@@ -179,7 +192,7 @@ export async function getPendingLeaveApprovals() {
 }
 
 export async function getReviewedLeaveApprovals(limit = 30) {
-  await requireRole(MANAGER_ROLES)
+  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
@@ -195,7 +208,7 @@ export async function getReviewedLeaveApprovals(limit = 30) {
 }
 
 export async function approveLeaveRequest(id: string) {
-  const actor = await requireRole(MANAGER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
 
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
@@ -228,6 +241,14 @@ export async function approveLeaveRequest(id: string) {
   const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
   await applyLeaveToTimesheets(admin, request.employee_id, request.leave_type as LeaveType, allocations)
 
+  await notifyEmployee(admin, request.employee_id, {
+    kind: 'approved',
+    title: `Your ${request.leave_type} request was approved`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nApproved by ${actor.name}.`,
+    link: '/history',
+    cta: 'View My Requests',
+  })
+
   revalidatePath('/approvals')
   revalidatePath('/history')
   revalidatePath('/dashboard')
@@ -235,9 +256,9 @@ export async function approveLeaveRequest(id: string) {
 }
 
 export async function denyLeaveRequest(id: string, reason: string) {
-  const actor = await requireRole(MANAGER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
-  const { data: request, error: fetchError } = await admin.from('leave_requests').select('status').eq('id', id).single()
+  const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
 
@@ -249,6 +270,15 @@ export async function denyLeaveRequest(id: string, reason: string) {
     deny_reason: reason || null,
   }).eq('id', id)
   if (error) throw new Error(error.message)
+
+  await notifyEmployee(admin, request.employee_id, {
+    kind: 'denied',
+    title: `Your ${request.leave_type} request was denied`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nDenied by ${actor.name}.${reason ? `\nReason: ${reason}` : ''}`,
+    link: '/history',
+    cta: 'View My Requests',
+  })
+
   revalidatePath('/approvals')
   revalidatePath('/history')
   revalidatePath('/dashboard')

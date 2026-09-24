@@ -3,6 +3,10 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
+import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
+import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
+import { fmtDate } from '@/lib/format-date'
+import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import type { ExpenseCategory, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -82,6 +86,13 @@ export async function submitExpense(data: {
     status: 'pending',
   })
   if (error) throw new Error(error.message)
+
+  const label = EXPENSE_CATEGORY_LABELS[data.category] ?? data.category
+  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+    title: `Expense from ${employee.name}`,
+    body: `${label}${miles ? ` (${miles} mi)` : ''} · $${amount.toFixed(2)} · ${fmtDate(data.expense_date)}${data.description ? `\n${data.description}` : ''}`,
+  })
+
   revalidatePath('/expenses')
 }
 
@@ -110,7 +121,7 @@ export async function getReceiptViewUrl(expenseId: string) {
 }
 
 export async function getPendingExpenseApprovals() {
-  await requireRole(MANAGER_ROLES)
+  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('expenses')
@@ -121,21 +132,44 @@ export async function getPendingExpenseApprovals() {
   return data ?? []
 }
 
+async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string) {
+  const { data, error } = await admin.from('expenses').select('status, employee_id, category, amount, expense_date').eq('id', id).single()
+  if (error) throw new Error(error.message)
+  if (data.status !== 'pending') throw new Error('This expense has already been decided')
+  return data
+}
+
+function expenseSummary(e: { category: string; amount: number | string; expense_date: string }) {
+  return `${EXPENSE_CATEGORY_LABELS[e.category as ExpenseCategory] ?? e.category} · $${Number(e.amount).toFixed(2)} · ${fmtDate(e.expense_date)}`
+}
+
 export async function approveExpense(id: string) {
-  const actor = await requireRole(MANAGER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
+  const expense = await getPendingExpense(admin, id)
   const { error } = await admin.from('expenses').update({
     status: 'approved',
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+
+  await notifyEmployee(admin, expense.employee_id, {
+    kind: 'approved',
+    title: 'Your expense was approved',
+    body: `${expenseSummary(expense)}\nApproved by ${actor.name}.`,
+    link: '/expenses',
+    cta: 'View My Expenses',
+  })
+
   revalidatePath('/approvals')
+  revalidatePath('/expenses')
 }
 
 export async function denyExpense(id: string, reason: string) {
-  const actor = await requireRole(MANAGER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
+  const expense = await getPendingExpense(admin, id)
   const { error } = await admin.from('expenses').update({
     status: 'denied',
     approver_id: actor.id,
@@ -143,5 +177,15 @@ export async function denyExpense(id: string, reason: string) {
     deny_reason: reason,
   }).eq('id', id)
   if (error) throw new Error(error.message)
+
+  await notifyEmployee(admin, expense.employee_id, {
+    kind: 'denied',
+    title: 'Your expense was denied',
+    body: `${expenseSummary(expense)}\nDenied by ${actor.name}.${reason ? `\nReason: ${reason}` : ''}`,
+    link: '/expenses',
+    cta: 'View My Expenses',
+  })
+
   revalidatePath('/approvals')
+  revalidatePath('/expenses')
 }

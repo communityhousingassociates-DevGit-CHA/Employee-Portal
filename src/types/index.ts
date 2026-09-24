@@ -139,6 +139,7 @@ export interface Timesheet {
   employee_signed_at: string | null
   approver_id: string | null
   approved_at: string | null
+  return_reason: string | null
   created_at: string
 }
 
@@ -159,4 +160,17 @@ export interface AccrualLogEntry {
   hours: number
   period_start: string
   created_at: string
+}
+
+export type NotificationKind = 'approval_needed' | 'approved' | 'denied' | 'returned'
+
+export interface PortalNotification {
+  id: string
+  employee_id: string
+  kind: NotificationKind
+  title: string
+  body: string | null
+  link: string | null
+  created_at: string
+  read_at: string | null
 }

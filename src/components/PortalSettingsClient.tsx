@@ -215,7 +215,7 @@ export default function PortalSettingsClient({
             </div>
           ))}
           <p className="text-[11px] text-gray-400">
-            Approval rights are role-based — anyone with the Accounting Manager, CEO, or Admin role can review and approve requests.
+            Leave requests and expenses are approved by the President/CEO only. Timesheets are reviewed by the Accounting Manager, CEO, or Admin — never by their own author.
             An alternate backup manager for Carrileen Edwards will be added here once designated.
           </p>
         </div>
