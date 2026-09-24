@@ -230,7 +230,7 @@ export default async function AdminSopPage() {
               <>Invite links are valid for <strong>24 hours</strong> from the time the invite is sent.</>,
               <>Password reset links are valid for <strong>24 hours</strong>.</>,
               <>Passwords must be at least <strong>8 characters</strong>.</>,
-              'Credentials are personal and must not be shared; each employee is individually responsible for the accuracy of entries and e-signatures made under their own login.',
+              'Salary information is restricted to the Accounting Manager and the President/CEO only (not to other admins). Amounts are masked by default and each must be clicked individually to be shown; a revealed amount hides itself again after a few seconds, so do not leave salary figures on screen or share your screen while one is showing. Credentials are personal and must not be shared; each employee is individually responsible for the accuracy of entries and e-signatures made under their own login.',
             ]} />
           </Section>
 

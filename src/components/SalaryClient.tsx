@@ -2,16 +2,17 @@
 
 import { Fragment, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { setSalary, getSalaryForEmployee, bulkSetSalary } from '@/app/actions/salary'
+import { setSalary, getSalaryHistory, bulkSetSalary, revealSalary, revealSalaryEntry } from '@/app/actions/salary'
+import MaskedAmount from '@/components/MaskedAmount'
 
 type SalaryRow = {
   id: string
   name: string
   email: string
-  current: { annual_salary: number; effective_date: string; note: string | null } | null
+  current: { effective_date: string; note: string | null } | null
 }
 
-type HistoryEntry = { id: string; annual_salary: number; effective_date: string; note: string | null; created_at: string }
+type HistoryEntry = { id: string; effective_date: string; note: string | null; created_at: string }
 type BulkMode = 'set' | 'add' | 'percent'
 
 const currency = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
@@ -47,33 +48,13 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
     setSelected(s => s.size === salaries.length ? new Set() : new Set(salaries.map(r => r.id)))
   }
 
-  function computeBulkAmount(row: SalaryRow): number | null {
-    const value = Number(bulkForm.value)
-    if (!value && bulkForm.mode !== 'set') return null
-    if (bulkForm.mode === 'set') return value
-    const current = row.current?.annual_salary
-    if (current === undefined || current === null) return null
-    if (bulkForm.mode === 'add') return current + value
-    return Math.round(current * (1 + value / 100) * 100) / 100
-  }
-
   async function handleBulkSave() {
     setBulkError('')
-    const updates: { employee_id: string; annual_salary: number }[] = []
-    const skipped: string[] = []
-    for (const row of salaries.filter(r => selected.has(r.id))) {
-      const amount = computeBulkAmount(row)
-      if (amount === null) { skipped.push(row.name); continue }
-      updates.push({ employee_id: row.id, annual_salary: amount })
-    }
-    if (updates.length === 0) {
-      setBulkError('No eligible employees to update — for %/add mode, selected employees need an existing current salary.')
-      return
-    }
     setBulkSaving(true)
     try {
-      await bulkSetSalary(updates, bulkForm.effective_date, bulkForm.note)
-      showToast(`Updated ${updates.length} salaries${skipped.length ? ` (skipped ${skipped.length} with no current salary)` : ''}`)
+      // The server works out each new amount from the current one — the browser never holds the existing figures.
+      const { updated, skipped } = await bulkSetSalary([...selected], { mode: bulkForm.mode, value: Number(bulkForm.value) }, bulkForm.effective_date, bulkForm.note)
+      showToast(`Updated ${updated} salaries${skipped.length ? ` (skipped ${skipped.length} with no current salary)` : ''}`)
       setShowBulk(false)
       setSelected(new Set())
       startTransition(() => router.refresh())
@@ -98,7 +79,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
     if (!history[row.id]) {
       setLoadingHistory(true)
       try {
-        const rows = await getSalaryForEmployee(row.id)
+        const rows = await getSalaryHistory(row.id)
         setHistory(h => ({ ...h, [row.id]: rows }))
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load history')
@@ -138,7 +119,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Salary</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Restricted — visible to accounting managers, CEO, and admins only</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">Restricted to the Accounting Manager and CEO. Amounts stay hidden until you click one; each re-hides after a few seconds.</p>
         </div>
         {selected.size > 0 && (
           <button onClick={() => { setShowBulk(true); setBulkError(''); setBulkForm(f => ({ ...f, value: '' })) }}
@@ -174,7 +155,11 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
                   <td className="px-4 py-3"><input type="checkbox" checked={selected.has(row.id)} onChange={() => toggleSelected(row.id)} /></td>
                   <td className="px-4 py-3 font-medium text-[#0b2b35]">{row.name}</td>
                   <td className="px-4 py-3 text-gray-400">{row.email}</td>
-                  <td className="px-4 py-3 text-gray-500">{row.current ? currency(row.current.annual_salary) : '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {row.current
+                      ? <MaskedAmount label={`annual salary for ${row.name}`} reveal={() => revealSalary(row.id)} format={currency} />
+                      : '—'}
+                  </td>
                   <td className="px-4 py-3 text-gray-500">{row.current?.effective_date || '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
@@ -200,7 +185,9 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
                             {history[row.id].map(h => (
                               <tr key={h.id}>
                                 <td className="py-1 pr-4 text-gray-500">{h.effective_date}</td>
-                                <td className="py-1 pr-4 font-medium text-[#0b2b35]">{currency(h.annual_salary)}</td>
+                                <td className="py-1 pr-4 font-medium text-[#0b2b35]">
+                                  <MaskedAmount label={`salary effective ${h.effective_date}`} reveal={() => revealSalaryEntry(h.id)} format={currency} />
+                                </td>
                                 <td className="py-1 text-gray-400">{h.note || ''}</td>
                               </tr>
                             ))}

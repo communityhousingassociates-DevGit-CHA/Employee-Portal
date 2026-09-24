@@ -2,10 +2,18 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getCurrentEmployee, requireRole, requireSelfOrRole } from '@/lib/auth/session'
+import { getCurrentEmployee } from '@/lib/auth/session'
+import { canViewSalaries } from '@/lib/constants/salary-access'
+import type { Employee } from '@/types'
 
-const MANAGER_ROLES = ['accounting_manager', 'ceo', 'admin'] as const
+/** Salary data is limited to a named pair of people (see lib/constants/salary-access.ts), not a whole role. */
+async function requireSalaryViewer(): Promise<Employee> {
+  const employee = await getCurrentEmployee()
+  if (!employee || !canViewSalaries(employee)) throw new Error('Forbidden')
+  return employee
+}
 
+/** The signed-in employee's own current salary (always allowed — it's their own pay). */
 export async function getMySalary() {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
@@ -19,24 +27,16 @@ export async function getMySalary() {
   return data
 }
 
-export async function getSalaryForEmployee(employeeId: string) {
-  await requireSelfOrRole(employeeId, [...MANAGER_ROLES])
-  const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('employee_salaries')
-    .select('id, annual_salary, effective_date, note, created_at')
-    .eq('employee_id', employeeId)
-    .order('effective_date', { ascending: false })
-  if (error) throw new Error(error.message)
-  return data ?? []
-}
-
+/**
+ * Roster for the Salary page — deliberately WITHOUT amounts. Dollar figures are only ever sent one at a time,
+ * when a viewer clicks a masked field (see revealSalary / revealSalaryEntry).
+ */
 export async function getAllCurrentSalaries() {
-  await requireRole([...MANAGER_ROLES])
+  await requireSalaryViewer()
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, name, email, employee_current_salary(annual_salary, effective_date, note)')
+    .select('id, name, email, employee_current_salary(effective_date, note)')
     .eq('is_active', true)
     .order('name')
   if (error) throw new Error(error.message)
@@ -46,8 +46,49 @@ export async function getAllCurrentSalaries() {
   })
 }
 
+/** Reveals one employee's current annual salary (called when a viewer clicks the masked cell). */
+export async function revealSalary(employeeId: string): Promise<number | null> {
+  await requireSalaryViewer()
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('employee_current_salary').select('annual_salary').eq('employee_id', employeeId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? Number(data.annual_salary) : null
+}
+
+/** Sum of weekly gross (annual ÷ 52) for the given employees — the Reports "estimated weekly payroll" figure, revealed on click. */
+export async function revealWeeklyPayroll(employeeIds: string[]): Promise<number> {
+  await requireSalaryViewer()
+  if (employeeIds.length === 0) return 0
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('employee_current_salary').select('annual_salary').in('employee_id', employeeIds)
+  if (error) throw new Error(error.message)
+  return (data ?? []).reduce((s, r) => s + Number(r.annual_salary) / 52, 0)
+}
+
+/** Salary history for one employee, WITHOUT amounts (each is revealed individually). */
+export async function getSalaryHistory(employeeId: string) {
+  await requireSalaryViewer()
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('employee_salaries')
+    .select('id, effective_date, note, created_at')
+    .eq('employee_id', employeeId)
+    .order('effective_date', { ascending: false })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+/** Reveals a single historical salary entry. */
+export async function revealSalaryEntry(entryId: string): Promise<number | null> {
+  await requireSalaryViewer()
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('employee_salaries').select('annual_salary').eq('id', entryId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data ? Number(data.annual_salary) : null
+}
+
 export async function setSalary(employeeId: string, data: { annual_salary: number; effective_date: string; note: string }) {
-  const actor = await requireRole([...MANAGER_ROLES])
+  const actor = await requireSalaryViewer()
   const admin = createAdminClient()
   const { error } = await admin.from('employee_salaries').insert({
     employee_id: employeeId,
@@ -60,23 +101,41 @@ export async function setSalary(employeeId: string, data: { annual_salary: numbe
   revalidatePath('/admin/salary')
 }
 
-/** Applies a salary change to multiple employees at once (e.g. an across-the-board raise). */
-export async function bulkSetSalary(
-  updates: { employee_id: string; annual_salary: number }[],
-  effective_date: string,
-  note: string
-) {
-  const actor = await requireRole([...MANAGER_ROLES])
+export type BulkSalaryChange = { mode: 'set' | 'add' | 'percent'; value: number }
+
+/**
+ * Applies a salary change to several employees at once (e.g. an across-the-board raise). The new amounts are
+ * computed here from each person's current salary, so the browser never needs the existing figures.
+ */
+export async function bulkSetSalary(employeeIds: string[], change: BulkSalaryChange, effective_date: string, note: string) {
+  const actor = await requireSalaryViewer()
+  if (!Number.isFinite(change.value) || (change.mode !== 'set' && change.value === 0)) throw new Error('Enter an amount')
   const admin = createAdminClient()
+
+  const { data: employees, error: empError } = await admin.from('employees').select('id, name').in('id', employeeIds)
+  if (empError) throw new Error(empError.message)
+  const { data: current, error: curError } = await admin.from('employee_current_salary').select('employee_id, annual_salary').in('employee_id', employeeIds)
+  if (curError) throw new Error(curError.message)
+  const currentById = new Map((current ?? []).map(c => [c.employee_id as string, Number(c.annual_salary)]))
+
+  const updates: { employee_id: string; annual_salary: number }[] = []
+  const skipped: string[] = []
+  for (const emp of employees ?? []) {
+    let amount: number | null
+    if (change.mode === 'set') amount = change.value
+    else {
+      const base = currentById.get(emp.id)
+      amount = base === undefined ? null : change.mode === 'add' ? base + change.value : Math.round(base * (1 + change.value / 100) * 100) / 100
+    }
+    if (amount === null) skipped.push(emp.name)
+    else updates.push({ employee_id: emp.id, annual_salary: amount })
+  }
+  if (updates.length === 0) throw new Error('No eligible employees to update — for %/add mode, selected employees need an existing current salary.')
+
   const { error } = await admin.from('employee_salaries').insert(
-    updates.map(u => ({
-      employee_id: u.employee_id,
-      annual_salary: u.annual_salary,
-      effective_date,
-      note: note || null,
-      created_by: actor.id,
-    }))
+    updates.map(u => ({ ...u, effective_date, note: note || null, created_by: actor.id })),
   )
   if (error) throw new Error(error.message)
   revalidatePath('/admin/salary')
+  return { updated: updates.length, skipped }
 }

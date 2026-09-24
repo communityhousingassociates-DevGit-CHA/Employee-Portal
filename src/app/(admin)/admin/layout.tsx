@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { canViewSalaries } from '@/lib/constants/salary-access'
 
 const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
@@ -26,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const displayName = employee.name || 'Admin'
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role))
+  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role) && (item.href !== '/admin/salary' || canViewSalaries(employee)))
   const roleBadge = ROLE_BADGE[employee.role] ?? employee.role.toUpperCase()
 
   // Only a superadmin can act on a pending import, so only they see the count.

@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
+import { canViewSalaries } from '@/lib/constants/salary-access'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -11,6 +12,8 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   const me = await getCurrentEmployee()
   if (!me) throw new Error('Forbidden')
   const isManager = MANAGER_ROLES.includes(me.role)
+  // Salary-derived figures: everyone sees only their own; the named salary viewers can additionally reveal others' one click at a time.
+  const canViewSalary = canViewSalaries(me)
   const admin = createAdminClient()
 
   const { data: employees, error: empError } = await admin
@@ -23,7 +26,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const targetEmployees = isManager ? (employees ?? []) : (employees ?? []).filter(e => e.id === me.id)
   const employeeIds = targetEmployees.map(e => e.id)
-  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], isManager }
+  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], isManager, canViewSalary }
 
   const [{ data: balances }, { data: leaveRequests }, { data: timesheets }, { data: expenses }, { data: salaries }] = await Promise.all([
     admin.from('leave_balances').select('*').in('employee_id', employeeIds),
@@ -76,8 +79,11 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     const leave_hours = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
     const holiday_hours = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
     const annual_salary = salaryByEmployee.get(emp.id) ?? null
-    const weekly_gross = annual_salary !== null ? annual_salary / 52 : null
-    return { id: emp.id, name: emp.name, reg_hours, leave_hours, holiday_hours, status: ts?.status ?? 'draft', annual_salary, weekly_gross }
+    const isSelf = emp.id === me.id
+    // Amounts leave the server only for your own row; for others a salary viewer gets a flag and reveals the figure on click.
+    const weekly_gross = isSelf && annual_salary !== null ? annual_salary / 52 : null
+    const can_reveal = canViewSalary && !isSelf && annual_salary !== null
+    return { id: emp.id, name: emp.name, reg_hours, leave_hours, holiday_hours, status: ts?.status ?? 'draft', weekly_gross, can_reveal }
   })
 
   const expenseRows = targetEmployees.map(emp => {
@@ -88,5 +94,5 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     return { id: emp.id, name: emp.name, total, count: items.length, byCategory }
   })
 
-  return { leaveRows, timesheetRows, expenseRows, isManager }
+  return { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary }
 }

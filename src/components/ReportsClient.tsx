@@ -3,13 +3,15 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { getReportSummary } from '@/app/actions/reports'
+import { revealSalary, revealWeeklyPayroll } from '@/app/actions/salary'
+import MaskedAmount from '@/components/MaskedAmount'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
-export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; annual_salary: number | null; weekly_gross: number | null }
+export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; weekly_gross: number | null; can_reveal: boolean }
 export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
-type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean }
+type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean; canViewSalary: boolean }
 
 const STATUS_STYLES: Record<string, string> = {
   approved: 'bg-emerald-100 text-emerald-700',
@@ -40,7 +42,10 @@ export default function ReportsClient({
   const [typeFilter, setTypeFilter] = useState('All')
   const [tab, setTab] = useState<'leave' | 'timesheets' | 'expenses'>('leave')
 
-  const { leaveRows, timesheetRows, expenseRows, isManager } = summary
+  const { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary } = summary
+  // Managers only see pay columns if they're one of the named salary viewers; everyone else sees just their own row.
+  const showPay = isManager ? canViewSalary : true
+  const payrollIds = timesheetRows.filter(r => r.can_reveal || r.weekly_gross !== null).map(r => r.id)
   const selectedPeriod = periods[periodIdx]
 
   async function switchPeriod(idx: number) {
@@ -84,8 +89,8 @@ export default function ReportsClient({
   }
 
   function exportTimesheetsCsv() {
-    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status', 'Annual Salary', 'Weekly Gross Wages']
-    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.holiday_hours, r.reg_hours + r.leave_hours + r.holiday_hours, r.status, r.annual_salary ?? '', r.weekly_gross !== null ? r.weekly_gross.toFixed(2) : ''])
+    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status']
+    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.holiday_hours, r.reg_hours + r.leave_hours + r.holiday_hours, r.status])
     downloadCsv(headers, csvRows, `CHA-Team-Timesheets-${selectedPeriod.start}.csv`)
   }
 
@@ -181,7 +186,7 @@ export default function ReportsClient({
               { label: 'Leave Hours', value: `${tsTotalLeave} hrs`, color: '#7c3aed' },
               { label: 'Submitted', value: tsSubmittedCount, color: '#059669' },
               { label: 'Not Submitted', value: tsMissingCount, color: tsMissingCount > 0 ? '#d97706' : '#0b2b35' },
-              ...(isManager ? [{ label: 'Est. Weekly Payroll', value: currency(tsTotalWeeklyGross), color: '#02ACC0' }] : []),
+              ...(showPay ? [{ label: 'Est. Weekly Payroll', value: isManager ? <MaskedAmount label="estimated weekly payroll" reveal={() => revealWeeklyPayroll(payrollIds)} format={currency} className="text-[26px] font-black leading-none" /> : currency(tsTotalWeeklyGross), color: '#02ACC0' }] : []),
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
                 <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
@@ -199,7 +204,7 @@ export default function ReportsClient({
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                    {['Employee', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status', 'Weekly Gross Wages'].map(h => (
+                    {['Employee', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status', ...(showPay ? ['Weekly Gross Wages'] : [])].map(h => (
                       <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -218,7 +223,15 @@ export default function ReportsClient({
                       <td className="px-5 py-3">{r.holiday_hours ? <span className="font-semibold text-rose-500">{r.holiday_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours + r.holiday_hours} hrs</td>
                       <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[r.status] ?? 'bg-gray-100 text-gray-500'}`}>{r.status}</span></td>
-                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.weekly_gross !== null ? currency(r.weekly_gross) : <span className="font-normal text-gray-300">—</span>}</td>
+                      {showPay && (
+                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">
+                          {r.weekly_gross !== null
+                            ? currency(r.weekly_gross)
+                            : r.can_reveal
+                              ? <MaskedAmount label={`weekly gross for ${r.name}`} reveal={async () => { const a = await revealSalary(r.id); return a === null ? null : a / 52 }} format={currency} />
+                              : <span className="font-normal text-gray-300">—</span>}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -230,7 +243,11 @@ export default function ReportsClient({
                     <td className="px-5 py-3 font-bold text-rose-500">{tsTotalHoliday} hrs</td>
                     <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave + tsTotalHoliday} hrs</td>
                     <td className="px-5 py-3" />
-                    <td className="px-5 py-3 font-bold text-[#02ACC0]">{currency(tsTotalWeeklyGross)}</td>
+                    {showPay && (
+                      <td className="px-5 py-3 font-bold text-[#02ACC0]">
+                        {isManager ? <MaskedAmount label="total weekly payroll" reveal={() => revealWeeklyPayroll(payrollIds)} format={currency} /> : currency(tsTotalWeeklyGross)}
+                      </td>
+                    )}
                   </tr>
                 </tfoot>
               </table>
