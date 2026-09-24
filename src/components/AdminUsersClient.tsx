@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate } from '@/lib/format-date'
 
@@ -20,6 +20,7 @@ type Employee = {
   department: string | null
   job_title: string | null
   hire_date: string
+  end_date: string | null
   tier: string
   accrual: number
   status: string
@@ -45,7 +46,16 @@ const staffCategoryOptions: { value: string; label: string }[] = [
   { value: 'resident_advocate', label: 'Resident Advocate' },
 ]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', grant_id: '', pto_uncapped: false, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', end_date: '', grant_id: '', pto_uncapped: false, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
+
+const bulkFieldOptions: { value: BulkEditableField; label: string }[] = [
+  { value: 'department', label: 'Department' },
+  { value: 'role', label: 'Portal Role' },
+  { value: 'employee_type', label: 'Employee Type' },
+  { value: 'staff_category', label: 'Staff Category' },
+  { value: 'grant_id', label: 'Grant / Funding Source' },
+  { value: 'end_date', label: 'End / Termination Date' },
+]
 
 const inviteBadge: Record<Employee['invite_status'], { label: string; cls: string }> = {
   not_invited: { label: 'Not invited', cls: 'bg-gray-100 text-gray-500' },
@@ -75,6 +85,9 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   const [busy, setBusy] = useState(false)
   const [confirmBulk, setConfirmBulk] = useState<'invite' | 'delete' | null>(null)
   const [inviteSummary, setInviteSummary] = useState<{ invited: string[]; failed: { email: string; error: string }[]; skipped: string[] } | null>(null)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkField, setBulkField] = useState<BulkEditableField>('department')
+  const [bulkValue, setBulkValue] = useState('')
 
   const visible = employees.filter(e => filter === 'active' ? e.status === 'active' : e.status === 'archived')
   const selectedEmployees = useMemo(() => employees.filter(e => selected.has(e.id)), [employees, selected])
@@ -114,7 +127,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, end_date: e.end_date || '', grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
     setError('')
     setShowForm(true)
   }
@@ -126,10 +139,10 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const middle_initial = form.middle_initial || null
       const address = { address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code }
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
         showToast('Employee updated')
       } else {
-        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -183,6 +196,30 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setSelected(new Set())
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Bulk action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function openBulkEdit() {
+    setBulkField('department')
+    setBulkValue('')
+    setBulkEditOpen(true)
+  }
+
+  async function handleBulkEdit() {
+    setBusy(true)
+    try {
+      const ids = selectedEmployees.filter(e => e.id !== currentEmployeeId).map(e => e.id)
+      const value = bulkValue || null
+      await bulkEditEmployees(ids, bulkField, value)
+      const fieldLabel = bulkFieldOptions.find(f => f.value === bulkField)?.label ?? bulkField
+      showToast(`${fieldLabel} updated for ${ids.length} employee${ids.length === 1 ? '' : 's'}`)
+      setSelected(new Set())
+      setBulkEditOpen(false)
+      startTransition(() => router.refresh())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk edit failed')
     } finally {
       setBusy(false)
     }
@@ -275,6 +312,9 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
               ✉️ Send / Resend Invite ({invitable.length})
             </button>
           )}
+          <button onClick={openBulkEdit} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">
+            ✏️ Edit Field
+          </button>
           {filter === 'active'
             ? <button onClick={() => handleBulkActive(false)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Archive</button>
             : <button onClick={() => handleBulkActive(true)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Restore</button>}
@@ -295,14 +335,14 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
               <th className="pl-4 pr-2 py-2.5 w-8">
                 <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all" className="accent-[#02ACC0] w-4 h-4 cursor-pointer" />
               </th>
-              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'Accrual Tier', 'Invite', 'Status', 'Actions'].map(h => (
+              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'End Date', 'Accrual Tier', 'Invite', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={13} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
+              <tr><td colSpan={14} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
             )}
             {visible.map(e => (
               <tr key={e.id} className={`border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors ${selected.has(e.id) ? 'bg-[#f0fafb]' : ''}`}>
@@ -324,6 +364,9 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 </td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.grant_name || '—'}</td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(e.hire_date)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {e.end_date ? <span className="text-red-500 font-medium">{fmtDate(e.end_date)}</span> : <span className="text-gray-300">—</span>}
+                </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className="bg-[#e0f5f8] text-[#028a9e] text-[11px] font-semibold px-2 py-0.5 rounded-full">{e.tier}</span>
                 </td>
@@ -425,10 +468,15 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                   {grants.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
-              <div className="sm:col-span-2 flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Hire Date</label>
                 <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className={inputCls} />
                 <span className="text-[11px] text-gray-400">Accrual tier and 90-day waiting period are calculated from this date</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">End / Termination Date <span className="normal-case text-gray-400">(optional)</span></label>
+                <input type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} className={inputCls} />
+                <span className="text-[11px] text-gray-400">Leave blank unless the employee has separated</span>
               </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Address Line 1</label>
@@ -501,6 +549,74 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
             <div className="flex gap-3 justify-center">
               <button onClick={() => runInvites(invitable.map(e => e.id))} disabled={busy} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{busy ? 'Sending…' : 'Send Invites'}</button>
               <button onClick={() => setConfirmBulk(null)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk edit field */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-sm p-6 shadow-xl">
+            <h2 className="text-[16px] font-bold text-[#0b2b35] mb-1">Edit Field</h2>
+            <p className="text-[13px] text-gray-500 mb-4">
+              Sets one field for all {selected.size} selected employee{selected.size === 1 ? '' : 's'}. Your own account is never included.
+            </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Field</label>
+                <select value={bulkField} onChange={e => { setBulkField(e.target.value as BulkEditableField); setBulkValue('') }} className={inputCls}>
+                  {bulkFieldOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">New Value</label>
+                {bulkField === 'department' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Unassigned —</option>
+                    {deptOptions.map(d => <option key={d}>{d}</option>)}
+                  </select>
+                )}
+                {bulkField === 'role' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {roleOptions.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+                  </select>
+                )}
+                {bulkField === 'employee_type' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {typeOptions.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                )}
+                {bulkField === 'staff_category' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    {staffCategoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                )}
+                {bulkField === 'grant_id' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Unassigned —</option>
+                    {grants.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                )}
+                {bulkField === 'end_date' && (
+                  <>
+                    <input type="date" value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls} />
+                    <span className="text-[11px] text-gray-400">Leave blank to clear the end date for everyone selected</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={handleBulkEdit}
+                disabled={busy || (['role', 'employee_type', 'staff_category'].includes(bulkField) && !bulkValue)}
+                className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40 disabled:cursor-not-allowed">
+                {busy ? 'Applying…' : `Apply to ${selected.size}`}
+              </button>
+              <button onClick={() => setBulkEditOpen(false)} className="border border-[#d4eef2] text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#f0f7f8]">Cancel</button>
             </div>
           </div>
         </div>

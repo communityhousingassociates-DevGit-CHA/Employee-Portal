@@ -27,6 +27,7 @@ export interface Employee {
   department: string | null
   job_title: string | null
   hire_date: string
+  end_date: string | null
   address_line1: string | null
   address_line2: string | null
   city: string | null

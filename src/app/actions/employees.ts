@@ -20,6 +20,7 @@ export async function addEmployee(data: {
   department: string
   job_title: string
   hire_date: string
+  end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
   address_line1?: string
@@ -41,6 +42,7 @@ export async function addEmployee(data: {
     department: data.department || null,
     job_title: data.job_title || null,
     hire_date: data.hire_date,
+    end_date: data.end_date || null,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
     address_line1: data.address_line1 || null,
@@ -65,6 +67,7 @@ export async function editEmployee(id: string, data: {
   department: string
   job_title: string
   hire_date: string
+  end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
   address_line1?: string
@@ -86,6 +89,7 @@ export async function editEmployee(id: string, data: {
     department: data.department || null,
     job_title: data.job_title || null,
     hire_date: data.hire_date,
+    end_date: data.end_date || null,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
     address_line1: data.address_line1 || null,
@@ -198,7 +202,7 @@ export async function getEmployees() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name)')
     .order('name')
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()
@@ -289,6 +293,30 @@ export async function deleteEmployees(ids: string[]) {
   const me = await requireRole(['admin'])
   const admin = createAdminClient()
   const { error } = await admin.from('employees').delete().in('id', ids.filter(id => id !== me.id)).eq('is_super_admin', false)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
+}
+
+export type BulkEditableField = 'role' | 'employee_type' | 'staff_category' | 'department' | 'grant_id' | 'end_date'
+const BULK_EDITABLE_FIELDS: BulkEditableField[] = ['role', 'employee_type', 'staff_category', 'department', 'grant_id', 'end_date']
+
+/**
+ * True bulk field edit — sets one field to one value across every selected
+ * employee, distinct from the existing bulk archive/restore/delete actions
+ * (which only ever touch is_active or delete the row). Never applies to the
+ * caller's own row, same as the other bulk actions. `value: null` clears the
+ * field (e.g. unassign a grant, remove an end date) — meaningful for every
+ * field here except role/employee_type/staff_category, where the UI always
+ * supplies one of their fixed options.
+ */
+export async function bulkEditEmployees(ids: string[], field: BulkEditableField, value: string | null) {
+  if (!BULK_EDITABLE_FIELDS.includes(field)) throw new Error('Not a bulk-editable field')
+  const me = await requireRole(['admin'])
+  const admin = createAdminClient()
+  const targetIds = ids.filter(id => id !== me.id)
+  if (targetIds.length === 0) return
+  const normalized = field === 'employee_type' && value ? value.toLowerCase() : value
+  const { error } = await admin.from('employees').update({ [field]: normalized }).in('id', targetIds)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
 }
