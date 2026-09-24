@@ -1,10 +1,11 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NotificationKind, Role } from '@/types'
+import { NOTIFICATION_TEST_MODE } from '@/lib/constants/approvals'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
 
-export type Recipient = { id: string; email: string; name: string }
+export type Recipient = { id: string; email: string; name: string; role?: Role }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -21,7 +22,7 @@ const ACCENT: Record<NotificationKind, string> = {
   returned: '#d97706',
 }
 
-function renderEmail(recipient: Recipient, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string }) {
+function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string; testNote?: string }) {
   const firstName = escapeHtml(recipient.name.split(' ')[0] || 'there')
   return `
     <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -29,6 +30,7 @@ function renderEmail(recipient: Recipient, n: { kind: NotificationKind; title: s
         <span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal</span>
       </div>
       <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px;color:#0b2b35">
+        ${n.testNote ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin:0 0 14px"><strong>TEST MODE</strong> — ${escapeHtml(n.testNote)}</div>` : ''}
         <p style="font-size:14px;margin:0 0 12px">Hi ${firstName},</p>
         <p style="font-size:16px;font-weight:700;margin:0 0 8px;color:${ACCENT[n.kind]}">${escapeHtml(n.title)}</p>
         <div style="background:#f9fefe;border:1px solid #f0f7f8;border-radius:8px;padding:12px 14px;font-size:13px;white-space:pre-wrap">${escapeHtml(n.body)}</div>
@@ -48,6 +50,8 @@ export async function notify(
   admin: SupabaseClient,
   recipients: Recipient[],
   n: { kind: NotificationKind; title: string; body: string; link: string; cta?: string },
+  // Where emails actually go, when that differs from who gets the in-portal notice (test mode).
+  email?: { to: Pick<Recipient, 'email' | 'name'>[]; testNote?: string },
 ) {
   if (recipients.length === 0) return
   const cta = n.cta ?? 'Open in Portal'
@@ -65,20 +69,22 @@ export async function notify(
     console.error('notify: RESEND_API_KEY not set — skipping email')
     return
   }
+  const emailTo = email?.to ?? recipients.filter(r => !(NOTIFICATION_TEST_MODE.enabled && r.role && NOTIFICATION_TEST_MODE.neverEmailRoles.includes(r.role)))
+  if (emailTo.length === 0) return
   const resend = new Resend(process.env.RESEND_API_KEY)
   const results = await Promise.allSettled(
-    recipients.map(r =>
+    emailTo.map(r =>
       resend.emails.send({
         from: FROM,
         to: r.email,
-        subject: `[CHA Portal] ${n.title}`,
-        html: renderEmail(r, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta }),
+        subject: `${email?.testNote ? '[TEST] ' : ''}[CHA Portal] ${n.title}`,
+        html: renderEmail(r, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, testNote: email?.testNote }),
       }),
     ),
   )
   results.forEach((res, i) => {
-    if (res.status === 'rejected') console.error(`notify: email to ${recipients[i].email} failed`, res.reason)
-    else if (res.value.error) console.error(`notify: email to ${recipients[i].email} failed`, res.value.error)
+    if (res.status === 'rejected') console.error(`notify: email to ${emailTo[i].email} failed`, res.reason)
+    else if (res.value.error) console.error(`notify: email to ${emailTo[i].email} failed`, res.value.error)
   })
 }
 
@@ -89,7 +95,7 @@ export async function notify(
  */
 export async function getApprovers(admin: SupabaseClient, excludeEmployeeId: string, roles: Role[]): Promise<Recipient[]> {
   const base = () =>
-    admin.from('employees').select('id, email, name').in('role', roles).eq('is_active', true).neq('id', excludeEmployeeId)
+    admin.from('employees').select('id, email, name, role').in('role', roles).eq('is_active', true).neq('id', excludeEmployeeId)
   const { data } = await base().eq('is_test_account', false)
   if (data && data.length > 0) return data as Recipient[]
   const { data: fallback } = await base()
@@ -97,7 +103,7 @@ export async function getApprovers(admin: SupabaseClient, excludeEmployeeId: str
 }
 
 export async function getRecipient(admin: SupabaseClient, employeeId: string): Promise<Recipient | null> {
-  const { data } = await admin.from('employees').select('id, email, name').eq('id', employeeId).maybeSingle()
+  const { data } = await admin.from('employees').select('id, email, name, role').eq('id', employeeId).maybeSingle()
   return (data as Recipient | null) ?? null
 }
 
@@ -107,7 +113,17 @@ type Payload = { kind: NotificationKind; title: string; body: string; link: stri
 export async function notifyApprovers(admin: SupabaseClient, submitterId: string, roles: Role[], payload: Omit<Payload, 'kind' | 'link'>) {
   try {
     const approvers = await getApprovers(admin, submitterId, roles)
-    await notify(admin, approvers, { ...payload, kind: 'approval_needed', link: '/approvals', cta: payload.cta ?? 'Review in Portal' })
+    const n = { ...payload, kind: 'approval_needed' as const, link: '/approvals', cta: payload.cta ?? 'Review in Portal' }
+    if (!NOTIFICATION_TEST_MODE.enabled) return await notify(admin, approvers, n)
+
+    // Test mode: approvers still get the in-portal notice, but the email alert goes to the test recipients
+    // (never the submitter) with a note about who it would normally have reached.
+    const { data: submitter } = await admin.from('employees').select('email').eq('id', submitterId).maybeSingle()
+    const testAddrs = NOTIFICATION_TEST_MODE.emailRecipients.filter(addr => addr.toLowerCase() !== submitter?.email?.toLowerCase())
+    const { data: known } = await admin.from('employees').select('email, name').in('email', testAddrs)
+    const testTo = testAddrs.map(addr => ({ email: addr, name: known?.find(k => k.email.toLowerCase() === addr.toLowerCase())?.name ?? 'there' }))
+    const normally = approvers.map(a => a.name).join(', ') || 'no one'
+    await notify(admin, approvers, n, { to: testTo, testNote: `this alert would normally go to: ${normally}.` })
   } catch (e) {
     console.error('notifyApprovers failed', e)
   }
