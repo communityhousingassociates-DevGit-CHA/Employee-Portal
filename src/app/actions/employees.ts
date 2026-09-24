@@ -23,6 +23,7 @@ export async function addEmployee(data: {
   end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
+  is_active?: boolean
   address_line1?: string
   address_line2?: string
   city?: string
@@ -50,7 +51,7 @@ export async function addEmployee(data: {
     city: data.city || null,
     state: data.state || null,
     postal_code: data.postal_code || null,
-    is_active: true,
+    is_active: data.is_active ?? true,
   })
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
@@ -70,13 +71,14 @@ export async function editEmployee(id: string, data: {
   end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
+  is_active?: boolean
   address_line1?: string
   address_line2?: string
   city?: string
   state?: string
   postal_code?: string
 }) {
-  await requireRole(['admin'])
+  const me = await requireRole(['admin'])
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({
     first_name: data.first_name,
@@ -92,6 +94,8 @@ export async function editEmployee(id: string, data: {
     end_date: data.end_date || null,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
+    // Status is configurable here, but an admin can never deactivate their own account (mirrors setEmployeesActive)
+    ...(data.is_active !== undefined && id !== me.id ? { is_active: data.is_active } : {}),
     address_line1: data.address_line1 || null,
     address_line2: data.address_line2 || null,
     city: data.city || null,
@@ -297,8 +301,8 @@ export async function deleteEmployees(ids: string[]) {
   revalidatePath('/admin/users')
 }
 
-export type BulkEditableField = 'role' | 'employee_type' | 'staff_category' | 'department' | 'grant_id' | 'end_date'
-const BULK_EDITABLE_FIELDS: BulkEditableField[] = ['role', 'employee_type', 'staff_category', 'department', 'grant_id', 'end_date']
+export type BulkEditableField = 'role' | 'employee_type' | 'staff_category' | 'department' | 'grant_id' | 'end_date' | 'is_active'
+const BULK_EDITABLE_FIELDS: BulkEditableField[] = ['role', 'employee_type', 'staff_category', 'department', 'grant_id', 'end_date', 'is_active']
 
 /**
  * True bulk field edit — sets one field to one value across every selected
@@ -315,7 +319,8 @@ export async function bulkEditEmployees(ids: string[], field: BulkEditableField,
   const admin = createAdminClient()
   const targetIds = ids.filter(id => id !== me.id)
   if (targetIds.length === 0) return
-  const normalized = field === 'employee_type' && value ? value.toLowerCase() : value
+  if (field === 'is_active' && value !== 'true' && value !== 'false') throw new Error('Status must be active or inactive')
+  const normalized = field === 'is_active' ? value === 'true' : field === 'employee_type' && value ? value.toLowerCase() : value
   const { error } = await admin.from('employees').update({ [field]: normalized }).in('id', targetIds)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')

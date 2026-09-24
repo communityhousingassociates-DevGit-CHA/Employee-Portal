@@ -46,7 +46,7 @@ const staffCategoryOptions: { value: string; label: string }[] = [
   { value: 'resident_advocate', label: 'Resident Advocate' },
 ]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', end_date: '', grant_id: '', pto_uncapped: false, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', end_date: '', grant_id: '', pto_uncapped: false, is_active: true, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
 
 const bulkFieldOptions: { value: BulkEditableField; label: string }[] = [
   { value: 'department', label: 'Department' },
@@ -55,6 +55,7 @@ const bulkFieldOptions: { value: BulkEditableField; label: string }[] = [
   { value: 'staff_category', label: 'Staff Category' },
   { value: 'grant_id', label: 'Grant / Funding Source' },
   { value: 'end_date', label: 'End / Termination Date' },
+  { value: 'is_active', label: 'Status (Active / Inactive)' },
 ]
 
 const inviteBadge: Record<Employee['invite_status'], { label: string; cls: string }> = {
@@ -127,7 +128,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, end_date: e.end_date || '', grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, end_date: e.end_date || '', grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, is_active: e.status === 'active', address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
     setError('')
     setShowForm(true)
   }
@@ -139,10 +140,11 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const middle_initial = form.middle_initial || null
       const address = { address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code }
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_active: form.is_active, ...address })
+        if (editId !== currentEmployeeId) setEmployees(es => es.map(e => e.id === editId ? { ...e, status: form.is_active ? 'active' : 'archived' } : e))
         showToast('Employee updated')
       } else {
-        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, ...address })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_active: form.is_active, ...address })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -214,6 +216,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const value = bulkValue || null
       await bulkEditEmployees(ids, bulkField, value)
       const fieldLabel = bulkFieldOptions.find(f => f.value === bulkField)?.label ?? bulkField
+      if (bulkField === 'is_active') setEmployees(es => es.map(e => ids.includes(e.id) ? { ...e, status: bulkValue === 'true' ? 'active' : 'archived' } : e))
       showToast(`${fieldLabel} updated for ${ids.length} employee${ids.length === 1 ? '' : 's'}`)
       setSelected(new Set())
       setBulkEditOpen(false)
@@ -478,6 +481,15 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <input type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} className={inputCls} />
                 <span className="text-[11px] text-gray-400">Leave blank unless the employee has separated</span>
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Status</label>
+                <select value={form.is_active ? 'active' : 'inactive'} onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'active' }))}
+                  disabled={editId === currentEmployeeId} className={inputCls}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+                <span className="text-[11px] text-gray-400">{editId === currentEmployeeId ? 'You can’t deactivate your own account' : 'Inactive employees are archived: excluded from reports and accruals, and hidden from the roster by default'}</span>
+              </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Address Line 1</label>
                 <input value={form.address_line1} onChange={e => setForm(f => ({ ...f, address_line1: e.target.value }))} placeholder="123 Main St" className={inputCls} />
@@ -601,6 +613,13 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                     {grants.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
                 )}
+                {bulkField === 'is_active' && (
+                  <select value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls}>
+                    <option value="">— Select —</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                )}
                 {bulkField === 'end_date' && (
                   <>
                     <input type="date" value={bulkValue} onChange={e => setBulkValue(e.target.value)} className={inputCls} />
@@ -612,7 +631,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
             <div className="flex gap-3 mt-5">
               <button
                 onClick={handleBulkEdit}
-                disabled={busy || (['role', 'employee_type', 'staff_category'].includes(bulkField) && !bulkValue)}
+                disabled={busy || (['role', 'employee_type', 'staff_category', 'is_active'].includes(bulkField) && !bulkValue)}
                 className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40 disabled:cursor-not-allowed">
                 {busy ? 'Applying…' : `Apply to ${selected.size}`}
               </button>
