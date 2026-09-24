@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
-import { canViewSalaries } from '@/lib/constants/salary-access'
+import { canViewSalaries, canViewTimesheetReports } from '@/lib/constants/salary-access'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -14,6 +14,8 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   const isManager = MANAGER_ROLES.includes(me.role)
   // Salary-derived figures: everyone sees only their own; the named salary viewers can additionally reveal others' one click at a time.
   const canViewSalary = canViewSalaries(me)
+  // The team Timesheets report is limited to the named payroll viewers; everyone else uses their own Timesheets page.
+  const canViewTimesheets = canViewTimesheetReports(me)
   const admin = createAdminClient()
 
   const { data: employees, error: empError } = await admin
@@ -26,7 +28,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const targetEmployees = isManager ? (employees ?? []) : (employees ?? []).filter(e => e.id === me.id)
   const employeeIds = targetEmployees.map(e => e.id)
-  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], isManager, canViewSalary }
+  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], isManager, canViewSalary, canViewTimesheets }
 
   const [{ data: balances }, { data: leaveRequests }, { data: timesheets }, { data: expenses }, { data: salaries }] = await Promise.all([
     admin.from('leave_balances').select('*').in('employee_id', employeeIds),
@@ -72,7 +74,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     }
   })
 
-  const timesheetRows = targetEmployees.map(emp => {
+  const timesheetRows = !canViewTimesheets ? [] : targetEmployees.map(emp => {
     const ts = timesheetByEmployee.get(emp.id)
     const rows = (ts?.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number }[]
     const reg_hours = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
@@ -94,5 +96,5 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     return { id: emp.id, name: emp.name, total, count: items.length, byCategory }
   })
 
-  return { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary }
+  return { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary, canViewTimesheets }
 }

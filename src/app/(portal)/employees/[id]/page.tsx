@@ -5,6 +5,7 @@ import { getEmployeeSummary } from '@/app/actions/employees'
 import { getLeaveHistory } from '@/app/actions/leave-requests'
 import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
 import { getPeriodsSince } from '@/lib/pay-periods'
+import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import HistoryClient from '@/components/HistoryClient'
 import EmployeeTimesheetView from '@/components/EmployeeTimesheetView'
@@ -22,9 +23,11 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const periods = getPeriodsSince(employee.hire_date)
   const current = periods[0]
 
+  // Other people's timesheets are limited to the named payroll viewers (Nico, Carrileen, super admin).
+  const showTimesheets = canViewTimesheetReports(me)
   const [leaveRequests, { timesheet, rows }] = await Promise.all([
     getLeaveHistory(id),
-    getTimesheetForEmployeePeriod(id, current.start, current.end),
+    showTimesheets ? getTimesheetForEmployeePeriod(id, current.start, current.end) : Promise.resolve({ timesheet: null, rows: [] }),
   ])
 
   return (
@@ -62,10 +65,12 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
-      <div className="mb-8">
-        <h2 className="text-[15px] font-bold text-[#0b2b35] mb-3">Timesheets</h2>
-        <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} />
-      </div>
+      {showTimesheets && (
+        <div className="mb-8">
+          <h2 className="text-[15px] font-bold text-[#0b2b35] mb-3">Timesheets</h2>
+          <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} />
+        </div>
+      )}
 
       <div>
         <HistoryClient

@@ -2,7 +2,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
-import { getCurrentEmployee, requireRole, requireSelfOrRole } from '@/lib/auth/session'
+import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
+import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, getPayrollDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { loadClosedRanges } from '@/lib/period-lock'
@@ -13,7 +14,6 @@ import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import type { Role, Timesheet, TimesheetEventAction, TimesheetForReview } from '@/types'
 
-const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
 async function requireOwnTimesheet(timesheetId: string) {
   const employee = await getCurrentEmployee()
@@ -41,7 +41,9 @@ export async function getOrCreateTimesheet(periodStart: string, periodEnd: strin
  * one for them.
  */
 export async function getTimesheetForEmployeePeriod(employeeId: string, periodStart: string, periodEnd: string) {
-  await requireSelfOrRole(employeeId, MANAGER_ROLES)
+  // Your own timesheet, always; anyone else's only for the named payroll viewers (Nico, Carrileen, super admin).
+  const viewer = await getCurrentEmployee()
+  if (!viewer || (viewer.id !== employeeId && !canViewTimesheetReports(viewer))) throw new Error('Forbidden')
   const admin = createAdminClient()
 
   const { data: timesheet, error: findError } = await admin

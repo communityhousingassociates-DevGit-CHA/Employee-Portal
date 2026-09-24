@@ -11,7 +11,7 @@ import type { PayPeriod } from '@/lib/pay-periods'
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
 export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; weekly_gross: number | null; can_reveal: boolean }
 export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
-type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean; canViewSalary: boolean }
+type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean; canViewSalary: boolean; canViewTimesheets: boolean }
 
 const STATUS_STYLES: Record<string, string> = {
   approved: 'bg-emerald-100 text-emerald-700',
@@ -42,7 +42,7 @@ export default function ReportsClient({
   const [typeFilter, setTypeFilter] = useState('All')
   const [tab, setTab] = useState<'leave' | 'timesheets' | 'expenses'>('leave')
 
-  const { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary } = summary
+  const { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary, canViewTimesheets } = summary
   // Managers only see pay columns if they're one of the named salary viewers; everyone else sees just their own row.
   const showPay = isManager ? canViewSalary : true
   const payrollIds = timesheetRows.filter(r => r.can_reveal || r.weekly_gross !== null).map(r => r.id)
@@ -150,7 +150,7 @@ export default function ReportsClient({
 
       {isManager && (
         <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 mb-4 w-fit no-print">
-          {([['leave', 'Leave Reports'], ['timesheets', 'Timesheets'], ['expenses', 'Expenses']] as const).map(([value, label]) => (
+          {([['leave', 'Leave Reports'], ['timesheets', 'Timesheets'], ['expenses', 'Expenses']] as const).filter(([value]) => value !== 'timesheets' || canViewTimesheets).map(([value, label]) => (
             <button key={value} onClick={() => setTab(value)}
               className={`px-4 py-1.5 rounded-md text-[13px] font-semibold transition-colors ${tab === value ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
               {label}

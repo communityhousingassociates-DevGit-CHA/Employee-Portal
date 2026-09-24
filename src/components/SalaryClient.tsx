@@ -119,7 +119,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Salary</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Restricted to the Accounting Manager and CEO. Amounts stay hidden until you click one; each re-hides after a few seconds.</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">Restricted to designated payroll administrators. Amounts stay hidden until you click one; each re-hides after a few seconds.</p>
         </div>
         {selected.size > 0 && (
           <button onClick={() => { setShowBulk(true); setBulkError(''); setBulkForm(f => ({ ...f, value: '' })) }}
