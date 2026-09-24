@@ -121,9 +121,9 @@ export default async function GuidePage() {
               <>Hourly employees enter <strong>Regular</strong> hours directly for each day worked.</>,
               <>Salaried employees don&apos;t enter Regular directly — it&apos;s calculated automatically as <strong>8 minus Leave</strong> for each day.</>,
               <>The <strong>Leave</strong> column can&apos;t be typed in — it fills in automatically from your leave requests (see section 4). To take time off, submit a leave request first; a timesheet with no leave submits as normal. If a leave request in the pay period is still pending, get it decided before you submit.</>,
-              <>Scheduled holidays fill in automatically as <strong>Holiday</strong> hours (a rose tag) instead of Regular, so holiday time is tracked separately. You can&apos;t edit that column either.</>,
+              <>Scheduled holidays fill in automatically as <strong>Holiday</strong> hours instead of Regular, with the description set to “Holiday Hours”, so holiday time is tracked separately. You can&apos;t edit that column either.</>,
               'Add a short description for each day worked.',
-              <>A day showing an amber <strong>Incomplete</strong> tag has less than a full day logged; a day tagged <strong>Leave</strong> has hours logged in the Leave column.</>,
+              <>The <strong>Tags</strong> column flags each day automatically: <strong>Holiday</strong> (hover for the holiday&apos;s name), the type of leave taken (<strong>PTO</strong>, <strong>Sick</strong>, <strong>Vacation</strong>…), or an amber <strong>Incomplete</strong> when no hours are logged. Tags can&apos;t be edited — they follow the day&apos;s hours — and they appear in the CSV export and in what your approver sees.</>,
             ]} />
             <p><strong className="text-[#0b2b35]">Saving.</strong> Edits autosave a couple of seconds after you stop typing. You can also click <strong>Save Now</strong> to save immediately.</p>
             <p><strong className="text-[#0b2b35]">Due date.</strong> Each period&apos;s timesheet is due <strong>2 days after the pay period ends</strong>.</p>

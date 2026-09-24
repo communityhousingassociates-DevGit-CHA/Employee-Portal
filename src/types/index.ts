@@ -193,7 +193,7 @@ export interface TimesheetEvent {
 /** A timesheet as shown to an approver: with its daily rows, audit history, and payroll lock state. */
 export interface TimesheetForReview extends Timesheet {
   employee_name: string
-  timesheet_rows: { work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; description: string | null }[]
+  timesheet_rows: { work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; leave_type: LeaveType | null; description: string | null }[]
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null }[]
   payroll_due: string
   /** Why reopening needs the CEO override: accounting closed the dates, or payroll was already due. null = open. */

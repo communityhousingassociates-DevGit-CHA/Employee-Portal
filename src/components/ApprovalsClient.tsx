@@ -8,6 +8,7 @@ import { approveTimesheet, returnTimesheet, reopenTimesheet } from '@/app/action
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { LeaveRequest, Expense, Role, TimesheetForReview } from '@/types'
+import RowTags from '@/components/RowTags'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -379,6 +380,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
                 <tr className="text-left text-[10px] uppercase tracking-widest text-gray-400">
                   <th className="py-1.5 pr-3 font-semibold">Date</th>
                   <th className="py-1.5 pr-3 font-semibold">Description</th>
+                  <th className="py-1.5 pr-3 font-semibold">Tags</th>
                   <th className="py-1.5 pr-3 font-semibold text-right">Regular</th>
                   <th className="py-1.5 pr-3 font-semibold text-right">Leave</th>
                   <th className="py-1.5 pr-3 font-semibold text-right">Holiday</th>
@@ -389,6 +391,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
                   <tr key={r.work_date}>
                     <td className="py-1.5 pr-3 whitespace-nowrap text-[#0b2b35]">{fmtDate(r.work_date)}</td>
                     <td className="py-1.5 pr-3 text-gray-500">{r.description || <span className="text-gray-300">—</span>}</td>
+                    <td className="py-1.5 pr-3"><RowTags row={r} /></td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.regular_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.leave_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.holiday_hours) || <span className="text-gray-300">0</span>}</td>

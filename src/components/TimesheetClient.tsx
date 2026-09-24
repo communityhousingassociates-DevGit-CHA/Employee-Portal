@@ -7,6 +7,8 @@ import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
 import { holidayOn } from '@/lib/holidays'
+import RowTags from '@/components/RowTags'
+import { rowTags } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense } from '@/types'
 import { periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod } from '@/lib/pay-periods'
 
@@ -222,12 +224,12 @@ export default function TimesheetClient({
   }
 
   function exportCsv() {
-    const headers = ['Employee', 'Employee ID', 'Date', 'Description', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours']
-    const csvRows = rows.map(r => [employeeName, employeeIdLabel, r.work_date, r.description || '', r.regular_hours, r.leave_hours, r.holiday_hours ?? 0, Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0)])
-    csvRows.push([employeeName, employeeIdLabel, '', 'Totals', totalReg, totalLeave, totalHoliday, total])
+    const headers = ['Employee', 'Employee ID', 'Date', 'Description', 'Tags', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours']
+    const csvRows = rows.map(r => [employeeName, employeeIdLabel, r.work_date, r.description || '', rowTags(r).map(t => t.label).join('; '), r.regular_hours, r.leave_hours, r.holiday_hours ?? 0, Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0)])
+    csvRows.push([employeeName, employeeIdLabel, '', 'Totals', '', totalReg, totalLeave, totalHoliday, total])
     if (weeklyGross !== null && periodGross !== null) {
-      csvRows.push([employeeName, employeeIdLabel, '', 'Weekly Gross Wages', '', '', '', weeklyGross.toFixed(2)])
-      csvRows.push([employeeName, employeeIdLabel, '', 'Pay Period Gross Wages', '', '', '', periodGross.toFixed(2)])
+      csvRows.push([employeeName, employeeIdLabel, '', 'Weekly Gross Wages', '', '', '', '', weeklyGross.toFixed(2)])
+      csvRows.push([employeeName, employeeIdLabel, '', 'Pay Period Gross Wages', '', '', '', '', periodGross.toFixed(2)])
     }
     const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -424,10 +426,10 @@ export default function TimesheetClient({
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
-        <div className="min-w-[720px]">
-        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
-          {['Date', 'Description / Project', 'Regular', 'Leave', 'Holiday', 'Total'].map((h, i) => (
-            <span key={h} className={`text-[10px] uppercase tracking-widest text-gray-400 font-semibold ${i >= 2 ? 'text-center' : ''}`}>{h}</span>
+        <div className="min-w-[860px]">
+        <div className="grid grid-cols-[100px_1fr_130px_90px_90px_90px_70px] gap-3 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
+          {['Date', 'Description / Project', 'Tags', 'Regular', 'Leave', 'Holiday', 'Total'].map((h, i) => (
+            <span key={h} className={`text-[10px] uppercase tracking-widest text-gray-400 font-semibold ${i >= 3 ? 'text-center' : ''}`}>{h}</span>
           ))}
         </div>
 
@@ -435,8 +437,8 @@ export default function TimesheetClient({
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
         {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
-        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
-          <span className="text-gray-400 col-span-5 text-right font-semibold">
+        <div className="grid grid-cols-[100px_1fr_130px_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
+          <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week1Total} hrs</span>
@@ -446,15 +448,16 @@ export default function TimesheetClient({
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
         {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
-        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
-          <span className="text-gray-400 col-span-5 text-right font-semibold">
+        <div className="grid grid-cols-[100px_1fr_130px_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
+          <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week2Total} hrs</span>
         </div>
 
-        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
+        <div className="grid grid-cols-[100px_1fr_130px_90px_90px_90px_70px] gap-3 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
           <span className="font-bold text-[#0b2b35]">Totals</span>
+          <span />
           <span />
           <span className="text-center font-bold text-[#0b2b35]">{totalReg}</span>
           <span className="text-center font-bold text-violet-600">{totalLeave}</span>
@@ -516,7 +519,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried, locked }: { row: Editable
   const dayShort = fmtDateShort(d)
 
   return (
-    <div className={`grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
+    <div className={`grid grid-cols-[100px_1fr_130px_90px_90px_90px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
       isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
     }`}>
       <div>
@@ -531,10 +534,8 @@ function TimesheetRowView({ row, onUpdate, isSalaried, locked }: { row: Editable
           placeholder="Add description…"
           className="flex-1 px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
         />
-        {isHoliday && <span className="text-[10px] font-semibold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">{holidayOn(row.work_date)}</span>}
-        {isLeave && <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Leave</span>}
-        {isEmpty && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Incomplete</span>}
       </div>
+      <div className="flex items-center"><RowTags row={row} /></div>
       {isSalaried ? (
         <div
           title="Calculated automatically as 8 minus Leave hours"
