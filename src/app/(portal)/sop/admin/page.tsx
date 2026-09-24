@@ -194,6 +194,8 @@ export default async function AdminSopPage() {
                 ['Pay date(s)', 'TBD — pending CHA&apos;s payroll schedule (direct deposit for the period ending 2026-09-12 is 2026-09-29)'],
               ]}
             />
+            <p className="font-semibold text-[#0b2b35] mt-4">Timesheet tags</p>
+            <p>Days on a timesheet carry <strong>automatic tags</strong> (holiday, leave type, incomplete, over 8 hrs, overtime, short day, and timesheet-level states such as reopened or payroll locked) and <strong>hand-picked tags</strong> from a managed list (Admin Console → Timesheet Tags), which the President/CEO, Accounting Manager, and super administrator maintain — name, color, description, and an optional payroll/Sage code. Employees tag their own days while a timesheet is a draft; approvers may adjust tags during review (recorded in the timesheet history). Tags label a day and do not split its hours. Retiring a tag stops new use but leaves it on existing days. The team Timesheets report totals hours on tagged days.</p>
             <p className="font-semibold text-[#0b2b35] mt-4">Reopening timesheets</p>
             <p>Timesheets lock at submission. The payroll due date (provisionally 12 days after period end) is the hard lock. Every reopen — including a return for correction — requires a <strong>reason code and written notes</strong> and is recorded in the timesheet&apos;s history (who, when, why).</p>
             <Table

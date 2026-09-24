@@ -153,6 +153,7 @@ export interface TimesheetRow {
   regular_hours: number
   leave_hours: number
   holiday_hours: number
+  tag_ids: string[]
   leave_type: LeaveType | null
 }
 
@@ -178,7 +179,7 @@ export interface PortalNotification {
   read_at: string | null
 }
 
-export type TimesheetEventAction = 'submitted' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held'
+export type TimesheetEventAction = 'submitted' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held' | 'tags_changed'
 
 export interface TimesheetEvent {
   id: string
@@ -194,9 +195,19 @@ export interface TimesheetEvent {
 export interface TimesheetForReview extends Timesheet {
   employee_name: string
   employee_type: string
-  timesheet_rows: { work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; leave_type: LeaveType | null; description: string | null }[]
+  timesheet_rows: { id: string; work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; tag_ids: string[]; leave_type: LeaveType | null; description: string | null }[]
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null }[]
   payroll_due: string
   /** Why reopening needs the CEO override: accounting closed the dates, or payroll was already due. null = open. */
   lock_reason: 'closed' | 'payroll' | null
+}
+
+/** A hand-picked tag from the managed list (see timesheet_tags). */
+export interface TimesheetTag {
+  id: string
+  name: string
+  color: string
+  description: string | null
+  code: string | null
+  is_active: boolean
 }

@@ -7,11 +7,12 @@ import { revealSalary, revealWeeklyPayroll } from '@/app/actions/salary'
 import MaskedAmount from '@/components/MaskedAmount'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
+import { tagColor } from '@/lib/timesheet-tags'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
 export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; weekly_gross: number | null; can_reveal: boolean }
 export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
-type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean; canViewSalary: boolean; canViewTimesheets: boolean }
+type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; tagSummary: { id: string; name: string; color: string; code: string | null; hours: number; days: number }[]; isManager: boolean; canViewSalary: boolean; canViewTimesheets: boolean }
 
 const STATUS_STYLES: Record<string, string> = {
   approved: 'bg-emerald-100 text-emerald-700',
@@ -42,7 +43,7 @@ export default function ReportsClient({
   const [typeFilter, setTypeFilter] = useState('All')
   const [tab, setTab] = useState<'leave' | 'timesheets' | 'expenses'>('leave')
 
-  const { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary, canViewTimesheets } = summary
+  const { leaveRows, timesheetRows, expenseRows, tagSummary, isManager, canViewSalary, canViewTimesheets } = summary
   // Managers only see pay columns if they're one of the named salary viewers; everyone else sees just their own row.
   const showPay = isManager ? canViewSalary : true
   const payrollIds = timesheetRows.filter(r => r.can_reveal || r.weekly_gross !== null).map(r => r.id)
@@ -253,6 +254,34 @@ export default function ReportsClient({
               </table>
             </div>
           </div>
+
+          {tagSummary.length > 0 && (
+            <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mt-6">
+              <div className="px-5 py-3.5 border-b border-[#d4eef2]">
+                <p className="text-[13px] font-bold text-[#0b2b35]">Hours by tag</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Hours on days carrying each hand-picked tag this pay period. A day with several tags counts under each.</p>
+              </div>
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
+                    {['Tag', 'Code', 'Days tagged', 'Hours on those days'].map(h => (
+                      <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tagSummary.map(t => (
+                    <tr key={t.id} className="border-b border-[#f0f7f8] last:border-0">
+                      <td className="px-5 py-2.5"><span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${tagColor(t.color).cls}`}>{t.name}</span></td>
+                      <td className="px-5 py-2.5 font-mono text-[12px] text-gray-500">{t.code ?? '—'}</td>
+                      <td className="px-5 py-2.5 text-[#0b2b35]">{t.days}</td>
+                      <td className="px-5 py-2.5 font-semibold text-[#0b2b35]">{Number(t.hours.toFixed(2))} hrs</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       ) : tab === 'expenses' ? (
         <>

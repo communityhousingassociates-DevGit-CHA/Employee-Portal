@@ -7,7 +7,7 @@
 // into these lists — the display code wouldn't change.
 
 import { holidayOn } from '@/lib/holidays'
-import type { LeaveType } from '@/types'
+import type { LeaveType, TimesheetTag } from '@/types'
 
 export type TagKey =
   // day-level
@@ -52,15 +52,47 @@ const LEAVE_TAG: Record<LeaveType, TagKey> = {
   'Jury Duty': 'leave_jury',
 }
 
+// Colors a managed tag can use (the managed list stores just the key).
+export const TAG_COLORS: Record<string, { label: string; cls: string; dot: string }> = {
+  teal: { label: 'Teal', cls: 'bg-[#e0f5f8] text-[#028a9e]', dot: 'bg-[#02ACC0]' },
+  blue: { label: 'Blue', cls: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },
+  violet: { label: 'Violet', cls: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
+  rose: { label: 'Rose', cls: 'bg-rose-100 text-rose-600', dot: 'bg-rose-500' },
+  amber: { label: 'Amber', cls: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  emerald: { label: 'Green', cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  orange: { label: 'Orange', cls: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
+  slate: { label: 'Gray', cls: 'bg-slate-200 text-slate-700', dot: 'bg-slate-500' },
+}
+
+export function tagColor(color: string) {
+  return TAG_COLORS[color] ?? TAG_COLORS.teal
+}
+
+/** A managed (hand-picked) tag as a displayable tag. `custom` marks it as removable/editable by whoever may tag. */
+export function customRowTag(t: TimesheetTag): RowTag {
+  return { key: `custom:${t.id}` as TagKey, label: t.name, cls: tagColor(t.color).cls, title: t.description ?? undefined, custom: true, tagId: t.id, inactive: !t.is_active }
+}
+
 export type TaggableRow = {
   work_date: string
   regular_hours: number | string
   leave_hours: number | string
   holiday_hours?: number | string | null
   leave_type?: LeaveType | null
+  tag_ids?: string[] | null
 }
 
-export type RowTag = { key: TagKey; label: string; cls: string; /** Hover text, e.g. the holiday's name. */ title?: string }
+export type RowTag = {
+  key: TagKey
+  label: string
+  cls: string
+  /** Hover text, e.g. the holiday's name. */
+  title?: string
+  /** Hand-picked from the managed list (vs automatic). */
+  custom?: boolean
+  tagId?: string
+  inactive?: boolean
+}
 
 function tag(key: TagKey, title?: string): RowTag {
   return { key, ...TAGS[key], title }
@@ -78,7 +110,8 @@ function weekKey(iso: string): string {
  * Day-level tags for a whole timesheet (rows in date order). Needs the full set because Overtime depends on the
  * running total for the week. `fullTime` enables "Short day", which would be noise for part-time staff.
  */
-export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean } = {}): RowTag[][] {
+export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean; customTags?: TimesheetTag[] } = {}): RowTag[][] {
+  const customById = new Map((ctx.customTags ?? []).map(t => [t.id, t]))
   const weekRegular = new Map<string, number>()
   return rows.map(row => {
     const tags: RowTag[] = []
@@ -109,6 +142,12 @@ export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean } = {}): 
     weekRegular.set(wk, after)
     if (regular > 0 && after > OVERTIME_WEEKLY_HOURS) {
       tags.push(tag('overtime', `${Math.round((after - Math.max(before, OVERTIME_WEEKLY_HOURS)) * 100) / 100} hrs past ${OVERTIME_WEEKLY_HOURS} this week`))
+    }
+
+    // Hand-picked tags from the managed list come last, after the automatic ones.
+    for (const id of row.tag_ids ?? []) {
+      const c = customById.get(id)
+      if (c) tags.push(customRowTag(c))
     }
     return tags
   })

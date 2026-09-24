@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
 import { fmtDateRange, fmtDateShort } from '@/lib/format-date'
-import type { Timesheet, TimesheetRow } from '@/types'
+import type { Timesheet, TimesheetRow, TimesheetTag } from '@/types'
 import type { PayPeriod } from '@/lib/pay-periods'
 import RowTags from '@/components/RowTags'
 import { tagRows } from '@/lib/timesheet-tags'
@@ -21,11 +21,13 @@ export default function EmployeeTimesheetView({
   periods,
   initialTimesheet,
   initialRows,
+  customTags = [],
 }: {
   employeeId: string
   periods: PayPeriod[]
   initialTimesheet: Timesheet | null
   initialRows: TimesheetRow[]
+  customTags?: TimesheetTag[]
 }) {
   const [periodIdx, setPeriodIdx] = useState(0)
   const [timesheet, setTimesheet] = useState<Timesheet | null>(initialTimesheet)
@@ -56,7 +58,7 @@ export default function EmployeeTimesheetView({
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
   const totalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
   const total = totalReg + totalLeave + totalHoliday
-  const dayTags = tagRows(rows)
+  const dayTags = tagRows(rows, { customTags })
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
   const week1 = rows.slice(0, 5)
   const week2 = rows.slice(5, 10)
@@ -112,7 +114,7 @@ export default function EmployeeTimesheetView({
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="overflow-x-auto">
               <div className="min-w-[560px]">
-                <div className="grid grid-cols-[90px_1fr_120px_56px_56px_56px] gap-3 px-4 py-2 bg-[#f9fefe] border-b border-[#d4eef2]">
+                <div className="grid grid-cols-[90px_240px_170px_56px_56px_56px] gap-3 px-4 py-2 bg-[#f9fefe] border-b border-[#d4eef2]">
                   {['Date', 'Description', 'Tags', 'Regular', 'Leave', 'Holiday'].map((h, i) => (
                     <span key={h} className={`text-[10px] uppercase tracking-widest text-gray-400 font-semibold ${i >= 3 ? 'text-center' : ''}`}>{h}</span>
                   ))}
@@ -125,7 +127,7 @@ export default function EmployeeTimesheetView({
                     {week.map(row => {
                       const d = new Date(`${row.work_date}T00:00:00`)
                       return (
-                        <div key={row.id} className={`grid grid-cols-[90px_1fr_120px_56px_56px_56px] gap-3 px-4 py-2 border-b border-[#f0f7f8] items-center text-[13px] ${Number(row.leave_hours) > 0 ? 'bg-violet-50/40' : ''}`}>
+                        <div key={row.id} className={`grid grid-cols-[90px_240px_170px_56px_56px_56px] gap-3 px-4 py-2 border-b border-[#f0f7f8] items-center text-[13px] ${Number(row.leave_hours) > 0 ? 'bg-violet-50/40' : ''}`}>
                           <div>
                             <p className="font-semibold text-[#0b2b35] text-[12px]">{d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
                             <p className="text-[10px] text-gray-400">{fmtDateShort(d)}</p>

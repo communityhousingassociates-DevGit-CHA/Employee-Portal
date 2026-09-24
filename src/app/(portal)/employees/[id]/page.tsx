@@ -4,6 +4,7 @@ import { getCurrentEmployee } from '@/lib/auth/session'
 import { getEmployeeSummary } from '@/app/actions/employees'
 import { getLeaveHistory } from '@/app/actions/leave-requests'
 import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
+import { getTagList } from '@/app/actions/tags'
 import { getPeriodsSince } from '@/lib/pay-periods'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
@@ -25,6 +26,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
 
   // Other people's timesheets are limited to the named payroll viewers (Nico, Carrileen, super admin).
   const showTimesheets = canViewTimesheetReports(me)
+  const customTags = showTimesheets ? await getTagList() : []
   const [leaveRequests, { timesheet, rows }] = await Promise.all([
     getLeaveHistory(id),
     showTimesheets ? getTimesheetForEmployeePeriod(id, current.start, current.end) : Promise.resolve({ timesheet: null, rows: [] }),
@@ -68,7 +70,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       {showTimesheets && (
         <div className="mb-8">
           <h2 className="text-[15px] font-bold text-[#0b2b35] mb-3">Timesheets</h2>
-          <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} />
+          <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} customTags={customTags} />
         </div>
       )}
 

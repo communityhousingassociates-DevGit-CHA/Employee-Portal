@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
-import { approveTimesheet, returnTimesheet, reopenTimesheet } from '@/app/actions/timesheets'
+import { approveTimesheet, returnTimesheet, reopenTimesheet, adjustRowTags } from '@/app/actions/timesheets'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
-import type { LeaveRequest, Expense, Role, TimesheetForReview } from '@/types'
+import type { LeaveRequest, Expense, Role, TimesheetForReview, TimesheetTag } from '@/types'
 import RowTags from '@/components/RowTags'
+import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
@@ -269,9 +270,10 @@ const EVENT_LABELS: Record<string, string> = {
   correction_requested: 'Correction requested by employee',
   leave_reopened: 'Reopened — leave added',
   leave_held: 'Leave held — payroll already due',
+  tags_changed: 'Tags adjusted',
 }
 
-function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; onDecided: () => void }) {
+function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; customTags: TimesheetTag[]; onDecided: () => void }) {
   const [confirming, setConfirming] = useState<'approve' | 'reopen' | null>(null)
   const [code, setCode] = useState('')
   const [note, setNote] = useState('')
@@ -285,7 +287,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
   const totalHoliday = item.timesheet_rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
 
   const canOverride = REOPEN_OVERRIDE_ROLES.includes(viewerRole)
-  const dayTags = tagRows(item.timesheet_rows, { fullTime: item.employee_type === 'full-time' })
+  const dayTags = tagRows(item.timesheet_rows, { fullTime: item.employee_type === 'full-time', customTags })
   // Lock state has its own badge below, so it's left out of the tag list here.
   const sheetTags = timesheetTags({ status: item.status, return_reason: item.return_reason, correction_requested_at: item.correction_requested_at, events: item.events })
   const isLocked = item.lock_reason !== null
@@ -395,7 +397,10 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
                   <tr key={r.work_date}>
                     <td className="py-1.5 pr-3 whitespace-nowrap text-[#0b2b35]">{fmtDate(r.work_date)}</td>
                     <td className="py-1.5 pr-3 text-gray-500">{r.description || <span className="text-gray-300">—</span>}</td>
-                    <td className="py-1.5 pr-3"><RowTags tags={dayTags[ri] ?? []} /></td>
+                    <td className="py-1.5 pr-3">
+                      <TagsCell tags={dayTags[ri] ?? []} allTags={customTags} selectedIds={r.tag_ids ?? []} editable={mode === 'pending'}
+                        onChange={async ids => { try { await adjustRowTags(item.id, r.id, ids); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to update tags') } }} />
+                    </td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.regular_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.leave_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.holiday_hours) || <span className="text-gray-300">0</span>}</td>
@@ -468,6 +473,7 @@ export default function ApprovalsClient({
   initialPendingTimesheets,
   initialApprovedTimesheets,
   viewerRole,
+  customTags,
 }: {
   approverName: string
   initialPendingLeave: LeaveApproval[]
@@ -476,6 +482,7 @@ export default function ApprovalsClient({
   initialPendingTimesheets: TimesheetForReview[]
   initialApprovedTimesheets: TimesheetForReview[]
   viewerRole: Role
+  customTags: TimesheetTag[]
 }) {
   const router = useRouter()
   const [category, setCategory] = useState<'leave' | 'expenses' | 'timesheets'>('leave')
@@ -604,7 +611,7 @@ export default function ApprovalsClient({
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="pending" viewerRole={viewerRole} onDecided={refresh} />)}
+                {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="pending" viewerRole={viewerRole} customTags={customTags} onDecided={refresh} />)}
               </div>
             )
           )}
@@ -617,7 +624,7 @@ export default function ApprovalsClient({
             ) : (
               <div className="space-y-4">
                 <p className="text-[12px] text-gray-500">Reopen an approved timesheet to correct it. Before payroll is due any approver can; after that, only the CEO (override). A reason code and notes are always required and logged.</p>
-                {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} onDecided={refresh} />)}
+                {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} customTags={customTags} onDecided={refresh} />)}
               </div>
             )
           )}

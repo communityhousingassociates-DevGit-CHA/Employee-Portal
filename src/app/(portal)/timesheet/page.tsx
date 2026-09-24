@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { getOrCreateTimesheet } from '@/app/actions/timesheets'
 import { getActiveClosedRanges } from '@/app/actions/close-period'
+import { getTagList } from '@/app/actions/tags'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { getMySalary } from '@/app/actions/salary'
 import { getPeriodsSince } from '@/lib/pay-periods'
@@ -15,11 +16,12 @@ export default async function TimesheetPage() {
 
   const periods = getPeriodsSince(employee.hire_date)
   const current = periods[0]
-  const [{ timesheet, rows }, expenses, salary, closedRanges] = await Promise.all([
+  const [{ timesheet, rows }, expenses, salary, closedRanges, customTags] = await Promise.all([
     getOrCreateTimesheet(current.start, current.end),
     getExpensesForPeriod(employee.id, current.start, current.end),
     getMySalary(),
     getActiveClosedRanges(),
+    getTagList(),
   ])
 
   return (
@@ -33,6 +35,7 @@ export default async function TimesheetPage() {
       initialExpenses={expenses}
       salary={salary}
       closedRanges={closedRanges}
+      customTags={customTags}
     />
   )
 }

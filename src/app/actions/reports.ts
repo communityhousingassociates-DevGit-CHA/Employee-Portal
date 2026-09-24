@@ -28,12 +28,12 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const targetEmployees = isManager ? (employees ?? []) : (employees ?? []).filter(e => e.id === me.id)
   const employeeIds = targetEmployees.map(e => e.id)
-  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], isManager, canViewSalary, canViewTimesheets }
+  if (employeeIds.length === 0) return { leaveRows: [], timesheetRows: [], expenseRows: [], tagSummary: [], isManager, canViewSalary, canViewTimesheets }
 
   const [{ data: balances }, { data: leaveRequests }, { data: timesheets }, { data: expenses }, { data: salaries }] = await Promise.all([
     admin.from('leave_balances').select('*').in('employee_id', employeeIds),
     admin.from('leave_requests').select('*').in('employee_id', employeeIds).eq('status', 'approved').lte('start_date', periodEnd).gte('end_date', periodStart),
-    admin.from('timesheets').select('*, timesheet_rows(regular_hours, leave_hours, holiday_hours)').in('employee_id', employeeIds).eq('period_start', periodStart),
+    admin.from('timesheets').select('*, timesheet_rows(regular_hours, leave_hours, holiday_hours, tag_ids)').in('employee_id', employeeIds).eq('period_start', periodStart),
     admin.from('expenses').select('*').in('employee_id', employeeIds).gte('expense_date', periodStart).lte('expense_date', periodEnd),
     admin.from('employee_current_salary').select('employee_id, annual_salary').in('employee_id', employeeIds),
   ])
@@ -96,5 +96,29 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
     return { id: emp.id, name: emp.name, total, count: items.length, byCategory }
   })
 
-  return { leaveRows, timesheetRows, expenseRows, isManager, canViewSalary, canViewTimesheets }
+  // Hours on days carrying each hand-picked tag (team-wide; only for the payroll viewers). A day with several tags
+  // counts under each of them — tags label a day, they don't split its hours.
+  const tagSummary: { id: string; name: string; color: string; code: string | null; hours: number; days: number }[] = []
+  if (canViewTimesheets) {
+    const { data: tagDefs } = await admin.from('timesheet_tags').select('id, name, color, code')
+    const totals = new Map<string, { hours: number; days: number }>()
+    for (const ts of timesheets ?? []) {
+      for (const r of (ts.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number; tag_ids: string[] | null }[]) {
+        const hrs = Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0)
+        for (const id of r.tag_ids ?? []) {
+          const t = totals.get(id) ?? { hours: 0, days: 0 }
+          t.hours += hrs
+          t.days += 1
+          totals.set(id, t)
+        }
+      }
+    }
+    for (const def of tagDefs ?? []) {
+      const t = totals.get(def.id)
+      if (t) tagSummary.push({ id: def.id, name: def.name, color: def.color, code: def.code, hours: t.hours, days: t.days })
+    }
+    tagSummary.sort((a, b) => b.hours - a.hours)
+  }
+
+  return { leaveRows, timesheetRows, expenseRows, tagSummary, isManager, canViewSalary, canViewTimesheets }
 }

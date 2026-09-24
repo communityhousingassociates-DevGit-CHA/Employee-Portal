@@ -66,6 +66,56 @@ export async function getTimesheetForEmployeePeriod(employeeId: string, periodSt
 }
 
 /**
+ * Checks hand-picked tag ids before they're saved: each must exist, and must be active unless the day already carries it
+ * (so a retired tag can stay on old days but can't be newly applied). Returns the cleaned, de-duplicated ids per row.
+ */
+async function validateRowTags(admin: ReturnType<typeof createAdminClient>, timesheetId: string, rows: { id: string; tag_ids: string[] }[]) {
+  const out = new Map<string, string[]>()
+  if (rows.length === 0) return out
+  const [{ data: tags, error: tagError }, { data: existing, error: rowError }] = await Promise.all([
+    admin.from('timesheet_tags').select('id, is_active'),
+    admin.from('timesheet_rows').select('id, tag_ids').eq('timesheet_id', timesheetId).in('id', rows.map(r => r.id)),
+  ])
+  if (tagError) throw new Error(tagError.message)
+  if (rowError) throw new Error(rowError.message)
+  const activeById = new Map((tags ?? []).map(t => [t.id as string, t.is_active as boolean]))
+  const currentByRow = new Map((existing ?? []).map(r => [r.id as string, (r.tag_ids ?? []) as string[]]))
+  for (const r of rows) {
+    const ids = [...new Set(r.tag_ids)]
+    for (const id of ids) {
+      if (!activeById.has(id)) throw new Error('One of the selected tags no longer exists')
+      if (!activeById.get(id) && !(currentByRow.get(r.id) ?? []).includes(id)) throw new Error('One of the selected tags has been retired and can no longer be applied')
+    }
+    out.set(r.id, ids)
+  }
+  return out
+}
+
+/**
+ * An approver adjusting the hand-picked tags on one day of a SUBMITTED timesheet while reviewing it. Logged in the
+ * timesheet's history. (Employees tag their own days through saveTimesheetDraft while it's still a draft.)
+ */
+export async function adjustRowTags(timesheetId: string, rowId: string, tagIds: string[]) {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const admin = createAdminClient()
+  const timesheet = await getReviewableTimesheet(admin, timesheetId, actor, 'submitted')
+  const tagIdsByRow = await validateRowTags(admin, timesheetId, [{ id: rowId, tag_ids: tagIds }])
+  const cleaned = tagIdsByRow.get(rowId) ?? []
+
+  const { data: row, error: rowError } = await admin.from('timesheet_rows').select('work_date').eq('id', rowId).eq('timesheet_id', timesheetId).single()
+  if (rowError) throw new Error(rowError.message)
+  const { error } = await admin.from('timesheet_rows').update({ tag_ids: cleaned }).eq('id', rowId).eq('timesheet_id', timesheetId)
+  if (error) throw new Error(error.message)
+
+  const { data: names } = cleaned.length ? await admin.from('timesheet_tags').select('name').in('id', cleaned) : { data: [] as { name: string }[] }
+  await logTimesheetEvent(admin, {
+    timesheetId, actorId: actor.id, action: 'tags_changed',
+    note: `${fmtDate(row.work_date)}: ${(names ?? []).map(n => n.name).join(', ') || 'no tags'} (${fmtDateRange(timesheet.period_start, timesheet.period_end)})`,
+  })
+  revalidatePath('/approvals')
+}
+
+/**
  * Accounting closes out date ranges; a draft timesheet touching one can't be edited or submitted — unless it was
  * deliberately reopened by an approver/CEO (return_reason is set), which is how a CEO override lets corrections through.
  */
@@ -79,7 +129,7 @@ async function assertNotClosed(admin: ReturnType<typeof createAdminClient>, ts: 
 
 export async function saveTimesheetDraft(
   timesheetId: string,
-  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number }[]
+  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number; tag_ids?: string[] }[]
 ) {
   await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
@@ -88,11 +138,12 @@ export async function saveTimesheetDraft(
   if (statusError) throw new Error(statusError.message)
   if (current.status !== 'draft') throw new Error('This timesheet has been submitted and can no longer be edited')
   await assertNotClosed(admin, current)
+  const tagIdsByRow = await validateRowTags(admin, timesheetId, rows.filter(r => r.tag_ids).map(r => ({ id: r.id, tag_ids: r.tag_ids! })))
   for (const row of rows) {
     const { error } = await admin
       .from('timesheet_rows')
       // Leave hours are never written from here — they come only from approved (or auto-approved sick) leave requests.
-      .update({ description: row.description, regular_hours: row.regular_hours })
+      .update({ description: row.description, regular_hours: row.regular_hours, ...(tagIdsByRow.has(row.id) ? { tag_ids: tagIdsByRow.get(row.id) } : {}) })
       .eq('id', row.id)
       .eq('timesheet_id', timesheetId)
     if (error) throw new Error(error.message)
