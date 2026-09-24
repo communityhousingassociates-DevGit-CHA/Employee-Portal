@@ -17,6 +17,14 @@ type AdminClient = ReturnType<typeof createAdminClient>
 
 const SALARIED_DAILY_HOURS = 8
 
+// Default day descriptions, so a fresh timesheet is self-explanatory and holiday time is easy to spot.
+export const REGULAR_DESCRIPTION = 'Regular Hours'
+export const HOLIDAY_DESCRIPTION = 'Holiday Hours'
+
+function leaveDescription(leaveType: LeaveType): string {
+  return leaveType === 'Personal' ? 'Vacation' : leaveType === 'Sick' ? 'Sick Leave' : leaveType
+}
+
 export function weekdaysBetween(start: string, end: string): string[] {
   const days: string[] = []
   const d = new Date(`${start}T00:00:00Z`)
@@ -62,7 +70,7 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
       return {
         timesheet_id: timesheet!.id,
         work_date,
-        description: holiday,
+        description: holiday ? HOLIDAY_DESCRIPTION : REGULAR_DESCRIPTION,
         regular_hours: holiday ? 0 : defaultDailyHours,
         leave_hours: 0,
         holiday_hours: holiday ? defaultDailyHours : 0,
@@ -73,14 +81,51 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
     if (rowsError) throw new Error(rowsError.message)
   }
 
-  const { data: rows, error: rowsFetchError } = await admin
+  const { data: fetched, error: rowsFetchError } = await admin
     .from('timesheet_rows')
     .select('*')
     .eq('timesheet_id', timesheet.id)
     .order('work_date')
   if (rowsFetchError) throw new Error(rowsFetchError.message)
+  let rows = (fetched ?? []) as TimesheetRow[]
 
-  return { timesheet, rows: (rows ?? []) as TimesheetRow[] }
+  // Timesheets created before these defaults existed get them filled in on first view — drafts only, so a
+  // submitted/approved (signed) timesheet is never altered behind the employee's back.
+  if (timesheet.status === 'draft') rows = await applyDayDefaults(admin, employeeId, rows)
+
+  return { timesheet, rows }
+}
+
+/**
+ * Fills the standard defaults into an existing DRAFT timesheet's rows: an untouched (null) description becomes
+ * "Regular Hours" / "Holiday Hours", and a scheduled holiday still carrying default Regular hours is converted
+ * to Holiday hours (salaried only). A description the employee cleared on purpose ('') is left alone.
+ */
+async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: TimesheetRow[]): Promise<TimesheetRow[]> {
+  const needs = rows.some(r => {
+    const holiday = holidayOn(r.work_date)
+    return r.description === null || (holiday && r.description === holiday) ||
+      (!!holiday && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0)
+  })
+  if (!needs) return rows
+  const salaried = await isSalariedEmployee(admin, employeeId)
+
+  const out: TimesheetRow[] = []
+  for (const r of rows) {
+    const holiday = holidayOn(r.work_date)
+    const patch: Partial<TimesheetRow> = {}
+    if (r.description === null || (holiday && r.description === holiday)) patch.description = holiday ? HOLIDAY_DESCRIPTION : REGULAR_DESCRIPTION
+    if (holiday && salaried && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0) {
+      patch.regular_hours = 0
+      patch.holiday_hours = SALARIED_DAILY_HOURS
+    }
+    if (Object.keys(patch).length > 0) {
+      const { error } = await admin.from('timesheet_rows').update(patch).eq('id', r.id)
+      if (error) throw new Error(error.message)
+      out.push({ ...r, ...patch })
+    } else out.push(r)
+  }
+  return out
 }
 
 export async function isSalariedEmployee(admin: AdminClient, employeeId: string): Promise<boolean> {
@@ -167,9 +212,11 @@ export async function applyLeaveToTimesheets(
     const leave_hours = Math.min(SALARIED_DAILY_HOURS, hours)
     const regular_hours = isSalaried ? SALARIED_DAILY_HOURS - leave_hours - Number(row.holiday_hours ?? 0) : row.regular_hours
 
+    // A full day of leave shouldn't still say "Regular Hours".
+    const description = leave_hours >= SALARIED_DAILY_HOURS && (row.description === null || row.description === REGULAR_DESCRIPTION) ? leaveDescription(leaveType) : row.description
     const { error } = await admin
       .from('timesheet_rows')
-      .update({ leave_hours, leave_type: leaveType, regular_hours })
+      .update({ leave_hours, leave_type: leaveType, regular_hours, description })
       .eq('id', row.id)
     if (error) throw new Error(error.message)
   }

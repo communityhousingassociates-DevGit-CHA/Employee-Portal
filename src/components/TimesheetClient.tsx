@@ -531,7 +531,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried, locked }: { row: Editable
           placeholder="Add description…"
           className="flex-1 px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
         />
-        {isHoliday && <span className="text-[10px] font-semibold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Holiday</span>}
+        {isHoliday && <span className="text-[10px] font-semibold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">{holidayOn(row.work_date)}</span>}
         {isLeave && <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Leave</span>}
         {isEmpty && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Incomplete</span>}
       </div>
