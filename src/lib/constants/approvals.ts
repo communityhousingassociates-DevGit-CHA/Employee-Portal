@@ -36,3 +36,6 @@ export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string
   emailRecipients: ['cedwards@communityhousingmd.org', 'advisor@globalist.pro'],
   neverEmailRoles: ['ceo'],
 }
+
+// Closing a date range for accounting (see closed_periods). Lifting a closure is restricted to the CEO override role.
+export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES

@@ -8,7 +8,7 @@ import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
 import { holidayOn } from '@/lib/holidays'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense } from '@/types'
-import { isPayrollLocked, getPayrollDueDate, type PayPeriod } from '@/lib/pay-periods'
+import { periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 const AUTOSAVE_DELAY_MS = 1500
@@ -58,6 +58,7 @@ export default function TimesheetClient({
   initialRows,
   initialExpenses,
   salary,
+  closedRanges,
 }: {
   employeeName: string
   employeeNumber: number
@@ -66,6 +67,7 @@ export default function TimesheetClient({
   initialRows: TimesheetRowType[]
   initialExpenses: Expense[]
   salary: Salary
+  closedRanges: ClosedRange[]
 }) {
   const isSalaried = salary !== null
 
@@ -87,6 +89,9 @@ export default function TimesheetClient({
   const period = periods[periodIdx]
   const dueDate = addDays(period.end, 2)
   const submitted = timesheet.status === 'submitted' || timesheet.status === 'approved'
+  // Accounting closed dates in this period: a never-submitted draft can't be edited or submitted (a deliberately reopened one can — that's the CEO override).
+  const closedHit = closedRangeOverlapping(period.start, period.end, closedRanges)
+  const closedForEdit = !!closedHit && timesheet.status === 'draft' && !timesheet.return_reason
 
   const totalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
@@ -264,9 +269,9 @@ export default function TimesheetClient({
           ) : showCorrection ? (
             <div className="bg-[#f8fcfd] border border-[#d4eef2] rounded-xl p-4 text-left mb-5">
               <p className="text-[12px] font-semibold text-[#0b2b35] mb-1">What needs to be corrected?</p>
-              {isPayrollLocked(period.end) && (
+              {periodLockReason(period, closedRanges) && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                  Payroll for this period was due {fmtDate(getPayrollDueDate(period))}. A correction now needs a CEO override, so your request goes to the CEO.
+                  This pay period is locked (closed by accounting or past its payroll due date). A correction now needs a CEO override, so your request goes to the CEO.
                 </p>
               )}
               <textarea value={correctionNote} onChange={e => setCorrectionNote(e.target.value)} rows={3} placeholder="e.g. I worked 6 hours on Thursday, not 8"
@@ -313,6 +318,15 @@ export default function TimesheetClient({
           {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {fmtDate(new Date())}
         </p>
       </div>
+
+      {closedForEdit && closedHit && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-5 py-4 no-print">
+          <p className="text-[13px] font-semibold text-red-800">This pay period is closed</p>
+          <p className="text-[13px] text-red-700 mt-1">
+            Accounting closed {fmtDateRange(closedHit.start, closedHit.end)}, so this timesheet can no longer be edited or submitted. Contact your Accounting Manager if it needs to be reopened.
+          </p>
+        </div>
+      )}
 
       {timesheet.return_reason && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 no-print">
@@ -365,7 +379,7 @@ export default function TimesheetClient({
             {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Retry Save' : hasUnsaved ? 'Save Now' : '✓ All changes saved'}
           </button>
           <button
-            disabled={!signed || submitting}
+            disabled={!signed || submitting || closedForEdit}
             onClick={handleSubmit}
             className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {submitting ? 'Submitting…' : 'Submit & Sign'}
@@ -420,7 +434,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
-        {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
+        {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
         <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-5 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -431,7 +445,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
-        {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
+        {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
         <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-5 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -492,7 +506,7 @@ export default function TimesheetClient({
   )
 }
 
-function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean }) {
+function TimesheetRowView({ row, onUpdate, isSalaried, locked }: { row: EditableRow; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean }) {
   const isLeave = Number(row.leave_hours) > 0
   const isHoliday = !!holidayOn(row.work_date)
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
@@ -513,6 +527,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
         <input
           value={row.description || ''}
           onChange={e => onUpdate(row.id, { description: e.target.value })}
+          disabled={locked}
           placeholder="Add description…"
           className="flex-1 px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
         />
@@ -527,7 +542,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
           {Number(row.regular_hours)}
         </div>
       ) : (
-        <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} />
+        <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} disabled={locked} />
       )}
       <div
         title="Added automatically from approved leave requests — use Request Leave to take time off"
@@ -546,14 +561,15 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
   )
 }
 
-function HoursInput({ value, onChange, max = 24 }: { value: number; onChange: (v: number) => void; max?: number }) {
+function HoursInput({ value, onChange, max = 24, disabled = false }: { value: number; onChange: (v: number) => void; max?: number; disabled?: boolean }) {
   return (
     <input
       type="number" min={0} max={max} step={0.5}
       value={value || ''}
       placeholder="0"
+      disabled={disabled}
       onChange={e => onChange(Math.max(0, Math.min(max, Number(e.target.value))))}
-      className="w-full text-center px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
+      className="w-full text-center px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white disabled:bg-[#f9fefe] disabled:text-gray-400"
     />
   )
 }

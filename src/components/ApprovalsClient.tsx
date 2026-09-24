@@ -283,8 +283,9 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
   const totalHoliday = item.timesheet_rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
 
   const canOverride = REOPEN_OVERRIDE_ROLES.includes(viewerRole)
-  const isOverride = item.payroll_locked
-  const canReopen = mode === 'pending' || !item.payroll_locked || canOverride
+  const isLocked = item.lock_reason !== null
+  const isOverride = isLocked
+  const canReopen = mode === 'pending' ? !(item.lock_reason === 'closed') || canOverride : !isLocked || canOverride
 
   function startReopen() {
     setConfirming('reopen')
@@ -321,8 +322,8 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
               {mode === 'approved' && item.approved_at && <> · Approved {fmtDate(item.approved_at)}</>}
             </p>
             <div className="flex flex-wrap gap-1.5 mt-1.5">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${item.payroll_locked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                {item.payroll_locked ? `Payroll was due ${fmtDate(item.payroll_due)} — locked` : `Payroll due ${fmtDate(item.payroll_due)}`}
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLocked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                {item.lock_reason === 'closed' ? 'Closed by accounting — locked' : item.lock_reason === 'payroll' ? `Payroll was due ${fmtDate(item.payroll_due)} — locked` : `Payroll due ${fmtDate(item.payroll_due)}`}
               </span>
               {item.correction_requested_at && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Correction requested</span>}
             </div>
@@ -335,7 +336,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
                   {reopenLabel}
                 </button>
               ) : (
-                <span className="text-[11px] text-gray-400 max-w-[14rem] text-right">Payroll already processed — only the CEO can reopen this.</span>
+                <span className="text-[11px] text-gray-400 max-w-[14rem] text-right">This period is locked — only the CEO can reopen it.</span>
               )}
               {mode === 'pending' && (
                 <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
@@ -428,7 +429,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
             <p className="text-[13px] font-semibold text-[#0b2b35] mb-1">{reopenLabel}</p>
             <p className="text-[12px] text-gray-600 mb-3">
               {isOverride && mode === 'approved'
-                ? `Payroll for this period was due ${fmtDate(item.payroll_due)}. This is a post-payroll adjustment — it is logged as a CEO override, and the corrected timesheet must be resubmitted and re-approved.`
+                ? `${item.lock_reason === 'closed' ? 'Accounting has closed this period.' : `Payroll for this period was due ${fmtDate(item.payroll_due)}.`} This is an adjustment to a locked period — it is logged as a CEO override, and the corrected timesheet must be resubmitted and re-approved.`
                 : mode === 'pending'
                   ? 'The timesheet unlocks so the employee can fix it and resubmit. They’ll be notified with your reason.'
                   : 'The timesheet returns to the employee as a draft. They must correct it, resubmit, and it needs re-approval.'}

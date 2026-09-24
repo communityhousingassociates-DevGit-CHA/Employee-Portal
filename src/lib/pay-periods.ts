@@ -108,6 +108,31 @@ export function isPayrollLocked(periodEnd: string, now: Date = new Date()): bool
   return todayET(now) > getPayrollDueDate({ end: periodEnd })
 }
 
+/** A range of dates accounting has closed out (inclusive). */
+export interface ClosedRange {
+  start: string
+  end: string
+}
+
+/** The first closed range containing `date`, or null. */
+export function closedRangeOn(date: string, ranges: ClosedRange[]): ClosedRange | null {
+  return ranges.find(r => date >= r.start && date <= r.end) ?? null
+}
+
+/** The first closed range overlapping [start, end], or null. */
+export function closedRangeOverlapping(start: string, end: string, ranges: ClosedRange[]): ClosedRange | null {
+  return ranges.find(r => start <= r.end && end >= r.start) ?? null
+}
+
+/**
+ * Why a pay period is locked, if it is: 'closed' (accounting closed any date inside it) takes precedence over
+ * 'payroll' (its payroll due date has passed). null = open. Both lock reopening to the CEO override.
+ */
+export function periodLockReason(period: { start: string; end: string }, ranges: ClosedRange[], now: Date = new Date()): 'closed' | 'payroll' | null {
+  if (closedRangeOverlapping(period.start, period.end, ranges)) return 'closed'
+  return isPayrollLocked(period.end, now) ? 'payroll' : null
+}
+
 /** True if `dateStr` (YYYY-MM-DD) is the start date of a pay period relative to `anchorDate`. */
 export function isPeriodBoundary(dateStr: string, anchorDate: string = PAY_PERIOD_ANCHOR): boolean {
   const anchor = new Date(`${anchorDate}T00:00:00Z`)

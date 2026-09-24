@@ -9,6 +9,8 @@ import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS } from '@/lib/leave-window'
+import { loadClosedRanges } from '@/lib/period-lock'
+import { closedRangeOverlapping } from '@/lib/pay-periods'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -86,6 +88,10 @@ export async function createLeaveRequest(data: {
     throw new Error(`Leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
   }
   const admin = createAdminClient()
+  const closedHit = closedRangeOverlapping(data.start_date, data.end_date, await loadClosedRanges(admin))
+  if (closedHit) {
+    throw new Error(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so no new leave can be entered for those dates. Contact your Accounting Manager.`)
+  }
 
   // Auto-approved types (Sick) skip the approver when the balance covers the request.
   const col = balanceColumnFor(data.leave_type)
@@ -304,6 +310,10 @@ export async function approveLeaveRequest(id: string) {
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
   if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't approve your own request — it needs another approver.")
+  const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
+  if (closedHit) {
+    throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
+  }
 
   const col = balanceColumnFor(request.leave_type as LeaveType)
   if (col) {

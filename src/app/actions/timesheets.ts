@@ -4,7 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole, requireSelfOrRole } from '@/lib/auth/session'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
-import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, getPayrollDueDate, isPayrollLocked } from '@/lib/pay-periods'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, getPayrollDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { loadClosedRanges } from '@/lib/period-lock'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
@@ -62,6 +63,18 @@ export async function getTimesheetForEmployeePeriod(employeeId: string, periodSt
   return { timesheet, rows: rows ?? [] }
 }
 
+/**
+ * Accounting closes out date ranges; a draft timesheet touching one can't be edited or submitted — unless it was
+ * deliberately reopened by an approver/CEO (return_reason is set), which is how a CEO override lets corrections through.
+ */
+async function assertNotClosed(admin: ReturnType<typeof createAdminClient>, ts: { period_start: string; period_end: string; return_reason: string | null }) {
+  if (ts.return_reason) return
+  const hit = closedRangeOverlapping(ts.period_start, ts.period_end, await loadClosedRanges(admin))
+  if (hit) {
+    throw new Error(`This pay period was closed by accounting (${fmtDate(hit.start)} – ${fmtDate(hit.end)}), so its timesheet can no longer be changed. Contact your Accounting Manager.`)
+  }
+}
+
 export async function saveTimesheetDraft(
   timesheetId: string,
   rows: { id: string; description: string | null; regular_hours: number; leave_hours: number }[]
@@ -69,9 +82,10 @@ export async function saveTimesheetDraft(
   await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
   // Once submitted (or approved) the sheet is locked — the reviewer must be looking at what the employee signed.
-  const { data: current, error: statusError } = await admin.from('timesheets').select('status').eq('id', timesheetId).single()
+  const { data: current, error: statusError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
   if (statusError) throw new Error(statusError.message)
   if (current.status !== 'draft') throw new Error('This timesheet has been submitted and can no longer be edited')
+  await assertNotClosed(admin, current)
   for (const row of rows) {
     const { error } = await admin
       .from('timesheet_rows')
@@ -88,9 +102,10 @@ export async function submitTimesheet(timesheetId: string) {
   const employee = await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
 
-  const { data: current, error: currentError } = await admin.from('timesheets').select('status, period_start, period_end').eq('id', timesheetId).single()
+  const { data: current, error: currentError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
   if (currentError) throw new Error(currentError.message)
   if (current.status !== 'draft') throw new Error('This timesheet has already been submitted')
+  await assertNotClosed(admin, current)
 
   // Leave hours only appear on a timesheet once a request is decided, so submitting while one is still pending
   // would send in a timesheet with that leave missing. Get it decided first.
@@ -137,7 +152,7 @@ type RawReviewRow = Timesheet & {
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor: { name: string } | { name: string }[] | null }[] | null
 }
 
-function shapeTimesheet(t: RawReviewRow): TimesheetForReview {
+function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): TimesheetForReview {
   const rows = (t.timesheet_rows ?? []).slice().sort((a, b) => a.work_date.localeCompare(b.work_date))
   const events = (t.events ?? [])
     .slice()
@@ -150,7 +165,7 @@ function shapeTimesheet(t: RawReviewRow): TimesheetForReview {
     events,
     employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
     payroll_due: getPayrollDueDate({ end: t.period_end }),
-    payroll_locked: isPayrollLocked(t.period_end),
+    lock_reason: periodLockReason({ start: t.period_start, end: t.period_end }, closedRanges),
   }
 }
 
@@ -162,12 +177,13 @@ export async function getPendingTimesheetApprovals() {
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
   const { data, error } = await query.order('employee_signed_at')
   if (error) throw new Error(error.message)
-  return (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow))
+  const ranges = await loadClosedRanges(admin)
+  return (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow, ranges))
 }
 
 /**
  * Recently approved timesheets (last ~90 days) — the list an approver reopens from. Ones an employee has
- * asked to correct come first. Includes payroll_locked so the UI knows whether reopening needs the CEO override.
+ * asked to correct come first. Includes lock_reason so the UI knows whether reopening needs the CEO override.
  */
 export async function getApprovedTimesheets() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
@@ -177,7 +193,8 @@ export async function getApprovedTimesheets() {
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
   const { data, error } = await query.order('period_end', { ascending: false }).limit(60)
   if (error) throw new Error(error.message)
-  const shaped = (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow))
+  const ranges = await loadClosedRanges(admin)
+  const shaped = (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow, ranges))
   return shaped.sort((a, b) => Number(!!b.correction_requested_at) - Number(!!a.correction_requested_at))
 }
 
@@ -228,6 +245,10 @@ export async function returnTimesheet(id: string, reasonCode: string, note: stri
   const trimmed = requireReason(reasonCode, note)
   const admin = createAdminClient()
   const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted')
+  const returnLock = periodLockReason({ start: timesheet.period_start, end: timesheet.period_end }, await loadClosedRanges(admin))
+  if (returnLock === 'closed' && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
+    throw new Error('Accounting has closed this period, so only the CEO can return it (CEO override).')
+  }
   const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
   const { error } = await admin
     .from('timesheets')
@@ -260,9 +281,12 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
   const admin = createAdminClient()
   const timesheet = await getReviewableTimesheet(admin, id, actor, 'approved')
 
-  const locked = isPayrollLocked(timesheet.period_end)
+  const lockReason = periodLockReason({ start: timesheet.period_start, end: timesheet.period_end }, await loadClosedRanges(admin))
+  const locked = lockReason !== null
   if (locked && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
-    throw new Error(`Payroll for this period was due ${fmtDate(getPayrollDueDate({ end: timesheet.period_end }))}. Only the CEO can reopen it (CEO override).`)
+    throw new Error(lockReason === 'closed'
+      ? 'Accounting has closed this period. Only the CEO can reopen it (CEO override).'
+      : `Payroll for this period was due ${fmtDate(getPayrollDueDate({ end: timesheet.period_end }))}. Only the CEO can reopen it (CEO override).`)
   }
 
   const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
@@ -305,10 +329,10 @@ export async function requestTimesheetCorrection(timesheetId: string, note: stri
   if (error) throw new Error(error.message)
   await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'correction_requested', reasonCode: 'employee_error', note: trimmed })
 
-  const locked = isPayrollLocked(ts.period_end)
+  const locked = periodLockReason({ start: ts.period_start, end: ts.period_end }, await loadClosedRanges(admin)) !== null
   await notifyApprovers(admin, employee.id, locked ? REOPEN_OVERRIDE_ROLES : TIMESHEET_APPROVER_ROLES, {
     title: `Correction requested: ${employee.name}`,
-    body: `Pay period ${fmtDateRange(ts.period_start, ts.period_end)} (${ts.status})\n${trimmed}${locked ? '\nPayroll for this period was already due — a CEO override is needed to reopen it.' : ''}`,
+    body: `Pay period ${fmtDateRange(ts.period_start, ts.period_end)} (${ts.status})\n${trimmed}${locked ? '\nThis period is locked (closed by accounting or past payroll due) — a CEO override is needed to reopen it.' : ''}`,
   })
 
   revalidatePath('/timesheet')

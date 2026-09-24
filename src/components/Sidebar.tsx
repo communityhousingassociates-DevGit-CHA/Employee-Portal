@@ -24,6 +24,7 @@ type AdminItem = { href: string; icon: string; label: string; badge?: number; ro
 
 const adminItems: AdminItem[] = [
   { href: '/approvals',     icon: '✅', label: 'Approvals',      badge: 2, roles: ['accounting_manager', 'ceo', 'admin'] },
+  { href: '/close-period',  icon: '🔒', label: 'Close Period',             roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/issues',        icon: '🎫', label: 'Issue Reports',            roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/reports',       icon: '📊', label: 'Reports',                  roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/employees',     icon: '👥', label: 'Employees',                roles: ['ceo', 'admin'] },

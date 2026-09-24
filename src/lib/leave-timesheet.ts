@@ -7,7 +7,8 @@
 // never as its own public endpoint.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentPeriod, isPayrollLocked } from '@/lib/pay-periods'
+import { getCurrentPeriod, periodLockReason } from '@/lib/pay-periods'
+import { loadClosedRanges } from '@/lib/period-lock'
 import { holidayOn } from '@/lib/holidays'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import type { LeaveType, TimesheetRow } from '@/types'
@@ -139,6 +140,7 @@ export async function applyLeaveToTimesheets(
   const summary: LeavePostingSummary = { reopened: [], held: [] }
   if (allocations.length === 0) return summary
   const isSalaried = await isSalariedEmployee(admin, employeeId)
+  const closedRanges = await loadClosedRanges(admin)
   const reopenIds = new Set<string>()
   const heldIds = new Set<string>()
 
@@ -149,7 +151,7 @@ export async function applyLeaveToTimesheets(
     if (!row) continue
 
     if (timesheet.status !== 'draft') {
-      if (isPayrollLocked(period.end)) {
+      if (periodLockReason(period, closedRanges)) {
         if (!heldIds.has(timesheet.id)) {
           heldIds.add(timesheet.id)
           summary.held.push({ timesheetId: timesheet.id, periodStart: period.start, periodEnd: period.end })
