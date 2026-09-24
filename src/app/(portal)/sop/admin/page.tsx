@@ -188,7 +188,7 @@ export default async function AdminSopPage() {
               rows={[
                 ['Pay period cadence', 'Bi-weekly (14 days) — confirmed'],
                 ['Pay period anchor / start date', 'Confirmed 2026-09-22: periods start 2026-01-14 and every 14 days after (e.g. 2026-09-09, 2026-09-23, 2026-10-07, …)'],
-                ['Timesheet submission cutoff', '2 calendar days after each period ends — confirmed. Current period (2026-09-09 – 2026-09-22) is due 2026-09-24.'],
+                ['Timesheet submission cutoff', '2 calendar days after each period ends — confirmed.'],
                 ['Payroll processing cutoff', 'TBD'],
                 ['Pay date(s)', 'TBD'],
               ]}
@@ -197,7 +197,7 @@ export default async function AdminSopPage() {
           </Section>
 
           <Section id="issues" title="8. Error, Discrepancy & Issue Reporting">
-            <p>As of September 22, 2026, the portal has an in-app Report an Issue form (sidebar → Report an Issue) that emails communityhousingassociates@gmail.com, cc advisor@globalist.pro, with reply-to set to the reporting employee. A screenshot or file can be attached to the report. Employees should use it as the default reporting channel. The category-specific contacts below still apply for anything that needs a named person directly, or if the form itself is unavailable:</p>
+            <p>The portal has an in-app Report an Issue form (sidebar → Report an Issue) that emails communityhousingassociates@gmail.com, cc advisor@globalist.pro, with reply-to set to the reporting employee. A screenshot or file can be attached to the report. Employees should use it as the default reporting channel. The category-specific contacts below still apply for anything that needs a named person directly, or if the form itself is unavailable:</p>
             <Table
               head={['Issue type', 'Report to', 'Examples']}
               rows={[

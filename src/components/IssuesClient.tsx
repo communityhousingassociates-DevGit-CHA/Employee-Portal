@@ -118,7 +118,7 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
             <tbody>
               {issues.length === 0 && (
                 <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">
-                  {filter === 'open' ? 'No open issues — nice.' : 'No issues reported yet'}
+                  {filter === 'open' ? 'No open issues.' : 'No issues reported yet'}
                 </td></tr>
               )}
               {issues.map(issue => {

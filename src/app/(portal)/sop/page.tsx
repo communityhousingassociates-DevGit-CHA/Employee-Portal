@@ -175,7 +175,7 @@ export default async function StaffSopPage() {
               rows={[
                 ['Pay period cadence', 'Bi-weekly (14 days) — confirmed'],
                 ['Pay period anchor / start date', 'Periods start 2026-01-14 and every 14 days after (e.g. 2026-09-09, 2026-09-23, 2026-10-07, …)'],
-                ['Timesheet submission cutoff', '2 calendar days after each period ends. Current period (2026-09-09 – 2026-09-22) is due 2026-09-24.'],
+                ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
                 ['Payroll processing cutoff', 'TBD'],
                 ['Pay date(s)', 'TBD'],
               ]}

@@ -40,7 +40,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           <p className="text-[13px] text-gray-500">{employee.job_title || '—'} · {employee.department || '—'}</p>
         </div>
         {!employee.is_active && (
-          <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-500 ml-auto">Archived</span>
+          <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-500 ml-auto">Inactive</span>
         )}
       </div>
 

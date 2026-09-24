@@ -157,7 +157,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   async function handleArchive(id: string) {
     await archiveEmployee(id)
     setEmployees(es => es.map(e => e.id === id ? { ...e, status: 'archived' } : e))
-    showToast('Employee archived')
+    showToast('Employee deactivated')
   }
 
   async function handleRestore(id: string) {
@@ -194,7 +194,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const ids = selectedEmployees.filter(e => e.id !== currentEmployeeId).map(e => e.id)
       await setEmployeesActive(ids, active)
       setEmployees(es => es.map(e => ids.includes(e.id) ? { ...e, status: active ? 'active' : 'archived' } : e))
-      showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} ${active ? 'restored' : 'archived'}`)
+      showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} ${active ? 'restored' : 'deactivated'}`)
       setSelected(new Set())
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Bulk action failed')
@@ -281,7 +281,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">User Management</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Add, edit, archive, or remove portal users</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">Add, edit, deactivate, or remove portal users</p>
         </div>
         <button onClick={openNew} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
           + Add Employee
@@ -300,7 +300,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
           <button key={f} onClick={() => switchFilter(f)}
             className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors capitalize
               ${filter === f ? 'bg-[#0b2b35] text-white' : 'bg-white border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8]'}`}>
-            {f} ({employees.filter(e => f === 'active' ? e.status === 'active' : e.status === 'archived').length})
+            {f === 'archived' ? 'inactive' : f} ({employees.filter(e => f === 'active' ? e.status === 'active' : e.status === 'archived').length})
           </button>
         ))}
       </div>
@@ -319,7 +319,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
             ✏️ Edit Field
           </button>
           {filter === 'active'
-            ? <button onClick={() => handleBulkActive(false)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Archive</button>
+            ? <button onClick={() => handleBulkActive(false)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Deactivate</button>
             : <button onClick={() => handleBulkActive(true)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-40">Restore</button>}
           <button onClick={() => setConfirmBulk('delete')} disabled={busy || deletable.length === 0}
             className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-red-500/80 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -378,7 +378,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {e.status}
+                    {e.status === 'archived' ? 'inactive' : e.status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -396,7 +396,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                       <button onClick={() => handleSetTempPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-amber-600 hover:bg-amber-50">Set Temp Password</button>
                     )}
                     {e.status === 'active'
-                      ? <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Archive</button>
+                      ? <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Deactivate</button>
                       : <button onClick={() => handleRestore(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50">Restore</button>
                     }
                     <button onClick={() => setConfirmDelete(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">Delete</button>
@@ -488,7 +488,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
-                <span className="text-[11px] text-gray-400">{editId === currentEmployeeId ? 'You can’t deactivate your own account' : 'Inactive employees are archived: excluded from reports and accruals, and hidden from the roster by default'}</span>
+                <span className="text-[11px] text-gray-400">{editId === currentEmployeeId ? 'You can’t deactivate your own account' : 'Inactive employees are excluded from reports and accruals, and hidden from the roster by default'}</span>
               </div>
               <div className="sm:col-span-2 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Address Line 1</label>
@@ -539,7 +539,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
             <div className="text-4xl mb-3">⚠️</div>
             <h2 className="text-[16px] font-bold text-[#0b2b35] mb-2">Delete Employee?</h2>
             <p className="text-[13px] text-gray-500 mb-5">
-              This permanently removes the employee and all their leave history. Consider <strong>Archive</strong> instead to preserve records.
+              This permanently removes the employee and all their leave history. Consider <strong>Deactivate</strong> instead to preserve records.
             </p>
             <div className="flex gap-3 justify-center">
               <button onClick={() => handleDelete(confirmDelete)} className="bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600">Yes, Delete</button>
@@ -648,7 +648,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
             <div className="text-4xl mb-3">⚠️</div>
             <h2 className="text-[16px] font-bold text-[#0b2b35] mb-2">Delete {deletable.length} employee{deletable.length === 1 ? '' : 's'}?</h2>
             <p className="text-[13px] text-gray-500 mb-5">
-              This permanently removes them and all their leave history. Consider <strong>Archive</strong> instead to preserve records. Your own account and super admins are never deleted.
+              This permanently removes them and all their leave history. Consider <strong>Deactivate</strong> instead to preserve records. Your own account and super admins are never deleted.
             </p>
             <div className="flex gap-3 justify-center">
               <button onClick={handleBulkDelete} disabled={busy} className="bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600 disabled:opacity-40">{busy ? 'Deleting…' : 'Yes, Delete'}</button>
@@ -664,7 +664,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
           <div className="bg-white rounded-2xl border border-[#d4eef2] w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-[16px] font-bold text-[#0b2b35] mb-3">Invites sent</h2>
             <p className="text-[13px] text-emerald-700 mb-2">Invited: {inviteSummary.invited.length ? inviteSummary.invited.join(', ') : 'none'}</p>
-            {inviteSummary.skipped.length > 0 && <p className="text-[13px] text-gray-500 mb-2">Skipped (already signed in or archived): {inviteSummary.skipped.join(', ')}</p>}
+            {inviteSummary.skipped.length > 0 && <p className="text-[13px] text-gray-500 mb-2">Skipped (already signed in or inactive): {inviteSummary.skipped.join(', ')}</p>}
             {inviteSummary.failed.length > 0 && <p className="text-[13px] text-red-600 mb-2">Failed: {inviteSummary.failed.map(f => `${f.email} (${f.error})`).join(', ')}</p>}
             <button onClick={() => setInviteSummary(null)} className="w-full mt-3 bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e]">Done</button>
           </div>

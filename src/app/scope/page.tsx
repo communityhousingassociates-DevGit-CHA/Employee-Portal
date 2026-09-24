@@ -12,7 +12,7 @@ export default function ScopePage() {
             <Image src="/cha-logo.png" alt="Community Housing Associates" width={220} height={36} className="object-contain" />
             <div className="text-right text-[12px] text-gray-400 leading-relaxed">
               <p className="font-semibold text-[#0b2b35]">Prepared by Globalist Pro</p>
-              <p>globalistpro.com</p>
+              <p>globalist.pro</p>
               <p>June 2026</p>
             </div>
           </div>
@@ -545,7 +545,7 @@ export default function ScopePage() {
 
         {/* Footer */}
         <div className="text-center text-[12px] text-gray-400 pb-4 space-y-1">
-          <p>Questions? Contact <span className="text-[#02ACC0]">hello@globalistpro.com</span></p>
+          <p>Questions? Contact <span className="text-[#02ACC0]">advisor@globalist.pro</span></p>
           <p>portal.communityhousingassociates.org · Powered by Globalist Pro</p>
           <div className="pt-2">
             <Link href="/login" className="text-[#02ACC0] hover:text-[#028a9e] font-medium underline underline-offset-2 transition-colors">

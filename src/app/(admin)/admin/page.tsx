@@ -47,7 +47,7 @@ export default async function AdminPage() {
         {[
           { label: 'Active Employees', value: active ?? 0, icon: '👥', color: 'text-[#02ACC0]' },
           { label: 'Pending Approvals', value: pendingApprovals, icon: '⏳', color: 'text-amber-500' },
-          { label: 'Archived Users', value: archived ?? 0, icon: '🗄️', color: 'text-gray-400' },
+          { label: 'Inactive Users', value: archived ?? 0, icon: '🗄️', color: 'text-gray-400' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <div className="text-2xl mb-2">{s.icon}</div>

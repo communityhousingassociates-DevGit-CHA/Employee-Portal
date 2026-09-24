@@ -214,7 +214,7 @@ export default function EmployeesClient({ employees }: { employees: Employee[] }
                       <p className="text-[10px] text-gray-400">PTO hrs</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{e.status}</span>
+                      <span className={`text-[10px] font-semibold px-2 py-1 rounded-full capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{e.status === 'archived' ? 'inactive' : e.status}</span>
                       <span className={`text-gray-300 text-[13px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>›</span>
                     </div>
                   </div>

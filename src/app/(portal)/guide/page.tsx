@@ -175,7 +175,7 @@ export default async function GuidePage() {
           <Section id="expenses" title="7. Submitting Expenses & Mileage">
             <p>Go to <strong>Expenses</strong> and click <strong>+ New Expense</strong>.</p>
             <Bullets items={[
-              <><strong>1. Pick a category:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, or Other.</>,
+              <><strong>1. Pick a category:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, Parking, or Other.</>,
               <><strong>2. Enter the amount.</strong> For Mileage, enter miles driven — reimbursement is calculated automatically from the current rate per mile. Every other category, enter the dollar amount directly.</>,
               <><strong>3. Add a description</strong> and, optionally, attach a receipt (image or PDF).</>,
               <><strong>4. Click Submit Expense.</strong> Status updates from Pending to Approved/Denied; view an attached receipt any time from the Receipt column.</>,

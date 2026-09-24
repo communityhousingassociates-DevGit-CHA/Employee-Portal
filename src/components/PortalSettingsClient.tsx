@@ -178,7 +178,7 @@ export default function PortalSettingsClient({
           </select>
         </Field>
         <ToggleRow k="allow_negative_balance" label="Allow negative leave balances (with approval)" />
-        <ToggleRow k="personal_carryover" label="Allow personal days to carry over year to year" />
+        <ToggleRow k="personal_carryover" label="Allow vacation days to carry over year to year" />
         <ToggleRow k="blackout_dates_enabled" label="Enable blackout date restrictions" />
       </Section>
 
