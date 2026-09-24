@@ -1,27 +1,48 @@
-// Timesheet row tags — a small, central registry so anything that wants to flag a day (holiday, leave type,
-// incomplete, and later things like training or travel) does it one way and looks the same everywhere.
+// Timesheet tags — a small, central registry so anything that wants to flag a day or a whole timesheet does it one
+// way and looks the same everywhere.
 //
-// Tags are DERIVED from the row's own data, not stored: nothing to keep in sync, and signed timesheets (whose
-// rows are never edited) still tag correctly. To add a tag, add it to TAGS and to rowTags(). If tags ever need to
-// be assigned by hand, add a stored `tags` column and merge it into rowTags() — the display code won't change.
+// AUTOMATIC tags (everything here) are DERIVED from data the portal already holds, never stored: nothing to keep in
+// sync, and signed timesheets (whose rows are never edited) still tag correctly. To add one, add it to TAGS and to
+// tagRows() / timesheetTags(). Hand-assigned tags (grant/program, Sage codes, activity) would be a stored field merged
+// into these lists — the display code wouldn't change.
 
 import { holidayOn } from '@/lib/holidays'
 import type { LeaveType } from '@/types'
 
-export type TagKey = 'holiday' | 'leave_pto' | 'leave_sick' | 'leave_vacation' | 'leave_bereavement' | 'leave_jury' | 'leave' | 'incomplete'
+export type TagKey =
+  // day-level
+  | 'holiday' | 'holiday_worked' | 'leave' | 'leave_pto' | 'leave_sick' | 'leave_vacation' | 'leave_bereavement' | 'leave_jury'
+  | 'incomplete' | 'long_day' | 'short_day' | 'overtime'
+  // timesheet-level
+  | 'correction_requested' | 'reopened' | 'late_leave' | 'closed' | 'payroll_locked'
 
 type TagDef = { label: string; cls: string }
 
 export const TAGS: Record<TagKey, TagDef> = {
   holiday: { label: 'Holiday', cls: 'bg-rose-100 text-rose-600' },
+  holiday_worked: { label: 'Holiday worked', cls: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' },
+  leave: { label: 'Leave', cls: 'bg-violet-100 text-violet-700' },
   leave_pto: { label: 'PTO', cls: 'bg-[#e0f5f8] text-[#028a9e]' },
   leave_sick: { label: 'Sick', cls: 'bg-violet-100 text-violet-700' },
   leave_vacation: { label: 'Vacation', cls: 'bg-amber-100 text-amber-700' },
   leave_bereavement: { label: 'Bereavement', cls: 'bg-slate-100 text-slate-600' },
   leave_jury: { label: 'Jury Duty', cls: 'bg-slate-100 text-slate-600' },
-  leave: { label: 'Leave', cls: 'bg-violet-100 text-violet-700' },
   incomplete: { label: 'Incomplete', cls: 'bg-amber-100 text-amber-700' },
+  long_day: { label: 'Over 8 hrs', cls: 'bg-orange-100 text-orange-700' },
+  short_day: { label: 'Short day', cls: 'bg-gray-100 text-gray-600' },
+  overtime: { label: 'Overtime', cls: 'bg-orange-200 text-orange-800' },
+  correction_requested: { label: 'Correction requested', cls: 'bg-amber-100 text-amber-700' },
+  reopened: { label: 'Reopened', cls: 'bg-red-100 text-red-600' },
+  late_leave: { label: 'Leave added late', cls: 'bg-amber-100 text-amber-700' },
+  closed: { label: 'Closed by accounting', cls: 'bg-red-100 text-red-600' },
+  payroll_locked: { label: 'Payroll locked', cls: 'bg-gray-200 text-gray-600' },
 }
+
+// Thresholds. "Over 8 hrs" is informational; "Overtime" is the weekly standard (Regular hours past 40 in a calendar
+// week) — only hourly staff can reach either, since salaried Regular hours are calculated as 8 minus leave/holiday.
+export const LONG_DAY_HOURS = 8
+export const OVERTIME_WEEKLY_HOURS = 40
+const FULL_DAY_HOURS = 8
 
 const LEAVE_TAG: Record<LeaveType, TagKey> = {
   PTO: 'leave_pto',
@@ -41,17 +62,73 @@ export type TaggableRow = {
 
 export type RowTag = { key: TagKey; label: string; cls: string; /** Hover text, e.g. the holiday's name. */ title?: string }
 
-export function rowTags(row: TaggableRow): RowTag[] {
+function tag(key: TagKey, title?: string): RowTag {
+  return { key, ...TAGS[key], title }
+}
+
+/** Monday of the calendar week containing `iso` (YYYY-MM-DD) — the key overtime is counted against. */
+function weekKey(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  const dow = (d.getUTCDay() + 6) % 7 // Mon = 0
+  d.setUTCDate(d.getUTCDate() - dow)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Day-level tags for a whole timesheet (rows in date order). Needs the full set because Overtime depends on the
+ * running total for the week. `fullTime` enables "Short day", which would be noise for part-time staff.
+ */
+export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean } = {}): RowTag[][] {
+  const weekRegular = new Map<string, number>()
+  return rows.map(row => {
+    const tags: RowTag[] = []
+    const regular = Number(row.regular_hours)
+    const leave = Number(row.leave_hours)
+    const holidayHours = Number(row.holiday_hours ?? 0)
+    const holiday = holidayOn(row.work_date)
+
+    if (holiday) tags.push(tag('holiday', holiday))
+    if (holiday && regular > 0) tags.push(tag('holiday_worked', `Worked ${regular} hrs on ${holiday}`))
+
+    if (leave > 0) {
+      const key = row.leave_type ? LEAVE_TAG[row.leave_type] ?? 'leave' : 'leave'
+      tags.push(tag(key, row.leave_type ? `${row.leave_type} leave` : undefined))
+    }
+
+    const total = regular + leave + holidayHours
+    if (total === 0 && !holiday) tags.push(tag('incomplete', 'No hours entered for this day'))
+
+    if (regular > LONG_DAY_HOURS) tags.push(tag('long_day', `${regular} regular hours in one day`))
+    if (ctx.fullTime && regular > 0 && regular < FULL_DAY_HOURS && leave === 0 && holidayHours === 0) {
+      tags.push(tag('short_day', `${regular} of ${FULL_DAY_HOURS} hours`))
+    }
+
+    const wk = weekKey(row.work_date)
+    const before = weekRegular.get(wk) ?? 0
+    const after = before + regular
+    weekRegular.set(wk, after)
+    if (regular > 0 && after > OVERTIME_WEEKLY_HOURS) {
+      tags.push(tag('overtime', `${Math.round((after - Math.max(before, OVERTIME_WEEKLY_HOURS)) * 100) / 100} hrs past ${OVERTIME_WEEKLY_HOURS} this week`))
+    }
+    return tags
+  })
+}
+
+/** A timesheet's own state as tags: reopened, correction requested, leave added late, and why it's locked. */
+export function timesheetTags(t: {
+  status: string
+  return_reason?: string | null
+  correction_requested_at?: string | null
+  lock_reason?: 'closed' | 'payroll' | null
+  events?: { action: string }[]
+}): RowTag[] {
   const tags: RowTag[] = []
-  const holiday = holidayOn(row.work_date)
-  if (holiday) tags.push({ key: 'holiday', ...TAGS.holiday, title: holiday })
-
-  if (Number(row.leave_hours) > 0) {
-    const key = row.leave_type ? LEAVE_TAG[row.leave_type] ?? 'leave' : 'leave'
-    tags.push({ key, ...TAGS[key], title: row.leave_type ? `${row.leave_type} leave` : undefined })
-  }
-
-  const total = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
-  if (total === 0 && !holiday) tags.push({ key: 'incomplete', ...TAGS.incomplete, title: 'No hours entered for this day' })
+  if (t.status === 'draft' && t.return_reason) tags.push(tag('reopened', t.return_reason))
+  if (t.correction_requested_at) tags.push(tag('correction_requested'))
+  const lateLeave = (t.events ?? []).some(e => e.action === 'leave_reopened' || e.action === 'leave_held') ||
+    (t.status === 'draft' && !!t.return_reason && t.return_reason.startsWith('Leave added or changed'))
+  if (lateLeave) tags.push(tag('late_leave', 'Leave was added after this timesheet was submitted'))
+  if (t.lock_reason === 'closed') tags.push(tag('closed', 'Accounting closed these dates'))
+  else if (t.lock_reason === 'payroll') tags.push(tag('payroll_locked', 'Payroll for this period was already due'))
   return tags
 }

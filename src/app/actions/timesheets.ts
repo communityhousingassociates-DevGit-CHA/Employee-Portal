@@ -146,10 +146,10 @@ export async function submitTimesheet(timesheetId: string) {
   revalidatePath('/approvals')
 }
 
-const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
+const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number, employee_type), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
 
 type RawReviewRow = Timesheet & {
-  employee: { name: string } | { name: string }[]
+  employee: { name: string; employee_type: string } | { name: string; employee_type: string }[]
   timesheet_rows: TimesheetForReview['timesheet_rows'] | null
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor: { name: string } | { name: string }[] | null }[] | null
 }
@@ -166,6 +166,7 @@ function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): Timesheet
     timesheet_rows: rows,
     events,
     employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
+    employee_type: (Array.isArray(employee) ? employee[0]?.employee_type : employee?.employee_type) ?? '',
     payroll_due: getPayrollDueDate({ end: t.period_end }),
     lock_reason: periodLockReason({ start: t.period_start, end: t.period_end }, closedRanges),
   }

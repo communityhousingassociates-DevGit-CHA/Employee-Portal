@@ -1,9 +1,8 @@
-import { rowTags, type TaggableRow } from '@/lib/timesheet-tags'
+import type { RowTag } from '@/lib/timesheet-tags'
 
-/** A timesheet day's tags as pills (see lib/timesheet-tags.ts). Renders a dash when the day has none. */
-export default function RowTags({ row }: { row: TaggableRow }) {
-  const tags = rowTags(row)
-  if (tags.length === 0) return <span className="text-gray-300">—</span>
+/** Renders a list of tags (see lib/timesheet-tags.ts) as pills; a dash when there are none. */
+export default function RowTags({ tags, dashWhenEmpty = true }: { tags: RowTag[]; dashWhenEmpty?: boolean }) {
+  if (tags.length === 0) return dashWhenEmpty ? <span className="text-gray-300">—</span> : null
   return (
     <span className="flex flex-wrap gap-1">
       {tags.map(t => (

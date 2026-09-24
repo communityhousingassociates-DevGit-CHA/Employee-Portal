@@ -9,6 +9,7 @@ import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { LeaveRequest, Expense, Role, TimesheetForReview } from '@/types'
 import RowTags from '@/components/RowTags'
+import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -284,6 +285,9 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
   const totalHoliday = item.timesheet_rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
 
   const canOverride = REOPEN_OVERRIDE_ROLES.includes(viewerRole)
+  const dayTags = tagRows(item.timesheet_rows, { fullTime: item.employee_type === 'full-time' })
+  // Lock state has its own badge below, so it's left out of the tag list here.
+  const sheetTags = timesheetTags({ status: item.status, return_reason: item.return_reason, correction_requested_at: item.correction_requested_at, events: item.events })
   const isLocked = item.lock_reason !== null
   const isOverride = isLocked
   const canReopen = mode === 'pending' ? !(item.lock_reason === 'closed') || canOverride : !isLocked || canOverride
@@ -326,7 +330,7 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLocked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
                 {item.lock_reason === 'closed' ? 'Closed by accounting — locked' : item.lock_reason === 'payroll' ? `Payroll was due ${fmtDate(item.payroll_due)} — locked` : `Payroll due ${fmtDate(item.payroll_due)}`}
               </span>
-              {item.correction_requested_at && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Correction requested</span>}
+              <RowTags tags={sheetTags} dashWhenEmpty={false} />
             </div>
           </div>
           {!confirming && (
@@ -387,11 +391,11 @@ function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetF
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f7f8]">
-                {item.timesheet_rows.map(r => (
+                {item.timesheet_rows.map((r, ri) => (
                   <tr key={r.work_date}>
                     <td className="py-1.5 pr-3 whitespace-nowrap text-[#0b2b35]">{fmtDate(r.work_date)}</td>
                     <td className="py-1.5 pr-3 text-gray-500">{r.description || <span className="text-gray-300">—</span>}</td>
-                    <td className="py-1.5 pr-3"><RowTags row={r} /></td>
+                    <td className="py-1.5 pr-3"><RowTags tags={dayTags[ri] ?? []} /></td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.regular_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.leave_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.holiday_hours) || <span className="text-gray-300">0</span>}</td>

@@ -26,6 +26,7 @@ export default async function TimesheetPage() {
     <TimesheetClient
       employeeName={employee.name}
       employeeNumber={employee.employee_number}
+      employeeType={employee.employee_type}
       periods={periods}
       initialTimesheet={timesheet}
       initialRows={rows}
