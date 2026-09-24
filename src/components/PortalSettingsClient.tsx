@@ -215,7 +215,7 @@ export default function PortalSettingsClient({
             </div>
           ))}
           <p className="text-[11px] text-gray-400">
-            Leave requests and expenses are approved by the President/CEO only. Timesheets are reviewed by the Accounting Manager, CEO, or Admin — never by their own author.
+            Leave requests, expenses, and timesheets are approved by the Accounting Manager or CEO. The Accounting Manager&apos;s own items route to the CEO; the CEO may approve his own (during beta testing, both may).
             An alternate backup manager for Carrileen Edwards will be added here once designated.
           </p>
         </div>

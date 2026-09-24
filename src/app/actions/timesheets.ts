@@ -7,7 +7,7 @@ import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { fmtDateRange } from '@/lib/format-date'
-import { TIMESHEET_APPROVER_ROLES } from '@/lib/constants/approvals'
+import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -101,16 +101,16 @@ export async function submitTimesheet(timesheetId: string) {
   revalidatePath('/approvals')
 }
 
-/** Submitted timesheets awaiting review, oldest first. Never includes the caller's own — a timesheet can't be approved by its own author. */
+/** Submitted timesheets awaiting review, oldest first. The caller's own only appears if they're allowed to self-approve (see canSelfApprove). */
 export async function getPendingTimesheetApprovals() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('timesheets')
     .select('*, employee:employees!timesheets_employee_id_fkey(name, employee_number), timesheet_rows(*)')
     .eq('status', 'submitted')
-    .neq('employee_id', actor.id)
-    .order('employee_signed_at')
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  const { data, error } = await query.order('employee_signed_at')
   if (error) throw new Error(error.message)
   return (data ?? []).map(t => {
     const emp = t.employee as unknown as { name: string } | { name: string }[]
@@ -121,10 +121,10 @@ export async function getPendingTimesheetApprovals() {
   })
 }
 
-async function getSubmittedTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actorId: string) {
+async function getSubmittedTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }) {
   const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end').eq('id', id).single()
   if (error) throw new Error(error.message)
-  if (data.employee_id === actorId) throw new Error("You can't review your own timesheet — another approver needs to.")
+  if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't review your own timesheet — another approver needs to.")
   if (data.status !== 'submitted') throw new Error('This timesheet is no longer awaiting review')
   return data
 }
@@ -132,7 +132,7 @@ async function getSubmittedTimesheet(admin: ReturnType<typeof createAdminClient>
 export async function approveTimesheet(id: string) {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
-  const timesheet = await getSubmittedTimesheet(admin, id, actor.id)
+  const timesheet = await getSubmittedTimesheet(admin, id, actor)
   const { error } = await admin
     .from('timesheets')
     .update({ status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null })
@@ -161,7 +161,7 @@ export async function returnTimesheet(id: string, reason: string) {
   const trimmed = reason.trim()
   if (!trimmed) throw new Error('Add a reason so the employee knows what to correct')
   const admin = createAdminClient()
-  const timesheet = await getSubmittedTimesheet(admin, id, actor.id)
+  const timesheet = await getSubmittedTimesheet(admin, id, actor)
   const { error } = await admin
     .from('timesheets')
     .update({ status: 'draft', approver_id: actor.id, approved_at: null, return_reason: trimmed })

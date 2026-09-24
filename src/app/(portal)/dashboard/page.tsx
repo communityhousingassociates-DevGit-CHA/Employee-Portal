@@ -7,7 +7,6 @@ import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
 import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
-import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
@@ -43,8 +42,6 @@ export default async function DashboardPage() {
   if (!employee) redirect('/login')
 
   const isManager = MANAGER_ROLES.includes(employee.role)
-  // Leave requests and expenses are approved by the CEO only; other managers just review timesheets.
-  const canApproveLeaveExpenses = LEAVE_EXPENSE_APPROVER_ROLES.includes(employee.role)
   const firstName = employee.name.split(' ')[0] || 'there'
 
   const period = getCurrentPeriod()
@@ -53,10 +50,10 @@ export default async function DashboardPage() {
     getMyRecentRequests(4),
     getNextApprovedLeave(),
     getOrCreateTimesheet(period.start, period.end),
-    canApproveLeaveExpenses ? getPendingLeaveApprovals() : Promise.resolve([]),
+    isManager ? getPendingLeaveApprovals() : Promise.resolve([]),
     getBaltimoreWeather(),
     getTimesheetReminderStatus(),
-    canApproveLeaveExpenses ? getPendingExpenseApprovals() : Promise.resolve([]),
+    isManager ? getPendingExpenseApprovals() : Promise.resolve([]),
     isManager ? getPendingTimesheetApprovals() : Promise.resolve([]),
   ])
 

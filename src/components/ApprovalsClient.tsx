@@ -373,21 +373,19 @@ function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided
 
 export default function ApprovalsClient({
   approverName,
-  canApproveLeaveExpenses,
   initialPendingLeave,
   initialReviewedLeave,
   initialPendingExpenses,
   initialPendingTimesheets,
 }: {
   approverName: string
-  canApproveLeaveExpenses: boolean
   initialPendingLeave: LeaveApproval[]
   initialReviewedLeave: LeaveApproval[]
   initialPendingExpenses: ExpenseApproval[]
   initialPendingTimesheets: TimesheetApproval[]
 }) {
   const router = useRouter()
-  const [category, setCategory] = useState<'leave' | 'expenses' | 'timesheets'>(canApproveLeaveExpenses ? 'leave' : 'timesheets')
+  const [category, setCategory] = useState<'leave' | 'expenses' | 'timesheets'>('leave')
   const [tab, setTab] = useState<'pending' | 'reviewed'>('pending')
 
   const pendingLeave = initialPendingLeave
@@ -430,9 +428,7 @@ export default function ApprovalsClient({
       </div>
 
       <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 w-fit mb-3">
-        {([['leave', `Leave Requests (${pendingLeave.length})`], ['expenses', `Expenses (${pendingExpenses.length})`], ['timesheets', `Timesheets (${pendingTimesheets.length})`]] as const)
-          .filter(([key]) => canApproveLeaveExpenses || key === 'timesheets')
-          .map(([key, label]) => (
+        {([['leave', `Leave Requests (${pendingLeave.length})`], ['expenses', `Expenses (${pendingExpenses.length})`], ['timesheets', `Timesheets (${pendingTimesheets.length})`]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setCategory(key)}
             className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${category === key ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
             {label}

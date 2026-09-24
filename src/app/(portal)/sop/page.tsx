@@ -165,7 +165,7 @@ export default async function StaffSopPage() {
             <p><strong className="text-[#0b2b35]">Eligible categories:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, Parking, Other.</p>
             <p><strong className="text-[#0b2b35]">Mileage</strong> is reimbursed at the current rate per mile, set annually by the Accounting Manager. If a rate hasn&apos;t been set for the current year, flag it to the Accounting Manager rather than estimate.</p>
             <p><strong className="text-[#0b2b35]">Receipts</strong> are optional in the system but should be attached (image or PDF) whenever available, consistent with CHA&apos;s standard expense documentation practice.</p>
-            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses are approved by the President/CEO, who is notified by email and in the portal, and show status Pending → Approved/Denied. You receive an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
+            <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO for review, who are notified by email and in the portal, and show status Pending → Approved/Denied. You receive an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
           </Section>
 
           <Section id="payroll" title="6. Payroll Cutoff & Pay Dates">

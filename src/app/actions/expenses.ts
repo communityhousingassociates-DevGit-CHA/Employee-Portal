@@ -6,7 +6,7 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
 import { fmtDate } from '@/lib/format-date'
-import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
+import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import type { ExpenseCategory, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -121,21 +121,24 @@ export async function getReceiptViewUrl(expenseId: string) {
 }
 
 export async function getPendingExpenseApprovals() {
-  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('expenses')
     .select('*, employee:employees!expenses_employee_id_fkey(name, avatar_url)')
     .eq('status', 'pending')
-    .order('expense_date')
+  // Your own expense only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  const { data, error } = await query.order('expense_date')
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
-async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string) {
+async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }) {
   const { data, error } = await admin.from('expenses').select('status, employee_id, category, amount, expense_date').eq('id', id).single()
   if (error) throw new Error(error.message)
   if (data.status !== 'pending') throw new Error('This expense has already been decided')
+  if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't decide your own expense — it needs another approver.")
   return data
 }
 
@@ -146,7 +149,7 @@ function expenseSummary(e: { category: string; amount: number | string; expense_
 export async function approveExpense(id: string) {
   const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
-  const expense = await getPendingExpense(admin, id)
+  const expense = await getPendingExpense(admin, id, actor)
   const { error } = await admin.from('expenses').update({
     status: 'approved',
     approver_id: actor.id,
@@ -169,7 +172,7 @@ export async function approveExpense(id: string) {
 export async function denyExpense(id: string, reason: string) {
   const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
-  const expense = await getPendingExpense(admin, id)
+  const expense = await getPendingExpense(admin, id, actor)
   const { error } = await admin.from('expenses').update({
     status: 'denied',
     approver_id: actor.id,

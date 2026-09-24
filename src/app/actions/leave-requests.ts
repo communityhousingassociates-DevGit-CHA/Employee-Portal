@@ -6,7 +6,7 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { distributeLeaveHours, applyLeaveToTimesheets } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { fmtDate } from '@/lib/format-date'
-import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
+import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -166,13 +166,15 @@ export async function getNextApprovedLeave() {
 }
 
 export async function getPendingLeaveApprovals() {
-  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('leave_requests')
     .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url)')
     .eq('status', 'pending')
-    .order('created_at')
+  // Your own request only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  const { data, error } = await query.order('created_at')
   if (error) throw new Error(error.message)
 
   const results = []
@@ -214,6 +216,7 @@ export async function approveLeaveRequest(id: string) {
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
+  if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't approve your own request — it needs another approver.")
 
   const col = balanceColumnFor(request.leave_type as LeaveType)
   if (col) {
@@ -261,6 +264,7 @@ export async function denyLeaveRequest(id: string, reason: string) {
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
+  if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't deny your own request — it needs another approver.")
 
   const { error } = await admin.from('leave_requests').update({
     status: 'denied',
