@@ -6,6 +6,8 @@ import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } fro
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS } from '@/lib/leave-window'
+import { getCurrentPeriod, isPayrollLocked } from '@/lib/pay-periods'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
@@ -83,7 +85,9 @@ export default function RequestClient({
   const isNegative = balAfter !== null && balAfter < 0
   const canSubmit = signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
-  const today = new Date().toISOString().slice(0, 10)
+  const earliest = earliestLeaveDate()
+  // Payroll already due for the period the leave starts in: the request is accepted but the timesheet isn't changed.
+  const startInLockedPeriod = !!start && start >= earliest && isPayrollLocked(getCurrentPeriod(undefined, new Date(`${start}T00:00:00Z`)).end)
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -184,15 +188,23 @@ export default function RequestClient({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Start Date</label>
-                <input type="date" value={start} min={today} onChange={e => { setStart(e.target.value); setSigned(false) }}
+                <input type="date" value={start} min={earliest} onChange={e => { setStart(e.target.value); setSigned(false) }}
                   className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">End Date</label>
-                <input type="date" value={end} min={start || today} onChange={e => { handleEndChange(e.target.value); setSigned(false) }}
+                <input type="date" value={end} min={start || earliest} onChange={e => { handleEndChange(e.target.value); setSigned(false) }}
                   className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
             </div>
+            <p className="text-[11px] text-gray-400 -mt-2 mb-4">
+              You can enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up — ideally request leave as it happens.
+            </p>
+            {startInLockedPeriod && (
+              <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2 mb-4">
+                Payroll for this pay period was already due. Your leave will be recorded, but your timesheet for that period won&apos;t be changed — contact your Accounting Manager if your pay needs adjusting.
+              </div>
+            )}
             <div className="flex gap-3 items-end">
               <div className="flex-1 flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Total Hours</label>

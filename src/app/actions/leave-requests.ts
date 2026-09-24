@@ -8,6 +8,7 @@ import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notificatio
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS } from '@/lib/leave-window'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -78,6 +79,11 @@ export async function createLeaveRequest(data: {
   if (!employee) throw new Error('Forbidden')
   if (data.leave_type === 'Jury Duty' && !data.attachment_path) {
     throw new Error('Jury Duty requests require the summons attached.')
+  }
+  if (data.end_date < data.start_date) throw new Error('The end date can’t be before the start date.')
+  const earliest = earliestLeaveDate()
+  if (data.start_date < earliest) {
+    throw new Error(`Leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
   }
   const admin = createAdminClient()
 

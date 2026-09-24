@@ -135,7 +135,7 @@ export default async function StaffSopPage() {
             <p><strong className="text-[#0b2b35]">Leave types.</strong> PTO, Sick Leave, and Vacation draw from your leave balance. Bereavement and Jury Duty do not draw from any balance.</p>
             <p className="font-semibold text-[#0b2b35]">Submission</p>
             <Numbered items={[
-              <>Leave must be requested through the portal <strong>before</strong> it is taken (except where illness prevents advance notice — submit as soon as practical).</>,
+              <>Leave should be requested through the portal <strong>as it happens</strong> — in advance where possible, otherwise the same day (illness) — so timesheets stay current. Dates up to <strong>14 days in the past</strong> can be entered to catch up; earlier dates are not accepted in the portal and must go through the Accounting Manager. Once accounting closes out a pay period, no further changes or requests are made for it.</>,
               'Leave is recorded in hourly increments; 8 hours = 1 full workday.',
               'Check the Team Leave Calendar for overlapping team absences before submitting.',
               <>The request must be electronically signed before submission. An attachment is optional for every leave type except Jury Duty, where the summons is required — the portal blocks submission without it.</>,
