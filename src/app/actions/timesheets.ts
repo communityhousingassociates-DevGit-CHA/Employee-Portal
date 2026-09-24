@@ -4,11 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole, requireSelfOrRole } from '@/lib/auth/session'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
-import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate } from '@/lib/pay-periods'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, getPayrollDueDate, isPayrollLocked } from '@/lib/pay-periods'
+import { logTimesheetEvent } from '@/lib/timesheet-events'
+import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
-import { fmtDateRange } from '@/lib/format-date'
+import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
-import type { Role } from '@/types'
+import type { Role, Timesheet, TimesheetEventAction, TimesheetForReview } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
@@ -85,13 +87,38 @@ export async function saveTimesheetDraft(
 export async function submitTimesheet(timesheetId: string) {
   const employee = await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
+
+  const { data: current, error: currentError } = await admin.from('timesheets').select('status, period_start, period_end').eq('id', timesheetId).single()
+  if (currentError) throw new Error(currentError.message)
+  if (current.status !== 'draft') throw new Error('This timesheet has already been submitted')
+
+  // Leave hours only appear on a timesheet once a request is decided, so submitting while one is still pending
+  // would send in a timesheet with that leave missing. Get it decided first.
+  const { data: pendingLeave, error: pendingError } = await admin
+    .from('leave_requests')
+    .select('leave_type, start_date, end_date')
+    .eq('employee_id', employee.id)
+    .eq('status', 'pending')
+    .lte('start_date', current.period_end)
+    .gte('end_date', current.period_start)
+  if (pendingError) throw new Error(pendingError.message)
+  if (pendingLeave && pendingLeave.length > 0) {
+    const first = pendingLeave[0]
+    const range = first.start_date === first.end_date ? fmtDate(first.start_date) : `${fmtDate(first.start_date)} – ${fmtDate(first.end_date)}`
+    throw new Error(
+      `You have ${pendingLeave.length === 1 ? 'a pending leave request' : `${pendingLeave.length} pending leave requests`} in this pay period (${first.leave_type}, ${range}). ` +
+      `Ask your approver to decide ${pendingLeave.length === 1 ? 'it' : 'them'} first so the leave appears on this timesheet, then submit.`,
+    )
+  }
+
   const { data: timesheet, error } = await admin
     .from('timesheets')
-    .update({ status: 'submitted', employee_signed_at: new Date().toISOString(), return_reason: null })
+    .update({ status: 'submitted', employee_signed_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null })
     .eq('id', timesheetId)
     .select('period_start, period_end')
     .single()
   if (error) throw new Error(error.message)
+  await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted' })
 
   await notifyApprovers(admin, employee.id, TIMESHEET_APPROVER_ROLES, {
     title: `Timesheet from ${employee.name}`,
@@ -102,43 +129,76 @@ export async function submitTimesheet(timesheetId: string) {
   revalidatePath('/approvals')
 }
 
+const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
+
+type RawReviewRow = Timesheet & {
+  employee: { name: string } | { name: string }[]
+  timesheet_rows: TimesheetForReview['timesheet_rows'] | null
+  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor: { name: string } | { name: string }[] | null }[] | null
+}
+
+function shapeTimesheet(t: RawReviewRow): TimesheetForReview {
+  const rows = (t.timesheet_rows ?? []).slice().sort((a, b) => a.work_date.localeCompare(b.work_date))
+  const events = (t.events ?? [])
+    .slice()
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map(e => ({ id: e.id, action: e.action, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: (Array.isArray(e.actor) ? e.actor[0]?.name : e.actor?.name) ?? null }))
+  const { employee, ...rest } = t
+  return {
+    ...rest,
+    timesheet_rows: rows,
+    events,
+    employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
+    payroll_due: getPayrollDueDate({ end: t.period_end }),
+    payroll_locked: isPayrollLocked(t.period_end),
+  }
+}
+
 /** Submitted timesheets awaiting review, oldest first. The caller's own only appears if they're allowed to self-approve (see canSelfApprove). */
 export async function getPendingTimesheetApprovals() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
-  let query = admin
-    .from('timesheets')
-    .select('*, employee:employees!timesheets_employee_id_fkey(name, employee_number), timesheet_rows(*)')
-    .eq('status', 'submitted')
+  let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'submitted')
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
   const { data, error } = await query.order('employee_signed_at')
   if (error) throw new Error(error.message)
-  return (data ?? []).map(t => {
-    const emp = t.employee as unknown as { name: string } | { name: string }[]
-    const rows = ((t.timesheet_rows ?? []) as { work_date: string; regular_hours: number; leave_hours: number; description: string | null }[])
-      .slice()
-      .sort((a, b) => a.work_date.localeCompare(b.work_date))
-    return { ...t, timesheet_rows: rows, employee_name: (Array.isArray(emp) ? emp[0]?.name : emp?.name) ?? 'Unknown' }
-  })
+  return (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow))
 }
 
-async function getSubmittedTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }) {
+/**
+ * Recently approved timesheets (last ~90 days) — the list an approver reopens from. Ones an employee has
+ * asked to correct come first. Includes payroll_locked so the UI knows whether reopening needs the CEO override.
+ */
+export async function getApprovedTimesheets() {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const admin = createAdminClient()
+  const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
+  let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'approved').gte('period_end', since)
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  const { data, error } = await query.order('period_end', { ascending: false }).limit(60)
+  if (error) throw new Error(error.message)
+  const shaped = (data ?? []).map(t => shapeTimesheet(t as unknown as RawReviewRow))
+  return shaped.sort((a, b) => Number(!!b.correction_requested_at) - Number(!!a.correction_requested_at))
+}
+
+async function getReviewableTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }, expected: 'submitted' | 'approved') {
   const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end').eq('id', id).single()
   if (error) throw new Error(error.message)
   if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't review your own timesheet — another approver needs to.")
-  if (data.status !== 'submitted') throw new Error('This timesheet is no longer awaiting review')
+  if (data.status !== expected) throw new Error(expected === 'submitted' ? 'This timesheet is no longer awaiting review' : 'Only an approved timesheet can be reopened this way')
   return data
 }
 
 export async function approveTimesheet(id: string) {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
-  const timesheet = await getSubmittedTimesheet(admin, id, actor)
+  const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted')
   const { error } = await admin
     .from('timesheets')
-    .update({ status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null })
+    .update({ status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null })
     .eq('id', id)
   if (error) throw new Error(error.message)
+  await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: 'approved' })
 
   await notifyEmployee(admin, timesheet.employee_id, {
     kind: 'approved',
@@ -152,33 +212,107 @@ export async function approveTimesheet(id: string) {
   revalidatePath('/timesheet')
 }
 
+function requireReason(reasonCode: string, note: string) {
+  if (!REOPEN_REASON_CODES.some(c => c.value === reasonCode)) throw new Error('Choose a reason code')
+  const trimmed = note.trim()
+  if (!trimmed) throw new Error('Add notes explaining why')
+  return trimmed
+}
+
 /**
- * Denies a submitted timesheet by sending it back for correction: status returns
- * to 'draft' so the employee can edit and resubmit, and the reason is shown to
- * them on the timesheet. A reason is required — they need to know what to fix.
+ * Sends a SUBMITTED timesheet back for correction (the "deny" of a timesheet): status returns to 'draft' so the
+ * employee can edit and resubmit. A reason code and notes are required and logged.
  */
-export async function returnTimesheet(id: string, reason: string) {
+export async function returnTimesheet(id: string, reasonCode: string, note: string) {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
-  const trimmed = reason.trim()
-  if (!trimmed) throw new Error('Add a reason so the employee knows what to correct')
+  const trimmed = requireReason(reasonCode, note)
   const admin = createAdminClient()
-  const timesheet = await getSubmittedTimesheet(admin, id, actor)
+  const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted')
+  const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
   const { error } = await admin
     .from('timesheets')
-    .update({ status: 'draft', approver_id: actor.id, approved_at: null, return_reason: trimmed })
+    .update({ status: 'draft', approver_id: actor.id, approved_at: null, return_reason: reason, correction_requested_at: null, correction_note: null })
     .eq('id', id)
   if (error) throw new Error(error.message)
+  await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: 'returned', reasonCode, note: trimmed })
 
   await notifyEmployee(admin, timesheet.employee_id, {
     kind: 'returned',
     title: 'Your timesheet was returned for correction',
-    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nReturned by ${actor.name}.\nReason: ${trimmed}\nPlease fix it and resubmit.`,
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nReturned by ${actor.name}.\nReason: ${reason}\nPlease fix it and resubmit.`,
     link: '/timesheet',
     cta: 'Open Timesheet',
   })
 
   revalidatePath('/approvals')
   revalidatePath('/timesheet')
+}
+
+/**
+ * Reopens an APPROVED timesheet so the employee can correct it and resubmit (it then needs re-approval).
+ *   * Before the payroll due date: any approver, with a reason code + notes.
+ *   * After the payroll due date: only the CEO (the "CEO override"), same requirements, logged as an
+ *     override so it stands out as a post-payroll adjustment.
+ */
+export async function reopenTimesheet(id: string, reasonCode: string, note: string) {
+  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const trimmed = requireReason(reasonCode, note)
+  const admin = createAdminClient()
+  const timesheet = await getReviewableTimesheet(admin, id, actor, 'approved')
+
+  const locked = isPayrollLocked(timesheet.period_end)
+  if (locked && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
+    throw new Error(`Payroll for this period was due ${fmtDate(getPayrollDueDate({ end: timesheet.period_end }))}. Only the CEO can reopen it (CEO override).`)
+  }
+
+  const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
+  const { error } = await admin
+    .from('timesheets')
+    .update({ status: 'draft', approver_id: actor.id, approved_at: null, return_reason: reason, correction_requested_at: null, correction_note: null })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+  await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: locked ? 'override_reopened' : 'reopened', reasonCode, note: trimmed })
+
+  await notifyEmployee(admin, timesheet.employee_id, {
+    kind: 'returned',
+    title: locked ? 'Your timesheet was reopened (post-payroll adjustment)' : 'Your approved timesheet was reopened',
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nReopened by ${actor.name}.\nReason: ${reason}\nPlease make the correction and resubmit for approval.`,
+    link: '/timesheet',
+    cta: 'Open Timesheet',
+  })
+
+  revalidatePath('/approvals')
+  revalidatePath('/timesheet')
+}
+
+/**
+ * Employee asks for a submitted/approved timesheet to be reopened. Approvers are alerted; before the payroll due
+ * date any approver can act on it, afterwards only the CEO (override).
+ */
+export async function requestTimesheetCorrection(timesheetId: string, note: string) {
+  const employee = await requireOwnTimesheet(timesheetId)
+  const trimmed = note.trim()
+  if (!trimmed) throw new Error('Describe what needs to be corrected')
+  const admin = createAdminClient()
+  const { data: ts, error: tsError } = await admin.from('timesheets').select('status, period_start, period_end').eq('id', timesheetId).single()
+  if (tsError) throw new Error(tsError.message)
+  if (ts.status === 'draft') throw new Error('This timesheet is still open — you can edit it directly')
+
+  const { error } = await admin
+    .from('timesheets')
+    .update({ correction_requested_at: new Date().toISOString(), correction_note: trimmed })
+    .eq('id', timesheetId)
+  if (error) throw new Error(error.message)
+  await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'correction_requested', reasonCode: 'employee_error', note: trimmed })
+
+  const locked = isPayrollLocked(ts.period_end)
+  await notifyApprovers(admin, employee.id, locked ? REOPEN_OVERRIDE_ROLES : TIMESHEET_APPROVER_ROLES, {
+    title: `Correction requested: ${employee.name}`,
+    body: `Pay period ${fmtDateRange(ts.period_start, ts.period_end)} (${ts.status})\n${trimmed}${locked ? '\nPayroll for this period was already due — a CEO override is needed to reopen it.' : ''}`,
+  })
+
+  revalidatePath('/timesheet')
+  revalidatePath('/approvals')
 }
 
 export type TimesheetReminder = { periodStart: string; periodEnd: string; due: string; daysUntil: number } | null

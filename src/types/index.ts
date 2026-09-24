@@ -140,6 +140,8 @@ export interface Timesheet {
   approver_id: string | null
   approved_at: string | null
   return_reason: string | null
+  correction_requested_at: string | null
+  correction_note: string | null
   created_at: string
 }
 
@@ -150,6 +152,7 @@ export interface TimesheetRow {
   description: string | null
   regular_hours: number
   leave_hours: number
+  holiday_hours: number
   leave_type: LeaveType | null
 }
 
@@ -173,4 +176,25 @@ export interface PortalNotification {
   link: string | null
   created_at: string
   read_at: string | null
+}
+
+export type TimesheetEventAction = 'submitted' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held'
+
+export interface TimesheetEvent {
+  id: string
+  timesheet_id: string
+  actor_id: string | null
+  action: TimesheetEventAction
+  reason_code: string | null
+  note: string | null
+  created_at: string
+}
+
+/** A timesheet as shown to an approver: with its daily rows, audit history, and payroll lock state. */
+export interface TimesheetForReview extends Timesheet {
+  employee_name: string
+  timesheet_rows: { work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; description: string | null }[]
+  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null }[]
+  payroll_due: string
+  payroll_locked: boolean
 }

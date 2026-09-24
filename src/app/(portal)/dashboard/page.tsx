@@ -88,7 +88,8 @@ export default async function DashboardPage() {
 
   const tsTotalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const tsTotalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
-  const tsTotal = tsTotalReg + tsTotalLeave
+  const tsTotalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
+  const tsTotal = tsTotalReg + tsTotalLeave + tsTotalHoliday
   const tsTarget = 80
   const tsPct = Math.min(Math.round((tsTotal / tsTarget) * 100), 100)
   const tsRemaining = Math.max(tsTarget - tsTotal, 0)

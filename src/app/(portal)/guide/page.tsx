@@ -120,7 +120,8 @@ export default async function GuidePage() {
             <Bullets items={[
               <>Hourly employees enter <strong>Regular</strong> hours directly for each day worked.</>,
               <>Salaried employees don&apos;t enter Regular directly — it&apos;s calculated automatically as <strong>8 minus Leave</strong> for each day.</>,
-              <>The <strong>Leave</strong> column can&apos;t be typed in — it fills in automatically from your leave requests (see section 4). To take time off, submit a leave request first; a timesheet with no leave submits as normal.</>,
+              <>The <strong>Leave</strong> column can&apos;t be typed in — it fills in automatically from your leave requests (see section 4). To take time off, submit a leave request first; a timesheet with no leave submits as normal. If a leave request in the pay period is still pending, get it decided before you submit.</>,
+              <>Scheduled holidays fill in automatically as <strong>Holiday</strong> hours (a rose tag) instead of Regular, so holiday time is tracked separately. You can&apos;t edit that column either.</>,
               'Add a short description for each day worked.',
               <>A day showing an amber <strong>Incomplete</strong> tag has less than a full day logged; a day tagged <strong>Leave</strong> has hours logged in the Leave column.</>,
             ]} />
@@ -132,7 +133,7 @@ export default async function GuidePage() {
               'Click inside the signature box and sign your name to certify the hours are accurate.',
               <>Click <strong>Submit &amp; Sign</strong>.</>,
             ]} />
-            <p>Once submitted, the timesheet <strong>locks</strong> — you can&apos;t edit it yourself after that. Your approver is notified by email and in the portal. When they review it you&apos;re notified the same way (the 🔔 in the top bar): it shows as <strong>Approved</strong>, or it&apos;s <strong>returned for correction</strong> with their reason at the top of the timesheet — fix it and submit again. For any other correction on a submitted or approved timesheet, contact your approver directly.</p>
+            <p>Once submitted, the timesheet <strong>locks</strong> — you can&apos;t edit it yourself after that. Your approver is notified by email and in the portal. When they review it you&apos;re notified the same way (the 🔔 in the top bar): it shows as <strong>Approved</strong>, or it&apos;s <strong>returned for correction</strong> with their reason at the top of the timesheet — fix it and submit again. Spotted a mistake after submitting? Click <strong>Request a correction</strong> on the timesheet and say what needs fixing — your approver reopens it and you resubmit. (Once payroll is due for that period, only the CEO can reopen it, so tell us promptly.)</p>
             <p><strong className="text-[#0b2b35]">Exporting.</strong> Use <strong>Export CSV</strong> or <strong>Export PDF</strong> at any time to download or print the current period&apos;s timesheet.</p>
           </Section>
 
@@ -200,7 +201,7 @@ export default async function GuidePage() {
                 <>Click <strong>Deny</strong>, optionally add a reason, then <strong>Confirm Denial</strong>.</>,
               ]} />
               <p><strong className="text-[#0b2b35]">Reviewing an expense</strong> works the same way, in the Expenses tab.</p>
-              <p><strong className="text-[#0b2b35]">Reviewing a timesheet:</strong> open the Timesheets tab, use <strong>Show daily entries</strong> to check the hours, then click <strong>✓ Approve</strong>, or <strong>Return for correction</strong> with a reason (required) to unlock it for the employee.</p>
+              <p><strong className="text-[#0b2b35]">Reviewing a timesheet:</strong> open the Timesheets tab, use <strong>Show daily entries</strong> to check the hours, then click <strong>✓ Approve</strong>, or <strong>Return for correction</strong> with a reason code and notes (both required) to unlock it for the employee. To fix an already-approved timesheet, use the <strong>Approved</strong> tab → <strong>Reopen for correction</strong>; after payroll is due only the CEO sees the <strong>CEO override</strong> button. Employee correction requests are flagged there, and every reopen is recorded in the timesheet&apos;s <strong>History</strong>.</p>
               <p>The employee is emailed and notified in the portal of every approval, denial, or return.</p>
               <p>Decisions are final once confirmed. Issue reports (from Report an Issue) follow their own workflow on the Issue Reports page: Open → Reviewed → Fixed, with an optional note when marked Fixed.</p>
             </Section>

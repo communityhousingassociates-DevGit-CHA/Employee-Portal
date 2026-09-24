@@ -28,7 +28,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   const [{ data: balances }, { data: leaveRequests }, { data: timesheets }, { data: expenses }, { data: salaries }] = await Promise.all([
     admin.from('leave_balances').select('*').in('employee_id', employeeIds),
     admin.from('leave_requests').select('*').in('employee_id', employeeIds).eq('status', 'approved').lte('start_date', periodEnd).gte('end_date', periodStart),
-    admin.from('timesheets').select('*, timesheet_rows(regular_hours, leave_hours)').in('employee_id', employeeIds).eq('period_start', periodStart),
+    admin.from('timesheets').select('*, timesheet_rows(regular_hours, leave_hours, holiday_hours)').in('employee_id', employeeIds).eq('period_start', periodStart),
     admin.from('expenses').select('*').in('employee_id', employeeIds).gte('expense_date', periodStart).lte('expense_date', periodEnd),
     admin.from('employee_current_salary').select('employee_id, annual_salary').in('employee_id', employeeIds),
   ])
@@ -71,12 +71,13 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const timesheetRows = targetEmployees.map(emp => {
     const ts = timesheetByEmployee.get(emp.id)
-    const rows = (ts?.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number }[]
+    const rows = (ts?.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number }[]
     const reg_hours = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
     const leave_hours = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
+    const holiday_hours = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
     const annual_salary = salaryByEmployee.get(emp.id) ?? null
     const weekly_gross = annual_salary !== null ? annual_salary / 52 : null
-    return { id: emp.id, name: emp.name, reg_hours, leave_hours, status: ts?.status ?? 'draft', annual_salary, weekly_gross }
+    return { id: emp.id, name: emp.name, reg_hours, leave_hours, holiday_hours, status: ts?.status ?? 'draft', annual_salary, weekly_gross }
   })
 
   const expenseRows = targetEmployees.map(emp => {

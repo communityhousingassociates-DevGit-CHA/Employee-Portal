@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet } from '@/app/actions/timesheets'
+import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
+import { holidayOn } from '@/lib/holidays'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense } from '@/types'
-import type { PayPeriod } from '@/lib/pay-periods'
+import { isPayrollLocked, getPayrollDueDate, type PayPeriod } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 const AUTOSAVE_DELAY_MS = 1500
@@ -43,8 +44,9 @@ const SALARIED_DAILY_HOURS = 8
 function normalizeRows(rows: TimesheetRowType[], salaried: boolean): EditableRow[] {
   if (!salaried) return rows
   return rows.map(r => {
-    const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.leave_hours)))
-    return { ...r, leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave }
+    const holiday = Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.holiday_hours ?? 0)))
+    const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS - holiday, Number(r.leave_hours)))
+    return { ...r, holiday_hours: holiday, leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave - holiday }
   })
 }
 
@@ -75,6 +77,10 @@ export default function TimesheetClient({
   const [signed, setSigned] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [submitting, setSubmitting] = useState(false)
+  const [showCorrection, setShowCorrection] = useState(false)
+  const [correctionNote, setCorrectionNote] = useState('')
+  const [correctionBusy, setCorrectionBusy] = useState(false)
+  const [correctionError, setCorrectionError] = useState('')
   const [error, setError] = useState('')
   const savingRef = useRef(false)
 
@@ -84,7 +90,8 @@ export default function TimesheetClient({
 
   const totalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
-  const total = totalReg + totalLeave
+  const totalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
+  const total = totalReg + totalLeave + totalHoliday
   const pct = Math.min(Math.round((total / TARGET_HOURS) * 100), 100)
   const remaining = Math.max(TARGET_HOURS - total, 0)
   const over = total > TARGET_HOURS
@@ -194,13 +201,28 @@ export default function TimesheetClient({
     }
   }
 
+  async function handleCorrectionRequest() {
+    setCorrectionBusy(true)
+    setCorrectionError('')
+    try {
+      await requestTimesheetCorrection(timesheet.id, correctionNote)
+      setTimesheet(t => ({ ...t, correction_requested_at: new Date().toISOString(), correction_note: correctionNote.trim() }))
+      setShowCorrection(false)
+      setCorrectionNote('')
+    } catch (e: unknown) {
+      setCorrectionError(e instanceof Error ? e.message : 'Failed to send request')
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
+
   function exportCsv() {
-    const headers = ['Employee', 'Employee ID', 'Date', 'Description', 'Regular Hours', 'Leave Hours', 'Total Hours']
-    const csvRows = rows.map(r => [employeeName, employeeIdLabel, r.work_date, r.description || '', r.regular_hours, r.leave_hours, Number(r.regular_hours) + Number(r.leave_hours)])
-    csvRows.push([employeeName, employeeIdLabel, '', 'Totals', totalReg, totalLeave, total])
+    const headers = ['Employee', 'Employee ID', 'Date', 'Description', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours']
+    const csvRows = rows.map(r => [employeeName, employeeIdLabel, r.work_date, r.description || '', r.regular_hours, r.leave_hours, r.holiday_hours ?? 0, Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0)])
+    csvRows.push([employeeName, employeeIdLabel, '', 'Totals', totalReg, totalLeave, totalHoliday, total])
     if (weeklyGross !== null && periodGross !== null) {
-      csvRows.push([employeeName, employeeIdLabel, '', 'Weekly Gross Wages', '', '', weeklyGross.toFixed(2)])
-      csvRows.push([employeeName, employeeIdLabel, '', 'Pay Period Gross Wages', '', '', periodGross.toFixed(2)])
+      csvRows.push([employeeName, employeeIdLabel, '', 'Weekly Gross Wages', '', '', '', weeklyGross.toFixed(2)])
+      csvRows.push([employeeName, employeeIdLabel, '', 'Pay Period Gross Wages', '', '', '', periodGross.toFixed(2)])
     }
     const csv = [headers, ...csvRows].map(row => row.map(v => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -227,11 +249,38 @@ export default function TimesheetClient({
           <div className="bg-[#f8fcfd] border border-[#d4eef2] rounded-xl p-4 text-left text-[12px] text-gray-500 mb-5">
             <div className="flex justify-between mb-1"><span>Regular hours</span><strong className="text-[#0b2b35]">{totalReg} hrs</strong></div>
             <div className="flex justify-between mb-1"><span>Leave hours</span><strong className="text-[#0b2b35]">{totalLeave} hrs</strong></div>
+            <div className="flex justify-between mb-1"><span>Holiday hours</span><strong className="text-[#0b2b35]">{totalHoliday} hrs</strong></div>
             <div className={`flex justify-between ${periodGross !== null ? 'mb-1' : ''} border-t border-[#e8f4f7] pt-1 mt-1`}><span>Total logged</span><strong className="text-[#0b2b35]">{total} / {TARGET_HOURS} hrs</strong></div>
             {periodGross !== null && (
               <div className="flex justify-between"><span>Pay period gross wages</span><strong className="text-[#0b2b35]">{currency(periodGross)}</strong></div>
             )}
           </div>
+          {timesheet.correction_requested_at ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left text-[12px] text-amber-800 mb-5">
+              <p className="font-semibold">Correction requested {fmtDate(timesheet.correction_requested_at)}</p>
+              <p className="mt-1 whitespace-pre-line">{timesheet.correction_note}</p>
+              <p className="mt-2 text-amber-700">An approver will reopen your timesheet, or reply if they have questions.</p>
+            </div>
+          ) : showCorrection ? (
+            <div className="bg-[#f8fcfd] border border-[#d4eef2] rounded-xl p-4 text-left mb-5">
+              <p className="text-[12px] font-semibold text-[#0b2b35] mb-1">What needs to be corrected?</p>
+              {isPayrollLocked(period.end) && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                  Payroll for this period was due {fmtDate(getPayrollDueDate(period))}. A correction now needs a CEO override, so your request goes to the CEO.
+                </p>
+              )}
+              <textarea value={correctionNote} onChange={e => setCorrectionNote(e.target.value)} rows={3} placeholder="e.g. I worked 6 hours on Thursday, not 8"
+                className="w-full text-[12px] border border-[#d4eef2] rounded-lg px-3 py-2 mb-2 focus:outline-none focus:border-[#02ACC0] bg-white resize-none" />
+              {correctionError && <p className="text-[12px] text-red-600 mb-2">{correctionError}</p>}
+              <div className="flex gap-2">
+                <button onClick={handleCorrectionRequest} disabled={correctionBusy || !correctionNote.trim()}
+                  className="bg-[#02ACC0] text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{correctionBusy ? 'Sending…' : 'Send request'}</button>
+                <button onClick={() => { setShowCorrection(false); setCorrectionNote('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-gray-600 hover:bg-white">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowCorrection(true)} className="text-[13px] font-semibold text-[#02ACC0] hover:underline mb-4 block mx-auto">Request a correction</button>
+          )}
           <Link href="/dashboard" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">← Back to Dashboard</Link>
         </div>
       </div>
@@ -240,8 +289,8 @@ export default function TimesheetClient({
 
   const week1 = rows.slice(0, 5)
   const week2 = rows.slice(5, 10)
-  const week1Total = week1.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours), 0)
-  const week2Total = week2.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours), 0)
+  const week1Total = week1.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
+  const week2Total = week2.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
   const expenseTotal = expenses.reduce((s, e) => s + Number(e.amount), 0)
 
   return (
@@ -330,7 +379,7 @@ export default function TimesheetClient({
 
       {isSalaried && (
         <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
-          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
+          Regular hours default to 8 on every workday; scheduled holidays are filled in automatically as <strong>Holiday</strong> hours instead, so this timesheet totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
         </div>
       )}
 
@@ -338,6 +387,7 @@ export default function TimesheetClient({
         {[
           { label: 'Regular', value: `${totalReg} hrs`, color: 'text-[#0b2b35]' },
           { label: 'Leave', value: `${totalLeave} hrs`, color: 'text-violet-600' },
+          { label: 'Holiday', value: `${totalHoliday} hrs`, color: 'text-rose-500' },
           { label: 'Total', value: `${total} / ${TARGET_HOURS}`, color: over ? 'text-red-500' : 'text-[#0b2b35]' },
           { label: 'Remaining', value: over ? 'Over by ' + (total - TARGET_HOURS) + ' hrs' : `${remaining} hrs`, color: over ? 'text-red-500' : remaining === 0 ? 'text-emerald-600' : 'text-amber-600' },
           ...(weeklyGross !== null ? [{ label: 'Weekly Gross Wages', value: currency(weeklyGross), color: 'text-[#0b2b35]' }] : []),
@@ -360,9 +410,9 @@ export default function TimesheetClient({
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
-        <div className="min-w-[620px]">
-        <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
-          {['Date', 'Description / Project', 'Regular', 'Leave', 'Total'].map((h, i) => (
+        <div className="min-w-[720px]">
+        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
+          {['Date', 'Description / Project', 'Regular', 'Leave', 'Holiday', 'Total'].map((h, i) => (
             <span key={h} className={`text-[10px] uppercase tracking-widest text-gray-400 font-semibold ${i >= 2 ? 'text-center' : ''}`}>{h}</span>
           ))}
         </div>
@@ -371,8 +421,8 @@ export default function TimesheetClient({
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
         {week1.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
-        <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
-          <span className="text-gray-400 col-span-4 text-right font-semibold">
+        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
+          <span className="text-gray-400 col-span-5 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week1Total} hrs</span>
@@ -382,18 +432,19 @@ export default function TimesheetClient({
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
         {week2.map(row => <TimesheetRowView key={row.id} row={row} onUpdate={updateRow} isSalaried={isSalaried} />)}
-        <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
-          <span className="text-gray-400 col-span-4 text-right font-semibold">
+        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
+          <span className="text-gray-400 col-span-5 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week2Total} hrs</span>
         </div>
 
-        <div className="grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
+        <div className="grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
           <span className="font-bold text-[#0b2b35]">Totals</span>
           <span />
           <span className="text-center font-bold text-[#0b2b35]">{totalReg}</span>
           <span className="text-center font-bold text-violet-600">{totalLeave}</span>
+          <span className="text-center font-bold text-rose-500">{totalHoliday}</span>
           <span className="text-center font-bold text-[#0b2b35]">{total} / {TARGET_HOURS}</span>
         </div>
         </div>
@@ -443,15 +494,16 @@ export default function TimesheetClient({
 
 function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean }) {
   const isLeave = Number(row.leave_hours) > 0
-  const rowTotal = Number(row.regular_hours) + Number(row.leave_hours)
-  const isEmpty = rowTotal === 0
+  const isHoliday = !!holidayOn(row.work_date)
+  const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
+  const isEmpty = rowTotal === 0 && !isHoliday
   const d = new Date(`${row.work_date}T00:00:00`)
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
   const dayShort = fmtDateShort(d)
 
   return (
-    <div className={`grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
-      isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
+    <div className={`grid grid-cols-[100px_1fr_90px_90px_90px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
+      isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
     }`}>
       <div>
         <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}</p>
@@ -464,6 +516,7 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
           placeholder="Add description…"
           className="flex-1 px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
         />
+        {isHoliday && <span className="text-[10px] font-semibold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Holiday</span>}
         {isLeave && <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Leave</span>}
         {isEmpty && <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">Incomplete</span>}
       </div>
@@ -480,6 +533,11 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
         title="Added automatically from approved leave requests — use Request Leave to take time off"
         className="w-full text-center px-2 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
         {Number(row.leave_hours)}
+      </div>
+      <div
+        title="Filled automatically on scheduled holidays"
+        className="w-full text-center px-2 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
+        {Number(row.holiday_hours ?? 0)}
       </div>
       <div className={`text-center font-bold ${rowTotal === 8 ? 'text-emerald-600' : rowTotal === 0 ? 'text-gray-300' : 'text-amber-600'}`}>
         {rowTotal > 0 ? rowTotal : '—'}

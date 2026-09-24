@@ -3,16 +3,60 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
-import { distributeLeaveHours, applyLeaveToTimesheets } from '@/lib/leave-timesheet'
-import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
-import { fmtDate } from '@/lib/format-date'
-import { LEAVE_EXPENSE_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
+import { distributeLeaveHours, applyLeaveToTimesheets, type LeavePostingSummary } from '@/lib/leave-timesheet'
+import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notifications'
+import { fmtDate, fmtDateRange } from '@/lib/format-date'
+import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
+import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
 function rangeLabel(start: string, end: string) {
   return start === end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`
+}
+
+/**
+ * Tells the right people what posting an approved leave request did to timesheets that were already
+ * submitted/approved ("late leave"): reopened for re-review (payroll not yet due), or left untouched
+ * because payroll was already due (needs a CEO override if pay must change).
+ */
+async function announceLeavePosting(admin: ReturnType<typeof createAdminClient>, employeeId: string, summary: LeavePostingSummary, leaveLabel: string) {
+  if (summary.reopened.length === 0 && summary.held.length === 0) return
+  const owner = await getRecipient(admin, employeeId)
+  const ownerName = owner?.name ?? 'An employee'
+
+  for (const r of summary.reopened) {
+    const period = fmtDateRange(r.periodStart, r.periodEnd)
+    await notifyEmployee(admin, employeeId, {
+      kind: 'returned',
+      title: 'Your timesheet was reopened — leave added',
+      body: `Pay period ${period}\n${leaveLabel} was added to it. Review your entries and resubmit.`,
+      link: '/timesheet',
+      cta: 'Open Timesheet',
+    })
+    if (r.wasApproved) {
+      await notifyApprovers(admin, employeeId, TIMESHEET_APPROVER_ROLES, {
+        title: `Approved timesheet reopened: ${ownerName}`,
+        body: `Pay period ${period} was reopened because ${leaveLabel} was added. It will return for re-approval once ${ownerName} resubmits.`,
+      })
+    }
+  }
+
+  for (const h of summary.held) {
+    const period = fmtDateRange(h.periodStart, h.periodEnd)
+    await notifyEmployee(admin, employeeId, {
+      kind: 'returned',
+      title: 'Leave approved after payroll was due',
+      body: `Pay period ${period}\n${leaveLabel} was approved and your balance was updated, but payroll for that period was already due, so the timesheet was not changed. Contact your Accounting Manager if your pay needs adjusting.`,
+      link: '/history',
+      cta: 'View My Requests',
+    })
+    await notifyApprovers(admin, employeeId, REOPEN_OVERRIDE_ROLES, {
+      title: `Leave approved after payroll due: ${ownerName}`,
+      body: `${leaveLabel} falls in pay period ${period}, which is past its payroll due date. The timesheet was NOT changed. Use the CEO override (Approvals → Timesheets → Approved) if pay must be adjusted.`,
+    })
+  }
 }
 
 function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'personal_hours' | null {
@@ -70,7 +114,9 @@ export async function createLeaveRequest(data: {
       throw new Error(deductError.message)
     }
     const allocations = distributeLeaveHours(data.start_date, data.end_date, data.hours)
-    await applyLeaveToTimesheets(admin, employee.id, data.leave_type, allocations)
+    const leaveLabel = `${data.leave_type} leave (${rangeLabel(data.start_date, data.end_date)})`
+    const posting = await applyLeaveToTimesheets(admin, employee.id, data.leave_type, allocations, { actorId: employee.id, leaveLabel })
+    await announceLeavePosting(admin, employee.id, posting, leaveLabel)
 
     await notifyEmployee(admin, employee.id, {
       kind: 'approved',
@@ -277,7 +323,9 @@ export async function approveLeaveRequest(id: string) {
   // timesheet for any pay period they haven't opened yet. Pending/denied
   // requests never reach this — only an approval touches the timesheet.
   const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
-  await applyLeaveToTimesheets(admin, request.employee_id, request.leave_type as LeaveType, allocations)
+  const leaveLabel = `${request.leave_type} leave (${rangeLabel(request.start_date, request.end_date)})`
+  const posting = await applyLeaveToTimesheets(admin, request.employee_id, request.leave_type as LeaveType, allocations, { actorId: actor.id, leaveLabel })
+  await announceLeavePosting(admin, request.employee_id, posting, leaveLabel)
 
   await notifyEmployee(admin, request.employee_id, {
     kind: 'approved',

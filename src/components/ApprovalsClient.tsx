@@ -4,19 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
-import { approveTimesheet, returnTimesheet } from '@/app/actions/timesheets'
+import { approveTimesheet, returnTimesheet, reopenTimesheet } from '@/app/actions/timesheets'
+import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
-import type { LeaveRequest, Expense } from '@/types'
+import type { LeaveRequest, Expense, Role, TimesheetForReview } from '@/types'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
-type TimesheetApproval = {
-  id: string
-  period_start: string
-  period_end: string
-  employee_signed_at: string | null
-  employee_name: string
-  timesheet_rows: { work_date: string; regular_hours: number; leave_hours: number; description: string | null }[]
-}
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
 
 // Categories with underscores (rental_car, cash_advance, conference_fees) render wrong
@@ -265,49 +258,103 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
   )
 }
 
-function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided: () => void }) {
-  const [confirming, setConfirming] = useState<'approve' | 'return' | null>(null)
-  const [reason, setReason] = useState('')
+const EVENT_LABELS: Record<string, string> = {
+  submitted: 'Submitted',
+  approved: 'Approved',
+  returned: 'Returned for correction',
+  reopened: 'Reopened',
+  override_reopened: 'Reopened — CEO override',
+  correction_requested: 'Correction requested by employee',
+  leave_reopened: 'Reopened — leave added',
+  leave_held: 'Leave held — payroll already due',
+}
+
+function TimesheetCard({ item, mode, viewerRole, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; onDecided: () => void }) {
+  const [confirming, setConfirming] = useState<'approve' | 'reopen' | null>(null)
+  const [code, setCode] = useState('')
+  const [note, setNote] = useState('')
   const [showDays, setShowDays] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
   const totalReg = item.timesheet_rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const totalLeave = item.timesheet_rows.reduce((s, r) => s + Number(r.leave_hours), 0)
+  const totalHoliday = item.timesheet_rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
+
+  const canOverride = REOPEN_OVERRIDE_ROLES.includes(viewerRole)
+  const isOverride = item.payroll_locked
+  const canReopen = mode === 'pending' || !item.payroll_locked || canOverride
+
+  function startReopen() {
+    setConfirming('reopen')
+    setCode(isOverride && mode === 'approved' ? 'post_payroll_adjustment' : '')
+    setNote('')
+    setError('')
+  }
 
   async function submitApprove() {
     setBusy(true); setError('')
     try { await approveTimesheet(item.id); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to approve'); setBusy(false) }
   }
-  async function submitReturn() {
+  async function submitReopen() {
     setBusy(true); setError('')
-    try { await returnTimesheet(item.id, reason); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to return'); setBusy(false) }
+    try {
+      if (mode === 'pending') await returnTimesheet(item.id, code, note)
+      else await reopenTimesheet(item.id, code, note)
+      onDecided()
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed'); setBusy(false) }
   }
+
+  const reopenLabel = mode === 'pending' ? 'Return for correction' : isOverride ? 'CEO override — reopen' : 'Reopen for correction'
 
   return (
     <div className="bg-white rounded-xl border border-[#d4eef2] shadow-sm overflow-hidden">
-      <div className="h-1 bg-[#02ACC0]" />
+      <div className={`h-1 ${item.correction_requested_at ? 'bg-amber-400' : 'bg-[#02ACC0]'}`} />
       <div className="p-5">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
           <div>
             <p className="font-bold text-[15px] text-[#0b2b35]">{item.employee_name}</p>
             <p className="text-[12px] text-gray-400 mt-0.5">
               Pay period {fmtDateRange(item.period_start, item.period_end)}
-              {item.employee_signed_at && <> · Submitted {daysAgo(item.employee_signed_at)}</>}
+              {mode === 'pending' && item.employee_signed_at && <> · Submitted {daysAgo(item.employee_signed_at)}</>}
+              {mode === 'approved' && item.approved_at && <> · Approved {fmtDate(item.approved_at)}</>}
             </p>
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${item.payroll_locked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                {item.payroll_locked ? `Payroll was due ${fmtDate(item.payroll_due)} — locked` : `Payroll due ${fmtDate(item.payroll_due)}`}
+              </span>
+              {item.correction_requested_at && <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Correction requested</span>}
+            </div>
           </div>
           {!confirming && (
-            <div className="flex gap-2 flex-shrink-0">
-              <button onClick={() => setConfirming('return')} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">Return for correction</button>
-              <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
+            <div className="flex gap-2 flex-shrink-0 items-center">
+              {canReopen ? (
+                <button onClick={startReopen}
+                  className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition-colors ${isOverride && mode === 'approved' ? 'border-amber-300 text-amber-700 hover:bg-amber-50' : 'border-red-200 text-red-500 hover:bg-red-50'}`}>
+                  {reopenLabel}
+                </button>
+              ) : (
+                <span className="text-[11px] text-gray-400 max-w-[14rem] text-right">Payroll already processed — only the CEO can reopen this.</span>
+              )}
+              {mode === 'pending' && (
+                <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
+              )}
             </div>
           )}
         </div>
 
+        {item.correction_requested_at && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-3">
+            <p className="text-[12px] font-semibold text-amber-800">Employee requested a correction · {fmtDate(item.correction_requested_at)}</p>
+            <p className="text-[12px] text-amber-700 mt-1 whitespace-pre-line">{item.correction_note}</p>
+          </div>
+        )}
+
         {error && <div className="bg-red-50 border border-red-200 text-red-600 text-[12px] rounded-lg px-3 py-2 mb-3">{error}</div>}
 
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          {[['Regular', totalReg], ['Leave', totalLeave], ['Total', totalReg + totalLeave]].map(([label, val]) => (
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          {[['Regular', totalReg], ['Leave', totalLeave], ['Holiday', totalHoliday], ['Total', totalReg + totalLeave + totalHoliday]].map(([label, val]) => (
             <div key={label as string} className="bg-[#f8fcfd] rounded-xl p-3">
               <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">{label}</p>
               <p className="text-[14px] font-semibold text-[#0b2b35]">{val} hrs</p>
@@ -315,9 +362,15 @@ function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided
           ))}
         </div>
 
-        <button onClick={() => setShowDays(v => !v)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">
-          {showDays ? 'Hide daily entries' : 'Show daily entries'}
-        </button>
+        <div className="flex gap-4">
+          <button onClick={() => setShowDays(v => !v)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">
+            {showDays ? 'Hide daily entries' : 'Show daily entries'}
+          </button>
+          <button onClick={() => setShowHistory(v => !v)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">
+            {showHistory ? 'Hide history' : `History (${item.events.length})`}
+          </button>
+        </div>
+
         {showDays && (
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-[12px]">
@@ -327,6 +380,7 @@ function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided
                   <th className="py-1.5 pr-3 font-semibold">Description</th>
                   <th className="py-1.5 pr-3 font-semibold text-right">Regular</th>
                   <th className="py-1.5 pr-3 font-semibold text-right">Leave</th>
+                  <th className="py-1.5 pr-3 font-semibold text-right">Holiday</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f0f7f8]">
@@ -336,11 +390,26 @@ function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided
                     <td className="py-1.5 pr-3 text-gray-500">{r.description || <span className="text-gray-300">—</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.regular_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.leave_hours) || <span className="text-gray-300">0</span>}</td>
+                    <td className="py-1.5 pr-3 text-right">{Number(r.holiday_hours) || <span className="text-gray-300">0</span>}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        )}
+
+        {showHistory && (
+          <ul className="mt-3 space-y-2">
+            {item.events.length === 0 && <li className="text-[12px] text-gray-400">No history recorded yet.</li>}
+            {item.events.map(e => (
+              <li key={e.id} className="text-[12px] border-l-2 border-[#d4eef2] pl-3">
+                <p className="font-semibold text-[#0b2b35]">{EVENT_LABELS[e.action] ?? e.action} <span className="font-normal text-gray-400">· {fmtDate(e.created_at)}{e.actor_name ? ` · ${e.actor_name}` : ''}</span></p>
+                {(e.reason_code || e.note) && (
+                  <p className="text-gray-500 mt-0.5 whitespace-pre-line">{e.reason_code ? `${reopenReasonLabel(e.reason_code)}${e.note ? ' — ' : ''}` : ''}{e.note}</p>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
 
         {confirming === 'approve' && (
@@ -354,15 +423,27 @@ function TimesheetCard({ item, onDecided }: { item: TimesheetApproval; onDecided
           </div>
         )}
 
-        {confirming === 'return' && (
-          <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
-            <p className="text-[13px] font-semibold text-red-800 mb-1">Return for correction</p>
-            <p className="text-[12px] text-red-700 mb-2">The timesheet unlocks so the employee can fix it and resubmit. They&apos;ll be notified with your reason.</p>
-            <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Required: what needs to be corrected?" rows={2}
-              className="w-full text-[12px] border border-red-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:border-red-400 bg-white resize-none" />
+        {confirming === 'reopen' && (
+          <div className={`mt-4 rounded-xl p-4 border ${isOverride && mode === 'approved' ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+            <p className="text-[13px] font-semibold text-[#0b2b35] mb-1">{reopenLabel}</p>
+            <p className="text-[12px] text-gray-600 mb-3">
+              {isOverride && mode === 'approved'
+                ? `Payroll for this period was due ${fmtDate(item.payroll_due)}. This is a post-payroll adjustment — it is logged as a CEO override, and the corrected timesheet must be resubmitted and re-approved.`
+                : mode === 'pending'
+                  ? 'The timesheet unlocks so the employee can fix it and resubmit. They’ll be notified with your reason.'
+                  : 'The timesheet returns to the employee as a draft. They must correct it, resubmit, and it needs re-approval.'}
+            </p>
+            <label className="block text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35] mb-1">Reason code</label>
+            <select value={code} onChange={e => setCode(e.target.value)} className="w-full text-[12px] border border-[#d4eef2] rounded-lg px-3 py-2 mb-3 bg-white focus:outline-none focus:border-[#02ACC0]">
+              <option value="">— Select a reason —</option>
+              {REOPEN_REASON_CODES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <label className="block text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35] mb-1">Notes (required)</label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="What needs to be corrected, and why?" rows={2}
+              className="w-full text-[12px] border border-[#d4eef2] rounded-lg px-3 py-2 mb-3 focus:outline-none focus:border-[#02ACC0] bg-white resize-none" />
             <div className="flex gap-2">
-              <button onClick={submitReturn} disabled={busy || !reason.trim()} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">{busy ? 'Returning…' : '✕ Confirm Return'}</button>
-              <button onClick={() => { setConfirming(null); setReason('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors">Cancel</button>
+              <button onClick={submitReopen} disabled={busy || !code || !note.trim()} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">{busy ? 'Working…' : `Confirm — ${reopenLabel}`}</button>
+              <button onClick={() => { setConfirming(null); setNote(''); setCode('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-gray-600 hover:bg-white transition-colors">Cancel</button>
             </div>
           </div>
         )}
@@ -377,12 +458,16 @@ export default function ApprovalsClient({
   initialReviewedLeave,
   initialPendingExpenses,
   initialPendingTimesheets,
+  initialApprovedTimesheets,
+  viewerRole,
 }: {
   approverName: string
   initialPendingLeave: LeaveApproval[]
   initialReviewedLeave: LeaveApproval[]
   initialPendingExpenses: ExpenseApproval[]
-  initialPendingTimesheets: TimesheetApproval[]
+  initialPendingTimesheets: TimesheetForReview[]
+  initialApprovedTimesheets: TimesheetForReview[]
+  viewerRole: Role
 }) {
   const router = useRouter()
   const [category, setCategory] = useState<'leave' | 'expenses' | 'timesheets'>('leave')
@@ -392,6 +477,9 @@ export default function ApprovalsClient({
   const reviewedLeave = initialReviewedLeave
   const pendingExpenses = initialPendingExpenses
   const pendingTimesheets = initialPendingTimesheets
+  const approvedTimesheets = initialApprovedTimesheets
+  const correctionRequests = approvedTimesheets.filter(t => t.correction_requested_at).length
+  const [tsTab, setTsTab] = useState<'pending' | 'approved'>('pending')
 
   const totalHoursPending = pendingLeave.reduce((s, a) => s + Number(a.hours), 0)
   const oldest = pendingLeave.reduce<string | null>((min, a) => (!min || a.created_at < min ? a.created_at : min), null)
@@ -489,17 +577,43 @@ export default function ApprovalsClient({
         )
       )}
       {category === 'timesheets' && (
-        pendingTimesheets.length === 0 ? (
-          <div className="bg-white rounded-xl border border-[#d4eef2] p-14 text-center">
-            <p className="text-4xl mb-3">✅</p>
-            <p className="font-semibold text-[#0b2b35] text-[15px]">All caught up</p>
-            <p className="text-[13px] text-gray-400 mt-1">No submitted timesheets waiting for review.</p>
+        <>
+          <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 w-fit mb-6">
+            {([['pending', `Pending review (${pendingTimesheets.length})`], ['approved', `Approved${correctionRequests > 0 ? ` (${correctionRequests} correction request${correctionRequests > 1 ? 's' : ''})` : ` (${approvedTimesheets.length})`}`]] as const).map(([key, label]) => (
+              <button key={key} onClick={() => setTsTab(key)}
+                className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${tsTab === key ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
+                {label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="space-y-4">
-            {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} onDecided={refresh} />)}
-          </div>
-        )
+
+          {tsTab === 'pending' && (
+            pendingTimesheets.length === 0 ? (
+              <div className="bg-white rounded-xl border border-[#d4eef2] p-14 text-center">
+                <p className="text-4xl mb-3">✅</p>
+                <p className="font-semibold text-[#0b2b35] text-[15px]">All caught up</p>
+                <p className="text-[13px] text-gray-400 mt-1">No submitted timesheets waiting for review.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="pending" viewerRole={viewerRole} onDecided={refresh} />)}
+              </div>
+            )
+          )}
+
+          {tsTab === 'approved' && (
+            approvedTimesheets.length === 0 ? (
+              <div className="bg-white rounded-xl border border-[#d4eef2] p-14 text-center">
+                <p className="text-[13px] text-gray-400">No approved timesheets in the last 90 days.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-[12px] text-gray-500">Reopen an approved timesheet to correct it. Before payroll is due any approver can; after that, only the CEO (override). A reason code and notes are always required and logged.</p>
+                {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} onDecided={refresh} />)}
+              </div>
+            )
+          )}
+        </>
       )}
     </div>
   )

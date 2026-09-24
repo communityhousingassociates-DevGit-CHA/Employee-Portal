@@ -87,6 +87,27 @@ export function getTimesheetDueDate(period: PayPeriod): string {
   return toDateOnly(addDays(end, 2))
 }
 
+// PROVISIONAL (2026-09-24): CHA's payroll for the period ending 2026-09-12 was due 2026-09-24 (paid 2026-09-29
+// by direct deposit) — 12 days after period end. Replace with CHA's real payroll schedule once Carrileen
+// Edwards confirms it. Everything that locks a timesheet keys off this one number.
+export const PAYROLL_DUE_DAYS_AFTER_PERIOD_END = 12
+
+/** Payroll processing due date for a period (YYYY-MM-DD). After it passes the period is "payroll-locked". */
+export function getPayrollDueDate(period: { end: string }): string {
+  const end = new Date(`${period.end}T00:00:00Z`)
+  return toDateOnly(addDays(end, PAYROLL_DUE_DAYS_AFTER_PERIOD_END))
+}
+
+/** Today's date in CHA's timezone (America/New_York), as YYYY-MM-DD. */
+export function todayET(now: Date = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
+/** True once the payroll due date for the period ending `periodEnd` has passed — no ordinary reopening after this. */
+export function isPayrollLocked(periodEnd: string, now: Date = new Date()): boolean {
+  return todayET(now) > getPayrollDueDate({ end: periodEnd })
+}
+
 /** True if `dateStr` (YYYY-MM-DD) is the start date of a pay period relative to `anchorDate`. */
 export function isPeriodBoundary(dateStr: string, anchorDate: string = PAY_PERIOD_ANCHOR): boolean {
   const anchor = new Date(`${anchorDate}T00:00:00Z`)

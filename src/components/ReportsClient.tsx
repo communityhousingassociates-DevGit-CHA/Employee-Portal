@@ -7,7 +7,7 @@ import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
-export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; status: string; annual_salary: number | null; weekly_gross: number | null }
+export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; annual_salary: number | null; weekly_gross: number | null }
 export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
 type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; isManager: boolean }
 
@@ -69,6 +69,7 @@ export default function ReportsClient({
 
   const tsTotalReg = timesheetRows.reduce((s, r) => s + r.reg_hours, 0)
   const tsTotalLeave = timesheetRows.reduce((s, r) => s + r.leave_hours, 0)
+  const tsTotalHoliday = timesheetRows.reduce((s, r) => s + r.holiday_hours, 0)
   const tsSubmittedCount = timesheetRows.filter(r => r.status === 'submitted' || r.status === 'approved').length
   const tsMissingCount = timesheetRows.filter(r => r.status === 'draft').length
   const tsTotalWeeklyGross = timesheetRows.reduce((s, r) => s + (r.weekly_gross ?? 0), 0)
@@ -83,8 +84,8 @@ export default function ReportsClient({
   }
 
   function exportTimesheetsCsv() {
-    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status', 'Annual Salary', 'Weekly Gross Wages']
-    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.reg_hours + r.leave_hours, r.status, r.annual_salary ?? '', r.weekly_gross !== null ? r.weekly_gross.toFixed(2) : ''])
+    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status', 'Annual Salary', 'Weekly Gross Wages']
+    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.holiday_hours, r.reg_hours + r.leave_hours + r.holiday_hours, r.status, r.annual_salary ?? '', r.weekly_gross !== null ? r.weekly_gross.toFixed(2) : ''])
     downloadCsv(headers, csvRows, `CHA-Team-Timesheets-${selectedPeriod.start}.csv`)
   }
 
@@ -192,13 +193,13 @@ export default function ReportsClient({
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-5 py-4 border-b border-[#d4eef2]">
               <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
-              <p className="text-[11px] text-gray-400 mt-0.5">Regular + leave hours logged per employee this pay period</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Regular, leave, and holiday hours logged per employee this pay period</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                    {['Employee', 'Regular Hours', 'Leave Hours', 'Total Hours', 'Status', 'Weekly Gross Wages'].map(h => (
+                    {['Employee', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Total Hours', 'Status', 'Weekly Gross Wages'].map(h => (
                       <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -214,7 +215,8 @@ export default function ReportsClient({
                       </td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
                       <td className="px-5 py-3">{r.leave_hours ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
-                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours} hrs</td>
+                      <td className="px-5 py-3">{r.holiday_hours ? <span className="font-semibold text-rose-500">{r.holiday_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours + r.holiday_hours} hrs</td>
                       <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[r.status] ?? 'bg-gray-100 text-gray-500'}`}>{r.status}</span></td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.weekly_gross !== null ? currency(r.weekly_gross) : <span className="font-normal text-gray-300">—</span>}</td>
                     </tr>
@@ -225,7 +227,8 @@ export default function ReportsClient({
                     <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
                     <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg} hrs</td>
                     <td className="px-5 py-3 font-bold text-violet-600">{tsTotalLeave} hrs</td>
-                    <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave} hrs</td>
+                    <td className="px-5 py-3 font-bold text-rose-500">{tsTotalHoliday} hrs</td>
+                    <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave + tsTotalHoliday} hrs</td>
                     <td className="px-5 py-3" />
                     <td className="px-5 py-3 font-bold text-[#02ACC0]">{currency(tsTotalWeeklyGross)}</td>
                   </tr>

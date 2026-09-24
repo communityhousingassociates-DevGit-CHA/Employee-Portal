@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
+import { holidayOn } from '@/lib/holidays'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
@@ -23,7 +24,8 @@ function workdaysBetween(start: string, end: string): number {
   const cur = new Date(s)
   while (cur <= e) {
     const dow = cur.getDay()
-    if (dow !== 0 && dow !== 6) count++
+    const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`
+    if (dow !== 0 && dow !== 6 && !holidayOn(iso)) count++
     cur.setDate(cur.getDate() + 1)
   }
   return count

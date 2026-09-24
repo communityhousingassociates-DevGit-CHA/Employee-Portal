@@ -122,12 +122,12 @@ export default async function StaffSopPage() {
           <Section id="time-entry" title="3. Procedure — Time Entry">
             <Numbered items={[
               <><strong className="text-[#0b2b35]">Pay period.</strong> Time is recorded on a <strong>bi-weekly</strong> (14-day) cycle, target 80 hours per period.</>,
-              <><strong className="text-[#0b2b35]">Daily entry.</strong> Enter hours worked each day under Regular. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day. The Leave column cannot be typed in — it is filled automatically from approved leave requests (including automatically approved sick leave), so time off must be requested first. A timesheet with no leave can be submitted for approval as normal.</>,
+              <><strong className="text-[#0b2b35]">Daily entry.</strong> Enter hours worked each day under Regular. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day. The Leave column cannot be typed in — it is filled automatically from approved leave requests (including automatically approved sick leave), so time off must be requested first. Scheduled holidays are filled in automatically as <strong>Holiday</strong> hours (instead of Regular) so holiday time is tracked separately. A timesheet with no leave can be submitted for approval as normal; if you have a leave request still pending in that pay period, get it decided before submitting so the leave appears on the timesheet.</>,
               <><strong className="text-[#0b2b35]">Save frequently.</strong> The system autosaves during entry; you may also save manually at any point before submitting.</>,
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. You&apos;re responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if your timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, you must electronically sign, certifying the hours logged are accurate and complete.</>,
               <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further edits. Your approver is notified by email and in the portal, and must approve it in the portal. You are notified of the outcome the same way: if approved, it is marked <strong>Approved</strong>; if returned for correction, it unlocks with the reason shown at the top of the timesheet, and you must fix it and resubmit.</>,
-              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error in a timesheet that is still awaiting review or already approved, contact your approver (Accounting Manager) directly — self-service correction isn&apos;t available once it has been submitted, unless the approver returns it to you.</>,
+              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error after submitting, use <strong>Request a correction</strong> on the timesheet (with a note on what is wrong). Your approver reopens it for you — you then fix it and resubmit for approval. Before payroll is due any approver can reopen it; once payroll is due, only the CEO can (a documented override), so report errors promptly.</>,
             ]} />
           </Section>
 
@@ -176,8 +176,8 @@ export default async function StaffSopPage() {
                 ['Pay period cadence', 'Bi-weekly (14 days) — confirmed'],
                 ['Pay period anchor / start date', 'Periods start 2026-01-14 and every 14 days after (e.g. 2026-09-09, 2026-09-23, 2026-10-07, …)'],
                 ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
-                ['Payroll processing cutoff', 'TBD'],
-                ['Pay date(s)', 'TBD'],
+                ['Payroll processing cutoff', '12 calendar days after each period ends — PROVISIONAL, pending confirmation of CHA&apos;s payroll schedule (e.g. payroll for the period ending 2026-09-12 was due 2026-09-24)'],
+                ['Pay date(s)', 'TBD — pending CHA&apos;s payroll schedule (direct deposit for the period ending 2026-09-12 is 2026-09-29)'],
               ]}
             />
             <p>Until pay dates are confirmed, continue following CHA&apos;s existing payroll calendar for actual pay timing — the portal&apos;s period display should not yet be treated as authoritative for pay dates.</p>

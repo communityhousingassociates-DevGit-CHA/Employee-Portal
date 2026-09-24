@@ -124,12 +124,12 @@ export default async function AdminSopPage() {
           <Section id="time-entry" title="3. Procedure — Time Entry">
             <Numbered items={[
               <><strong className="text-[#0b2b35]">Pay period.</strong> Time is recorded on a <strong>bi-weekly</strong> (14-day) cycle, target 80 hours per period.</>,
-              <><strong className="text-[#0b2b35]">Daily entry.</strong> Employees enter hours worked each day under Regular. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day. The Leave column cannot be typed in — it is filled automatically from approved leave requests (and automatically approved sick leave), so time off must be requested first. A timesheet with no leave is submitted for approval as normal.</>,
+              <><strong className="text-[#0b2b35]">Daily entry.</strong> Employees enter hours worked each day under Regular. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day. The Leave column cannot be typed in — it is filled automatically from approved leave requests (and automatically approved sick leave), so time off must be requested first. Scheduled holidays are filled in automatically as <strong>Holiday</strong> hours (instead of Regular). A timesheet with no leave is submitted for approval as normal; the portal blocks submission while the employee has a pending leave request in that pay period, so the leave is decided first.</>,
               <><strong className="text-[#0b2b35]">Save frequently.</strong> The system autosaves during entry; employees may also save manually at any point before submitting.</>,
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. Employees are responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if the timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, the employee must electronically sign, certifying the hours logged are accurate and complete.</>,
               <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further employee edits. Approvers are notified by email and in the portal and must approve it in the portal (Approvals → Timesheets). The employee is notified of the outcome by email and in the portal: if approved, the timesheet is marked <strong>Approved</strong>; if returned for correction, it unlocks with the approver&apos;s reason and the employee must resubmit. An approver cannot approve their own timesheet — another approver reviews it.</>,
-              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> An employee who discovers an error in a timesheet that is awaiting review or already approved must contact their approver (Accounting Manager) directly — self-service correction is not available once a timesheet has been submitted, unless the approver returns it via <strong>Return for correction</strong>.</>,
+              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> Employees use <strong>Request a correction</strong> on a submitted or approved timesheet; approvers act on it under Approvals → Timesheets. See <em>Reopening timesheets</em> in Section 7.</>,
             ]} />
           </Section>
 
@@ -190,10 +190,22 @@ export default async function AdminSopPage() {
                 ['Pay period cadence', 'Bi-weekly (14 days) — confirmed'],
                 ['Pay period anchor / start date', 'Confirmed 2026-09-22: periods start 2026-01-14 and every 14 days after (e.g. 2026-09-09, 2026-09-23, 2026-10-07, …)'],
                 ['Timesheet submission cutoff', '2 calendar days after each period ends — confirmed.'],
-                ['Payroll processing cutoff', 'TBD'],
-                ['Pay date(s)', 'TBD'],
+                ['Payroll processing cutoff', '12 calendar days after each period ends — PROVISIONAL, pending confirmation of CHA&apos;s payroll schedule (e.g. payroll for the period ending 2026-09-12 was due 2026-09-24)'],
+                ['Pay date(s)', 'TBD — pending CHA&apos;s payroll schedule (direct deposit for the period ending 2026-09-12 is 2026-09-29)'],
               ]}
             />
+            <p className="font-semibold text-[#0b2b35] mt-4">Reopening timesheets</p>
+            <p>Timesheets lock at submission. The payroll due date (provisionally 12 days after period end) is the hard lock. Every reopen — including a return for correction — requires a <strong>reason code and written notes</strong> and is recorded in the timesheet&apos;s history (who, when, why).</p>
+            <Table
+              head={['Stage', 'Reopen?', 'Who', 'Rule']}
+              rows={[
+                ['Submitted, not yet approved', 'Yes', 'Any approver — Return for correction', 'Reason code + notes; employee fixes and resubmits.'],
+                ['Approved, before payroll is due', 'Yes', 'Any approver — Reopen', 'Reason code + notes; goes back to draft and needs re-approval.'],
+                ['After payroll is due', 'Only by override', 'CEO only — CEO override', 'Reason code + notes; logged as a post-payroll adjustment; needs re-approval.'],
+              ]}
+            />
+            <p><strong>Reason codes:</strong> Employee error · Approver error · Leave added or changed · Payroll / accounting discrepancy · Post-payroll adjustment (CEO override) · Other. Employees may ask for a correction in the portal; approvers see it flagged under Approvals → Timesheets → Approved.</p>
+            <p><strong>Late leave:</strong> if leave is approved (or sick leave auto-approved) for dates on a timesheet that is already submitted or approved, and payroll is not yet due, that timesheet is reopened automatically (reason: leave added) and must be re-approved. If payroll is already due, the timesheet is left unchanged and the CEO is alerted; the leave still counts against the balance, and the CEO can use the override if pay must be adjusted.</p>
             <p>This section will be updated once CHA provides the confirmed bi-weekly cycle anchor date and pay dates. Until then, employees should continue to follow CHA&apos;s existing payroll calendar for actual pay timing.</p>
           </Section>
 
