@@ -6,7 +6,7 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { distributeLeaveHours, applyLeaveToTimesheets } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { fmtDate } from '@/lib/format-date'
-import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { LEAVE_EXPENSE_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -36,7 +36,20 @@ export async function createLeaveRequest(data: {
     throw new Error('Jury Duty requests require the summons attached.')
   }
   const admin = createAdminClient()
-  const { error } = await admin.from('leave_requests').insert({
+
+  // Auto-approved types (Sick) skip the approver when the balance covers the request.
+  const col = balanceColumnFor(data.leave_type)
+  let autoApprove = false
+  let balanceBefore = 0
+  if (col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)) {
+    const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+    if (balError) throw new Error(balError.message)
+    balanceBefore = balance ? Number(balance[col]) : 0
+    autoApprove = balanceBefore >= data.hours
+  }
+
+  const now = new Date().toISOString()
+  const { data: created, error } = await admin.from('leave_requests').insert({
     employee_id: employee.id,
     leave_type: data.leave_type,
     start_date: data.start_date,
@@ -44,19 +57,41 @@ export async function createLeaveRequest(data: {
     hours: data.hours,
     note: data.note || null,
     attachment_url: data.attachment_path || null,
-    status: 'pending',
-    employee_signed_at: new Date().toISOString(),
-  })
+    status: autoApprove ? 'approved' : 'pending',
+    approved_at: autoApprove ? now : null,
+    employee_signed_at: now,
+  }).select('id').single()
   if (error) throw new Error(error.message)
 
-  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
-    title: `Leave request from ${employee.name}`,
-    body: `${data.leave_type} · ${rangeLabel(data.start_date, data.end_date)} · ${data.hours} hrs${data.note ? `\nNote: ${data.note}` : ''}`,
-  })
+  if (autoApprove && col) {
+    const { error: deductError } = await admin.from('leave_balances').update({ [col]: balanceBefore - data.hours }).eq('employee_id', employee.id)
+    if (deductError) {
+      await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
+      throw new Error(deductError.message)
+    }
+    const allocations = distributeLeaveHours(data.start_date, data.end_date, data.hours)
+    await applyLeaveToTimesheets(admin, employee.id, data.leave_type, allocations)
+
+    await notifyEmployee(admin, employee.id, {
+      kind: 'approved',
+      title: `Your ${data.leave_type} leave was recorded`,
+      body: `${data.leave_type} · ${rangeLabel(data.start_date, data.end_date)} · ${data.hours} hrs\nApproved automatically — ${data.leave_type} leave needs no approval while your balance covers it. New balance: ${balanceBefore - data.hours} hrs.`,
+      link: '/history',
+      cta: 'View My Requests',
+    })
+  } else {
+    const overBalance = col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)
+    await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+      title: `Leave request from ${employee.name}`,
+      body: `${data.leave_type} · ${rangeLabel(data.start_date, data.end_date)} · ${data.hours} hrs${overBalance ? ` (exceeds available balance of ${balanceBefore} hrs — needs approval)` : ''}${data.note ? `\nNote: ${data.note}` : ''}`,
+    })
+  }
 
   revalidatePath('/request')
   revalidatePath('/history')
   revalidatePath('/dashboard')
+  revalidatePath('/timesheet')
+  return { autoApproved: autoApprove }
 }
 
 export async function getLeaveAttachmentUploadUrl(fileName: string) {

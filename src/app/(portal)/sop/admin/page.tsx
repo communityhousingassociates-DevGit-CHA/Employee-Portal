@@ -124,7 +124,7 @@ export default async function AdminSopPage() {
           <Section id="time-entry" title="3. Procedure — Time Entry">
             <Numbered items={[
               <><strong className="text-[#0b2b35]">Pay period.</strong> Time is recorded on a <strong>bi-weekly</strong> (14-day) cycle, target 80 hours per period.</>,
-              <><strong className="text-[#0b2b35]">Daily entry.</strong> Employees enter hours worked each day under Regular, and any time off under Leave. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day — they only need to enter Leave.</>,
+              <><strong className="text-[#0b2b35]">Daily entry.</strong> Employees enter hours worked each day under Regular. Hourly employees enter Regular hours directly; salaried employees&apos; Regular hours are system-calculated as 8 minus Leave hours for each day. The Leave column cannot be typed in — it is filled automatically from approved leave requests (and automatically approved sick leave), so time off must be requested first. A timesheet with no leave is submitted for approval as normal.</>,
               <><strong className="text-[#0b2b35]">Save frequently.</strong> The system autosaves during entry; employees may also save manually at any point before submitting.</>,
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. Employees are responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if the timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, the employee must electronically sign, certifying the hours logged are accurate and complete.</>,
@@ -141,7 +141,7 @@ export default async function AdminSopPage() {
               'Leave is recorded in hourly increments; 8 hours = 1 full workday.',
               'Employees should check the Team Leave Calendar for overlapping team absences before submitting.',
               <>The request must be electronically signed by the employee before submission. An attachment is optional for every leave type except Jury Duty, where the summons is required — the portal blocks submission without it.</>,
-              <>Submitted requests are status <strong>Pending</strong> until an approver acts in the portal; no leave should be taken on the assumption of approval until status changes to <strong>Approved</strong>. The employee receives an email and a portal notification when the request is approved or denied.</>,
+              <>Submitted requests are status <strong>Pending</strong> until an approver acts in the portal; no leave should be taken on the assumption of approval until status changes to <strong>Approved</strong>. The employee receives an email and a portal notification when the request is approved or denied. <strong>Sick leave</strong> needs no approval as long as the employee has enough sick balance: it is approved automatically at submission (balance deducted, days posted to the timesheet, employee notified) and never enters the Approvals queue. A sick request that exceeds the available balance is treated as a negative balance and routed to an approver.</>,
             ]} />
             <p className="font-semibold text-[#0b2b35]">Accrual policy</p>
             <Table

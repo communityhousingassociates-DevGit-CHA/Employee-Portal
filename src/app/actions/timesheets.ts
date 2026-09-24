@@ -73,7 +73,8 @@ export async function saveTimesheetDraft(
   for (const row of rows) {
     const { error } = await admin
       .from('timesheet_rows')
-      .update({ description: row.description, regular_hours: row.regular_hours, leave_hours: row.leave_hours })
+      // Leave hours are never written from here — they come only from approved (or auto-approved sick) leave requests.
+      .update({ description: row.description, regular_hours: row.regular_hours })
       .eq('id', row.id)
       .eq('timesheet_id', timesheetId)
     if (error) throw new Error(error.message)

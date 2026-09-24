@@ -330,7 +330,7 @@ export default function TimesheetClient({
 
       {isSalaried && (
         <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
-          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. Log any sick, PTO, or other time off under <strong>Leave</strong> — <strong>Regular</strong> adjusts automatically so each day still totals 8.
+          Regular hours default to 8/day so this timesheet totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
         </div>
       )}
 
@@ -449,15 +449,6 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
   const dayShort = fmtDateShort(d)
 
-  function handleLeaveChange(v: number) {
-    if (isSalaried) {
-      const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS, v))
-      onUpdate(row.id, { leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave })
-    } else {
-      onUpdate(row.id, { leave_hours: v })
-    }
-  }
-
   return (
     <div className={`grid grid-cols-[100px_1fr_100px_100px_70px] gap-3 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
       isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
@@ -485,7 +476,11 @@ function TimesheetRowView({ row, onUpdate, isSalaried }: { row: EditableRow; onU
       ) : (
         <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} />
       )}
-      <HoursInput value={Number(row.leave_hours)} onChange={handleLeaveChange} max={isSalaried ? SALARIED_DAILY_HOURS : 24} />
+      <div
+        title="Added automatically from approved leave requests — use Request Leave to take time off"
+        className="w-full text-center px-2 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
+        {Number(row.leave_hours)}
+      </div>
       <div className={`text-center font-bold ${rowTotal === 8 ? 'text-emerald-600' : rowTotal === 0 ? 'text-gray-300' : 'text-amber-600'}`}>
         {rowTotal > 0 ? rowTotal : '—'}
       </div>

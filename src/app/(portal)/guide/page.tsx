@@ -119,7 +119,8 @@ export default async function GuidePage() {
             <p className="font-semibold text-[#0b2b35]">Entering hours</p>
             <Bullets items={[
               <>Hourly employees enter <strong>Regular</strong> hours directly for each day worked.</>,
-              <>Salaried employees don&apos;t enter Regular directly — it&apos;s calculated automatically as <strong>8 minus Leave</strong> for each day. Log any time off in the <strong>Leave</strong> column and Regular adjusts on its own.</>,
+              <>Salaried employees don&apos;t enter Regular directly — it&apos;s calculated automatically as <strong>8 minus Leave</strong> for each day.</>,
+              <>The <strong>Leave</strong> column can&apos;t be typed in — it fills in automatically from your leave requests (see section 4). To take time off, submit a leave request first; a timesheet with no leave submits as normal.</>,
               'Add a short description for each day worked.',
               <>A day showing an amber <strong>Incomplete</strong> tag has less than a full day logged; a day tagged <strong>Leave</strong> has hours logged in the Leave column.</>,
             ]} />
@@ -140,13 +141,13 @@ export default async function GuidePage() {
             <p className="font-semibold text-[#0b2b35]">1. Choose a leave type</p>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
-                <thead><tr className="border-b border-[#f0f7f8]"><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Type</th><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Draws from balance?</th></tr></thead>
+                <thead><tr className="border-b border-[#f0f7f8]"><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Type</th><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Draws from balance?</th><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Needs approval?</th></tr></thead>
                 <tbody>
-                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🌴 PTO</td><td className="py-1.5">Yes</td></tr>
-                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🤒 Sick Leave</td><td className="py-1.5">Yes</td></tr>
-                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🗓 Vacation</td><td className="py-1.5">Yes</td></tr>
-                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🕊 Bereavement</td><td className="py-1.5">No</td></tr>
-                  <tr><td className="py-1.5">⚖️ Jury Duty</td><td className="py-1.5">No</td></tr>
+                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🌴 PTO</td><td className="py-1.5">Yes</td><td className="py-1.5">Yes</td></tr>
+                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🤒 Sick Leave</td><td className="py-1.5">Yes</td><td className="py-1.5">No — automatic if your balance covers it</td></tr>
+                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🗓 Vacation</td><td className="py-1.5">Yes</td><td className="py-1.5">Yes</td></tr>
+                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🕊 Bereavement</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
+                  <tr><td className="py-1.5">⚖️ Jury Duty</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
                 </tbody>
               </table>
             </div>

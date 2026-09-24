@@ -47,6 +47,7 @@ export default function RequestClient({
   const fileRef = useRef<HTMLInputElement>(null)
   const [signed, setSigned] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [autoApproved, setAutoApproved] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<Conflict[]>([])
@@ -93,7 +94,8 @@ export default function RequestClient({
         if (!res.ok) throw new Error('Attachment upload failed — please try again')
         attachment_path = path
       }
-      await createLeaveRequest({ leave_type: leaveType, start_date: start, end_date: end, hours: hoursNum, note, attachment_path })
+      const result = await createLeaveRequest({ leave_type: leaveType, start_date: start, end_date: end, hours: hoursNum, note, attachment_path })
+      setAutoApproved(result.autoApproved)
       setSubmitted(true)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to submit request')
@@ -107,12 +109,16 @@ export default function RequestClient({
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">✅</div>
-          <h2 className="text-[20px] font-bold text-[#0b2b35] mb-2">Request Submitted</h2>
+          <h2 className="text-[20px] font-bold text-[#0b2b35] mb-2">{autoApproved ? `${leaveType} Leave Recorded` : 'Request Submitted'}</h2>
           <p className="text-[13px] text-gray-500 mb-1">
             <strong className="text-[#0b2b35]">{leaveType}</strong> · {start === end ? fmtDate(start) : `${fmtDate(start)} – ${fmtDate(end)}`}
           </p>
           <p className="text-[12px] text-gray-400 mb-1">{employeeName} · Employee ID {employeeIdLabel}</p>
-          <p className="text-[13px] text-gray-500 mb-6">A manager will be notified to review and approve.</p>
+          <p className="text-[13px] text-gray-500 mb-6">
+            {autoApproved
+              ? 'Approved automatically — your balance covers it. Your balance is updated and the days are on your timesheet.'
+              : 'Your approvers have been notified by email and will review it in the portal. You\u2019ll be notified of the decision.'}
+          </p>
           <div className="flex flex-col gap-2">
             <Link href="/history" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">View My Requests</Link>
             <button onClick={() => { setSubmitted(false); setSigned(false); setStart(''); setEnd(''); setHours(''); setNote(''); setAttachment(null) }}
@@ -271,6 +277,7 @@ export default function RequestClient({
                     </div>
                   )}
                   {isNegative && <div className="mt-3 text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2">Negative balance will require manager approval.</div>}
+                  {leaveType === 'Sick' && hoursNum > 0 && !isNegative && <div className="mt-3 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2">Sick leave is approved automatically when your balance covers it.</div>}
                 </>
               ) : <p className="text-[12px] text-gray-400">{leaveType} does not draw from your leave balance.</p>}
             </div>
@@ -314,7 +321,7 @@ export default function RequestClient({
 
           <div className="bg-[#f8fcfd] rounded-xl border border-[#e8f4f7] p-4 space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Policy Reminders</p>
-            {['Leave requires approval before it is taken.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Vacation days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
+            {['PTO, Vacation, Jury Duty, and Bereavement need approval before they are taken. Sick leave is approved automatically when your balance covers it.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Vacation days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
               <div key={tip} className="flex gap-2 text-[11px] text-gray-500"><span className="text-[#02ACC0] flex-shrink-0 mt-0.5">·</span>{tip}</div>
             ))}
           </div>
