@@ -29,8 +29,12 @@ export async function sendApprovalDigest(admin: SupabaseClient): Promise<{ sent:
   ])
   for (const r of [leave, expenses, sheets]) if (r.error) throw new Error(r.error.message)
 
+  // Test accounts (workflow testing) never trigger reminders to the real approvers.
+  const { data: testAccounts } = await admin.from('employees').select('id').eq('is_test_account', true)
+  const testIds = new Set((testAccounts ?? []).map(t => t.id as string))
+
   const toItems = (rows: { employee_id: string; employee: unknown; [k: string]: unknown }[] | null, key: string): Item[] =>
-    (rows ?? []).map(r => ({ employeeId: r.employee_id, name: nameOf(r.employee), ageDays: ageDays(r[key] as string, now) }))
+    (rows ?? []).filter(r => !testIds.has(r.employee_id)).map(r => ({ employeeId: r.employee_id, name: nameOf(r.employee), ageDays: ageDays(r[key] as string, now) }))
   const groups = [
     { label: 'Leave requests', items: toItems(leave.data as never, 'created_at') },
     { label: 'Expenses', items: toItems(expenses.data as never, 'created_at') },

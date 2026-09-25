@@ -26,14 +26,19 @@ export function canSelfApprove(role: Role): boolean {
   return SELF_APPROVAL.betaOverride || SELF_APPROVAL.rolesAfterBeta.includes(role)
 }
 
-// Notification TEST MODE (set 2026-09-24). While `enabled`:
+// Notification TEST MODE. Switched OFF 2026-09-25 — real submissions now alert the real approvers (Carrileen, Nico) by
+// email and in the portal. Flip `enabled` back to true to route every approver alert to `emailRecipients` instead.
+//
+// Independent of `enabled`: anything submitted by a test account (employees.is_test_account, e.g. "Test User") is ALWAYS
+// alerted to `emailRecipients` only — bell and email — and left out of the approver digest, so workflow testing never
+// reaches real approvers. While `enabled`:
 //   * approver-alert emails (new leave request / expense / timesheet) go ONLY to `emailRecipients`
 //     instead of the real approvers, and are labelled as test alerts saying who they'd normally reach;
 //   * no notification email is ever sent to someone holding a role in `neverEmailRoles` (the CEO).
 // In-portal notifications (the bell) are unaffected. Flip `enabled` to false to go live.
 export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string[]; neverEmailRoles: Role[] } = {
-  enabled: true,
-  // 2026-09-26: approver alerts go to johnnyrio22 for the Test User → JRio approval test. Add Carrileen back for her testing.
+  enabled: false,
+  // Who receives alerts for test-account submissions (and for everything when `enabled`).
   emailRecipients: ['johnnyrio22@gmail.com'],
   neverEmailRoles: ['ceo'],
 }

@@ -140,8 +140,16 @@ type Payload = { kind: NotificationKind; title: string; body: string; link: stri
 /** Tells every approver holding one of `roles` (except the submitter) that something is waiting in their Approvals queue. Never throws. */
 export async function notifyApprovers(admin: SupabaseClient, submitterId: string, roles: Role[], payload: Omit<Payload, 'kind' | 'link'>) {
   try {
-    const approvers = await getApprovers(admin, submitterId, roles)
     const n = { ...payload, kind: 'approval_needed' as const, link: '/approvals', cta: payload.cta ?? 'Review in Portal' }
+
+    // A test account's submission only ever reaches the test recipients (bell and email) — never the real approvers.
+    const { data: who } = await admin.from('employees').select('is_test_account').eq('id', submitterId).maybeSingle()
+    if (who?.is_test_account) {
+      const { data: testApprovers } = await admin.from('employees').select('id, email, name, role').in('email', NOTIFICATION_TEST_MODE.emailRecipients).in('role', roles).eq('is_active', true).neq('id', submitterId)
+      return await notify(admin, (testApprovers ?? []) as Recipient[], n, { to: (testApprovers ?? []) as Recipient[], testNote: 'submitted by a test account — real approvers were not notified.' })
+    }
+
+    const approvers = await getApprovers(admin, submitterId, roles)
     if (!NOTIFICATION_TEST_MODE.enabled) return await notify(admin, approvers, n)
 
     // Test mode: approvers still get the in-portal notice, but the email alert goes to the test recipients
