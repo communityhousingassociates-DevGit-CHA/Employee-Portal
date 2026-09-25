@@ -145,7 +145,7 @@ export async function notifyApprovers(admin: SupabaseClient, submitterId: string
     // A test account's submission only ever reaches the test recipients (bell and email) — never the real approvers.
     const { data: who } = await admin.from('employees').select('is_test_account').eq('id', submitterId).maybeSingle()
     if (who?.is_test_account) {
-      const { data: testApprovers } = await admin.from('employees').select('id, email, name, role').in('email', NOTIFICATION_TEST_MODE.emailRecipients).in('role', roles).eq('is_active', true).neq('id', submitterId)
+      const { data: testApprovers } = await admin.from('employees').select('id, email, name, role').in('email', NOTIFICATION_TEST_MODE.emailRecipients).eq('is_active', true).neq('id', submitterId)
       return await notify(admin, (testApprovers ?? []) as Recipient[], n, { to: (testApprovers ?? []) as Recipient[], testNote: 'submitted by a test account — real approvers were not notified.' })
     }
 
