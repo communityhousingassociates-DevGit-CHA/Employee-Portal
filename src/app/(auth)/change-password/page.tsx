@@ -27,7 +27,7 @@ export default function ChangePasswordPage() {
     }
     setLoading(true)
     const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({ password })
+    const { error } = await supabase.auth.updateUser({ password, data: { password_set_at: new Date().toISOString() } })
     if (error) {
       setError(error.message)
       setLoading(false)

@@ -188,14 +188,18 @@ export async function setTemporaryPassword(id: string): Promise<string> {
 
 export type InviteStatus = 'not_invited' | 'invited' | 'active'
 
-/** Every auth user's id → whether they have ever signed in. */
+/**
+ * Every auth user's id → whether they have actually set up their account (chosen a password). NOT "has a sign-in
+ * timestamp": opening the invite link stamps last_sign_in_at even when the visit was an email security scanner
+ * prefetching it, which used to make Resend Invite skip people who had never set a password.
+ */
 async function getSignInMap(): Promise<Map<string, boolean>> {
   const admin = createAdminClient()
   const map = new Map<string, boolean>()
   for (let page = 1; ; page++) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
     if (error) throw new Error(error.message)
-    for (const u of data.users) map.set(u.id, !!u.last_sign_in_at)
+    for (const u of data.users) map.set(u.id, !!(u.user_metadata as { password_set_at?: string } | null)?.password_set_at)
     if (data.users.length < 1000) break
   }
   return map
@@ -206,14 +210,15 @@ export async function getEmployees() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name)')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
     .order('name')
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()
   return (data ?? []).map(e => {
     const { tier, ptoRate } = calcTier(e.hire_date)
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
-    const invite_status: InviteStatus = !e.user_id ? 'not_invited' : signedIn.get(e.user_id) ? 'active' : 'invited'
+    // Active = set a password through the portal (flag), or has signed in with one before (login_count covers accounts created earlier).
+    const invite_status: InviteStatus = !e.user_id ? 'not_invited' : (signedIn.get(e.user_id) || (e.login_count ?? 0) > 0) ? 'active' : 'invited'
     return { ...e, tier, accrual: ptoRate, status: e.is_active ? 'active' : 'archived', grant_name: grant?.name ?? null, invite_status }
   })
 }
@@ -226,8 +231,8 @@ export async function getEmployees() {
  *
  * Re-sending: Supabase refuses to invite an email that already has an auth
  * user, so an invited-but-never-signed-in account is replaced with a fresh
- * one. That's only done after confirming via last_sign_in_at that the person
- * has never signed in — an account that has been used is never touched.
+ * one. That's only done after confirming the person has never set a password
+ * (no password_set_at flag and no portal logins) — an account that has been used is never touched.
  */
 export async function sendInvites(
   employeeIds: string[]
@@ -236,7 +241,7 @@ export async function sendInvites(
   const admin = createAdminClient()
   const { data: employees, error } = await admin
     .from('employees')
-    .select('id, email, first_name, user_id, is_active')
+    .select('id, email, first_name, user_id, is_active, login_count')
     .in('id', employeeIds)
   if (error) throw new Error(error.message)
 
@@ -251,7 +256,8 @@ export async function sendInvites(
     if (emp.user_id) {
       const { data: existing, error: getError } = await admin.auth.admin.getUserById(emp.user_id)
       if (getError) { failed.push({ email: emp.email, error: getError.message }); continue }
-      if (existing.user?.last_sign_in_at) { skipped.push(emp.email); continue } // already using the portal
+      const setUp = !!(existing.user?.user_metadata as { password_set_at?: string } | null)?.password_set_at || (emp.login_count ?? 0) > 0
+      if (setUp) { skipped.push(emp.email); continue } // already using the portal
 
       const { error: unlinkError } = await admin.from('employees').update({ user_id: null }).eq('id', emp.id)
       if (unlinkError) { failed.push({ email: emp.email, error: unlinkError.message }); continue }

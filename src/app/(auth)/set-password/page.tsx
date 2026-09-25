@@ -83,7 +83,8 @@ function SetPasswordForm() {
         return
       }
     }
-    const { error } = await supabase.auth.updateUser({ password })
+    // password_set_at marks the account as set up, so admins' Resend Invite never replaces it (a scanner opening the link stamps a sign-in without a password).
+    const { error } = await supabase.auth.updateUser({ password, data: { password_set_at: new Date().toISOString() } })
     if (error) {
       setError(error.message)
       setLoading(false)
