@@ -8,7 +8,7 @@ import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
-import { getCurrentPeriod, isPayrollLocked, todayET, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { todayET, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
@@ -102,8 +102,6 @@ export default function RequestClient({
   // Planned leave can be booked well ahead; sick leave can't (no one can schedule being sick).
   const latest = leaveType === 'Sick' ? latestSickLeaveDate() : latestLeaveDate()
   const beyondLatest = !!end && end > latest
-  // Payroll already due for the period the leave starts in: the request is accepted but the timesheet isn't changed.
-  const startInLockedPeriod = !!start && start >= earliest && isPayrollLocked(getCurrentPeriod(undefined, new Date(`${start}T00:00:00Z`)).end)
   const canSubmit = !closedHit && !beyondLatest && signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
   async function handleSubmit() {
@@ -156,7 +154,7 @@ export default function RequestClient({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Request Leave</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">Request / Use Leave</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Sent to a manager for approval</p>
           <p className="text-[12px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel}</p>
         </div>
@@ -227,11 +225,6 @@ export default function RequestClient({
             {closedHit && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">
                 {fmtDate(closedHit.start)} – {fmtDate(closedHit.end)} has been closed by accounting, so no new leave can be entered for those dates. Choose different dates or contact your Accounting Manager.
-              </div>
-            )}
-            {startInLockedPeriod && (
-              <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2 mb-4">
-                Payroll for this pay period was already due. Your leave will be recorded, but your timesheet for that period won&apos;t be changed — contact your Accounting Manager if your pay needs adjusting.
               </div>
             )}
             <div className="flex gap-3 items-end">

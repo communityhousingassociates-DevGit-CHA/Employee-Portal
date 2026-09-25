@@ -70,7 +70,7 @@ const TOC = [
   { id: 'time-entry', label: '3. Time Entry' },
   { id: 'leave', label: '4. Leave Requests' },
   { id: 'expenses', label: '5. Expense & Mileage Reimbursement' },
-  { id: 'payroll', label: '6. Payroll Cutoff & Pay Dates' },
+  { id: 'payroll', label: '6. Pay Periods & Pay Dates' },
   { id: 'issues', label: '7. Error, Discrepancy & Issue Reporting' },
   { id: 'security', label: '8. Account Security' },
   { id: 'effective', label: '9. Effective Date' },
@@ -130,7 +130,7 @@ export default async function StaffSopPage() {
               <><strong className="text-[#0b2b35]">Deadline.</strong> The timesheet for a pay period is due <strong>2 calendar days after the period ends</strong>. You&apos;re responsible for submitting on time. The Dashboard shows an automatic reminder starting 2 days before the cutoff (and again 1 day before) if your timesheet is still unsubmitted.</>,
               <><strong className="text-[#0b2b35]">Certification.</strong> Before submission, you must electronically sign, certifying the hours logged are accurate and complete.</>,
               <><strong className="text-[#0b2b35]">Submission.</strong> Once submitted, the timesheet is locked from further edits. Your approver is notified by email and in the portal, and must approve it in the portal. You are notified of the outcome the same way: if approved, it is marked <strong>Approved</strong>; if returned for correction, it unlocks with the reason shown at the top of the timesheet, and you must fix it and resubmit.</>,
-              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error after submitting, use <strong>Request a correction</strong> on the timesheet (with a note on what is wrong). Your approver reopens it for you — you then fix it and resubmit for approval. Before payroll is due any approver can reopen it; once payroll is due, only the CEO can (a documented override), so report errors promptly.</>,
+              <><strong className="text-[#0b2b35]">Corrections after submission.</strong> If you discover an error after submitting, use <strong>Request a correction</strong> on the timesheet (with a note on what is wrong). Your approver reopens it for you — you then fix it and resubmit for approval. While the pay period is open any approver can reopen it; once accounting has closed the period, only the CEO can (a documented override), so report errors promptly.</>,
             ]} />
           </Section>
 
@@ -171,7 +171,7 @@ export default async function StaffSopPage() {
             <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO for review, who are notified by email and in the portal, and show status Pending → Approved/Denied. You receive an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
           </Section>
 
-          <Section id="payroll" title="6. Payroll Cutoff & Pay Dates">
+          <Section id="payroll" title="6. Pay Periods & Pay Dates">
             <p>Pay periods run bi-weekly, Sunday through Saturday, and pay is deposited directly on the Tuesday 17 days after a period ends. The portal follows this schedule.</p>
             <Table
               head={['Item', 'Value']}
@@ -179,14 +179,13 @@ export default async function StaffSopPage() {
                 ['Pay period cadence', 'Bi-weekly (14 days), Sunday through Saturday — per CHA&apos;s payroll schedule'],
                 ['Pay period anchor / start date', 'Periods start 2026-09-13 and every 14 days after (2026-09-27, 2026-10-11, …), continuing through 2027 on the same cycle'],
                 ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
-                ['Payroll processing cutoff', '12 calendar days after each period ends (5 days before the pay date) — inferred from CHA&apos;s payroll for the period ending 2026-09-12, which was due 2026-09-24; to be confirmed with the Accounting Manager'],
                 ['Pay date', 'Direct deposit on the Tuesday 17 days after each period ends. CHA&apos;s schedule is confirmed through 2027-01-05; later dates follow the same cycle and may shift for bank holidays.'],
               ]}
             />
             <p className="font-semibold text-[#0b2b35] mt-4">Upcoming pay periods</p>
             <Table
-              head={['Pay period', 'Timesheet due', 'Payroll due', 'Pay date']}
-              rows={payCalendar.map(c => [fmtDateRange(c.start, c.end), fmtDate(c.timesheetDue), fmtDate(c.payrollDue), `${fmtDate(c.payDate)}${c.confirmed ? '' : ' (projected)'}`])}
+              head={['Pay period', 'Timesheet due', 'Pay date']}
+              rows={payCalendar.map(c => [fmtDateRange(c.start, c.end), fmtDate(c.timesheetDue), `${fmtDate(c.payDate)}${c.confirmed ? '' : ' (projected)'}`])}
             />
           </Section>
 

@@ -71,7 +71,7 @@ const TOC = [
   { id: 'leave', label: '4. Leave Requests' },
   { id: 'expenses', label: '5. Expense & Mileage Reimbursement' },
   { id: 'approvals', label: '6. Approvals' },
-  { id: 'payroll', label: '7. Payroll Cutoff & Pay Dates' },
+  { id: 'payroll', label: '7. Pay Periods & Pay Dates' },
   { id: 'issues', label: '8. Error, Discrepancy & Issue Reporting' },
   { id: 'security', label: '9. Account Security' },
   { id: 'effective', label: '10. Effective Date & Review' },
@@ -185,7 +185,7 @@ export default async function AdminSopPage() {
             ]} />
           </Section>
 
-          <Section id="payroll" title="7. Payroll Cutoff & Pay Dates">
+          <Section id="payroll" title="7. Pay Periods & Pay Dates">
             <p>Pay periods run bi-weekly, Sunday through Saturday, and pay is deposited directly on the Tuesday 17 days after a period ends. The portal follows CHA&apos;s payroll schedule (received 2026-09-25).</p>
             <Table
               head={['Item', 'Value']}
@@ -193,33 +193,32 @@ export default async function AdminSopPage() {
                 ['Pay period cadence', 'Bi-weekly (14 days), Sunday through Saturday — per CHA&apos;s payroll schedule'],
                 ['Pay period anchor / start date', 'Periods start 2026-09-13 and every 14 days after (2026-09-27, 2026-10-11, …), continuing through 2027 on the same cycle'],
                 ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
-                ['Payroll processing cutoff', '12 calendar days after each period ends (5 days before the pay date) — inferred from CHA&apos;s payroll for the period ending 2026-09-12, which was due 2026-09-24; to be confirmed with the Accounting Manager'],
                 ['Pay date', 'Direct deposit on the Tuesday 17 days after each period ends. CHA&apos;s schedule is confirmed through 2027-01-05; later dates follow the same cycle and may shift for bank holidays.'],
               ]}
             />
             <p className="font-semibold text-[#0b2b35] mt-4">Upcoming pay periods</p>
             <Table
-              head={['Pay period', 'Timesheet due', 'Payroll due', 'Pay date']}
-              rows={payCalendar.map(c => [fmtDateRange(c.start, c.end), fmtDate(c.timesheetDue), fmtDate(c.payrollDue), `${fmtDate(c.payDate)}${c.confirmed ? '' : ' (projected)'}`])}
+              head={['Pay period', 'Timesheet due', 'Pay date']}
+              rows={payCalendar.map(c => [fmtDateRange(c.start, c.end), fmtDate(c.timesheetDue), `${fmtDate(c.payDate)}${c.confirmed ? '' : ' (projected)'}`])}
             />
 <p className="font-semibold text-[#0b2b35] mt-4">Leave balances and accruals</p>
             <p>Balances are loaded from CHA&apos;s figures and can be overridden at any time under <strong>Admin Console → Leave Balances</strong> (President/CEO, Accounting Manager, and super administrator only): upload the file, set its &ldquo;as of&rdquo; date, review the before/after preview, and confirm. Approved leave dated on or after the as-of date is deducted again automatically, and every override is recorded (who, when, and each employee&apos;s before and after). PTO and sick <strong>accruals</strong> run per pay period only once they are switched on there, starting from the first period <em>after</em> the one the loaded balances already include; each period is credited once, so re-running never double-credits.</p>
             <p className="font-semibold text-[#0b2b35] mt-4">Timesheet tags</p>
-            <p>Days on a timesheet carry <strong>automatic tags</strong> (holiday, leave type, incomplete, over 8 hrs, overtime, short day, and timesheet-level states such as reopened or payroll locked) and <strong>hand-picked tags</strong> from a managed list (Admin Console → Timesheet Tags), which the President/CEO, Accounting Manager, and super administrator maintain — name, color, description, and an optional payroll/Sage code. Employees tag their own days while a timesheet is a draft; approvers may adjust tags during review (recorded in the timesheet history). Tags label a day and do not split its hours. Retiring a tag stops new use but leaves it on existing days. The team Timesheets report totals hours on tagged days.</p>
+            <p>Days on a timesheet carry <strong>automatic tags</strong> (holiday, leave type, incomplete, over 8 hrs, overtime, short day, and timesheet-level states such as reopened or closed by accounting) and <strong>hand-picked tags</strong> from a managed list (Admin Console → Timesheet Tags), which the President/CEO, Accounting Manager, and super administrator maintain — name, color, description, and an optional payroll/Sage code. Employees tag their own days while a timesheet is a draft; approvers may adjust tags during review (recorded in the timesheet history). Tags label a day and do not split its hours. Retiring a tag stops new use but leaves it on existing days. The team Timesheets report totals hours on tagged days.</p>
             <p className="font-semibold text-[#0b2b35] mt-4">Reopening timesheets</p>
-            <p>Timesheets lock at submission. The payroll due date (12 days after period end) is the hard lock. Every reopen — including a return for correction — requires a <strong>reason code and written notes</strong> and is recorded in the timesheet&apos;s history (who, when, why).</p>
+            <p>Timesheets lock at submission, and accounting&apos;s <strong>Close Period</strong> is the hard lock. Every reopen — including a return for correction — requires a <strong>reason code and written notes</strong> and is recorded in the timesheet&apos;s history (who, when, why).</p>
             <Table
               head={['Stage', 'Reopen?', 'Who', 'Rule']}
               rows={[
                 ['Submitted, not yet approved', 'Yes', 'Any approver — Return for correction', 'Reason code + notes; employee fixes and resubmits.'],
-                ['Approved, before payroll is due', 'Yes', 'Any approver — Reopen', 'Reason code + notes; goes back to draft and needs re-approval.'],
-                ['After payroll is due', 'Only by override', 'CEO only — CEO override', 'Reason code + notes; logged as a post-payroll adjustment; needs re-approval.'],
+                ['Approved, period still open', 'Yes', 'Any approver — Reopen', 'Reason code + notes; goes back to draft and needs re-approval.'],
+                ['Period closed by accounting', 'Only by override', 'CEO only — CEO override', 'Reason code + notes; logged as an adjustment to a closed period; needs re-approval.'],
               ]}
             />
-            <p><strong>Reason codes:</strong> Employee error · Approver error · Leave added or changed · Payroll / accounting discrepancy · Post-payroll adjustment (CEO override) · Other. Employees may ask for a correction in the portal; approvers see it flagged under Approvals → Timesheets → Approved.</p>
+            <p><strong>Reason codes:</strong> Employee error · Approver error · Leave added or changed · Payroll / accounting discrepancy · Adjustment to a closed period (CEO override) · Other. Employees may ask for a correction in the portal; approvers see it flagged under Approvals → Timesheets → Approved.</p>
             <p className="font-semibold text-[#0b2b35] mt-4">Closing a period</p>
-            <p>Once time for a range of dates is final, accounting closes it out under <strong>Close Period</strong> (sidebar) by choosing the from/through dates on a calendar — a pay period can be picked as a shortcut, and any dates up to today can be closed. Before confirming, the portal lists any unsubmitted or unapproved timesheets and pending leave requests in the range so nothing is closed by accident. While dates are closed: no new leave requests may be entered for them; pending leave for them can no longer be approved; timesheets touching them cannot be edited or submitted by employees; and returning or reopening a timesheet in them requires the CEO override. Only the CEO can lift a closure, with a written note; every closure and lift is kept in the history (who, when, why). Capturing time daily and closing each period promptly after payroll processes is the intended rhythm.</p>
-            <p><strong>Late leave:</strong> if leave is approved (or sick leave auto-approved) for dates on a timesheet that is already submitted or approved, and payroll is not yet due, that timesheet is reopened automatically (reason: leave added) and must be re-approved. If payroll is already due, the timesheet is left unchanged and the CEO is alerted; the leave still counts against the balance, and the CEO can use the override if pay must be adjusted.</p>
+            <p>Once time for a range of dates is final, accounting closes it out under <strong>Close Period</strong> (sidebar) by choosing the from/through dates on a calendar — a pay period can be picked as a shortcut, and any dates up to today can be closed. Before confirming, the portal lists any unsubmitted or unapproved timesheets and pending leave requests in the range so nothing is closed by accident. While dates are closed: no new leave requests may be entered for them; pending leave for them can no longer be approved; timesheets touching them cannot be edited or submitted by employees; and returning or reopening a timesheet in them requires the CEO override. Only the CEO can lift a closure, with a written note; every closure and lift is kept in the history (who, when, why). Capturing time daily and closing each period once its timesheets and leave are approved is the intended rhythm; closing also saves a snapshot of every employee&apos;s leave balances as of the end of the closed dates, for reconciling against Sage.</p>
+            <p><strong>Late leave:</strong> if leave is approved (or sick leave auto-approved) for dates on a timesheet that is already submitted or approved, and the period is still open, that timesheet is reopened automatically (reason: leave added) and must be re-approved. If accounting has already closed the period, the leave cannot be entered or approved for those dates at all; corrections go through the CEO override or a balance adjustment.</p>
           </Section>
 
           <Section id="issues" title="8. Error, Discrepancy & Issue Reporting">
@@ -255,7 +254,7 @@ export default async function AdminSopPage() {
                 ['Document owner', 'Accounting Manager (Carrileen Edwards), with Globalist Pro maintaining the portal itself'],
               ]}
             />
-            <p>This SOP should be revisited once Section 7 (Payroll Cutoff &amp; Pay Dates) is finalized, once the parallel-run discrepancy-triage owner (Section 8) is confirmed, and again at cutover, when parallel-run language throughout this document should be removed.</p>
+            <p>This SOP should be revisited once Section 7 (Pay Periods &amp; Pay Dates) is finalized, once the parallel-run discrepancy-triage owner (Section 8) is confirmed, and again at cutover, when parallel-run language throughout this document should be removed.</p>
           </Section>
         </div>
       </div>

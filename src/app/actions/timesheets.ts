@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
-import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, getPayrollDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
@@ -218,7 +218,6 @@ function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): Timesheet
     events,
     employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
     employee_type: (Array.isArray(employee) ? employee[0]?.employee_type : employee?.employee_type) ?? '',
-    payroll_due: getPayrollDueDate({ end: t.period_end }),
     lock_reason: periodLockReason({ start: t.period_start, end: t.period_end }, closedRanges),
   }
 }
@@ -325,9 +324,9 @@ export async function returnTimesheet(id: string, reasonCode: string, note: stri
 
 /**
  * Reopens an APPROVED timesheet so the employee can correct it and resubmit (it then needs re-approval).
- *   * Before the payroll due date: any approver, with a reason code + notes.
- *   * After the payroll due date: only the CEO (the "CEO override"), same requirements, logged as an
- *     override so it stands out as a post-payroll adjustment.
+ *   * Period open: any approver, with a reason code + notes.
+ *   * Period closed by accounting: only the CEO (the "CEO override"), same requirements, logged as an
+ *     override so it stands out as an adjustment to a closed period.
  */
 export async function reopenTimesheet(id: string, reasonCode: string, note: string) {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
@@ -338,9 +337,7 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
   const lockReason = periodLockReason({ start: timesheet.period_start, end: timesheet.period_end }, await loadClosedRanges(admin))
   const locked = lockReason !== null
   if (locked && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
-    throw new Error(lockReason === 'closed'
-      ? 'Accounting has closed this period. Only the CEO can reopen it (CEO override).'
-      : `Payroll for this period was due ${fmtDate(getPayrollDueDate({ end: timesheet.period_end }))}. Only the CEO can reopen it (CEO override).`)
+    throw new Error('Accounting has closed this period. Only the CEO can reopen it (CEO override).')
   }
 
   const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
@@ -353,7 +350,7 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
 
   await notifyEmployee(admin, timesheet.employee_id, {
     kind: 'returned',
-    title: locked ? 'Your timesheet was reopened (post-payroll adjustment)' : 'Your approved timesheet was reopened',
+    title: locked ? 'Your timesheet was reopened (closed period)' : 'Your approved timesheet was reopened',
     body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nReopened by ${actor.name}.\nReason: ${reason}\nPlease make the correction and resubmit for approval.`,
     link: '/timesheet',
     cta: 'Open Timesheet',
@@ -364,7 +361,7 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
 }
 
 /**
- * Employee asks for a submitted/approved timesheet to be reopened. Approvers are alerted; before the payroll due
+ * Employee asks for a submitted/approved timesheet to be reopened. Approvers are alerted; while the period is open
  * date any approver can act on it, afterwards only the CEO (override).
  */
 export async function requestTimesheetCorrection(timesheetId: string, note: string) {
@@ -386,7 +383,7 @@ export async function requestTimesheetCorrection(timesheetId: string, note: stri
   const locked = periodLockReason({ start: ts.period_start, end: ts.period_end }, await loadClosedRanges(admin)) !== null
   await notifyApprovers(admin, employee.id, locked ? REOPEN_OVERRIDE_ROLES : TIMESHEET_APPROVER_ROLES, {
     title: `Correction requested: ${employee.name}`,
-    body: `Pay period ${fmtDateRange(ts.period_start, ts.period_end)} (${ts.status})\n${trimmed}${locked ? '\nThis period is locked (closed by accounting or past payroll due) — a CEO override is needed to reopen it.' : ''}`,
+    body: `Pay period ${fmtDateRange(ts.period_start, ts.period_end)} (${ts.status})\n${trimmed}${locked ? '\nThis period has been closed by accounting — a CEO override is needed to reopen it.' : ''}`,
   })
 
   revalidatePath('/timesheet')

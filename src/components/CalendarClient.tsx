@@ -103,7 +103,7 @@ export default function CalendarClient({
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Team Leave Calendar</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">See who&apos;s out before submitting requests</p>
         </div>
-        <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request Leave</Link>
+        <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request/Use Leave</Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-5 items-start">
@@ -211,7 +211,7 @@ export default function CalendarClient({
           </div>
 
           <Link href="/request" className="block bg-white rounded-xl border border-[#d4eef2] p-4 hover:border-[#02ACC0] transition-colors text-center">
-            <p className="text-[13px] font-semibold text-[#0b2b35]">+ Request Leave</p>
+            <p className="text-[13px] font-semibold text-[#0b2b35]">+ Request/Use Leave</p>
             <p className="text-[11px] text-gray-400 mt-0.5">Check the calendar first, then submit</p>
           </Link>
         </div>

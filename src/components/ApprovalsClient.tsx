@@ -269,7 +269,7 @@ const EVENT_LABELS: Record<string, string> = {
   override_reopened: 'Reopened — CEO override',
   correction_requested: 'Correction requested by employee',
   leave_reopened: 'Reopened — leave added',
-  leave_held: 'Leave held — payroll already due',
+  leave_held: 'Leave held — period closed',
   tags_changed: 'Tags adjusted',
 }
 
@@ -330,7 +330,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
             </p>
             <div className="flex flex-wrap gap-1.5 mt-1.5">
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${isLocked ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
-                {item.lock_reason === 'closed' ? 'Closed by accounting — locked' : item.lock_reason === 'payroll' ? `Payroll was due ${fmtDate(item.payroll_due)} — locked` : `Payroll due ${fmtDate(item.payroll_due)}`}
+                {item.lock_reason === 'closed' ? 'Closed by accounting — locked' : 'Period open'}
               </span>
               <RowTags tags={sheetTags} dashWhenEmpty={false} />
             </div>
@@ -441,7 +441,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
             <p className="text-[13px] font-semibold text-[#0b2b35] mb-1">{reopenLabel}</p>
             <p className="text-[12px] text-gray-600 mb-3">
               {isOverride && mode === 'approved'
-                ? `${item.lock_reason === 'closed' ? 'Accounting has closed this period.' : `Payroll for this period was due ${fmtDate(item.payroll_due)}.`} This is an adjustment to a locked period — it is logged as a CEO override, and the corrected timesheet must be resubmitted and re-approved.`
+                ? `Accounting has closed this period. This is an adjustment to a locked period — it is logged as a CEO override, and the corrected timesheet must be resubmitted and re-approved.`
                 : mode === 'pending'
                   ? 'The timesheet unlocks so the employee can fix it and resubmit. They’ll be notified with your reason.'
                   : 'The timesheet returns to the employee as a draft. They must correct it, resubmit, and it needs re-approval.'}
@@ -623,7 +623,7 @@ export default function ApprovalsClient({
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-[12px] text-gray-500">Reopen an approved timesheet to correct it. Before payroll is due any approver can; after that, only the CEO (override). A reason code and notes are always required and logged.</p>
+                <p className="text-[12px] text-gray-500">Reopen an approved timesheet to correct it. While the period is open any approver can; once accounting has closed it, only the CEO (override). A reason code and notes are always required and logged.</p>
                 {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} customTags={customTags} onDecided={refresh} />)}
               </div>
             )

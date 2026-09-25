@@ -3,7 +3,7 @@ import { HOLIDAYS } from '@/lib/holidays'
 
 // How far back a leave request may start. Time is meant to be captured daily, but staff catching up on the
 // current pay period need the recent past open. Once accounting closes out a period, no further changes
-// or requests should occur for it (Close Period; the payroll lock in lib/pay-periods.ts is the other stop).
+// or requests should occur for it (that is what Close Period is for).
 export const LEAVE_BACKDATE_DAYS = 14
 
 // One-time catch-up for go-live: balances were loaded as of 2026-09-13 and staff enter leave for the pay period

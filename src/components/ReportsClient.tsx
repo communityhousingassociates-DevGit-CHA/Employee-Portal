@@ -6,7 +6,7 @@ import { getReportSummary } from '@/app/actions/reports'
 import { revealSalary, revealWeeklyPayroll } from '@/app/actions/salary'
 import MaskedAmount from '@/components/MaskedAmount'
 import { fmtDate, fmtDateRange, fmtDateShort } from '@/lib/format-date'
-import { getPayDate, getPayrollDueDate, type PayPeriod } from '@/lib/pay-periods'
+import { getPayDate, type PayPeriod } from '@/lib/pay-periods'
 import { tagColor } from '@/lib/timesheet-tags'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
@@ -36,7 +36,7 @@ function periodOptionLabel(p: PayPeriod, i: number): string {
 }
 
 function PeriodDates({ p }: { p: PayPeriod }) {
-  return <span className="ml-2 text-[11px] font-normal text-gray-400">Payroll due {fmtDate(getPayrollDueDate(p))} · Pay date {fmtDate(getPayDate(p))}</span>
+  return <span className="ml-2 text-[11px] font-normal text-gray-400">Pay date {fmtDate(getPayDate(p))}</span>
 }
 
 export default function ReportsClient({

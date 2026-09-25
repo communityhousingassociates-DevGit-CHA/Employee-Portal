@@ -125,7 +125,7 @@ export default async function DashboardPage() {
           <WeatherBadge weather={weather} />
           <TimesheetAlertBell active={!!timesheetReminder} />
           <Link href="/calendar" className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8] transition-colors">Calendar</Link>
-          <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request Leave</Link>
+          <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request/Use Leave</Link>
         </div>
       </div>
 

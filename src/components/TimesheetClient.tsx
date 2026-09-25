@@ -279,7 +279,7 @@ export default function TimesheetClient({
               <p className="text-[12px] font-semibold text-[#0b2b35] mb-1">What needs to be corrected?</p>
               {periodLockReason(period, closedRanges) && (
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
-                  This pay period is locked (closed by accounting or past its payroll due date). A correction now needs a CEO override, so your request goes to the CEO.
+                  Accounting has closed this pay period. A correction now needs a CEO override, so your request goes to the CEO.
                 </p>
               )}
               <textarea value={correctionNote} onChange={e => setCorrectionNote(e.target.value)} rows={3} placeholder="e.g. I worked 6 hours on Thursday, not 8"
@@ -556,7 +556,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
         <HoursInput value={Number(row.regular_hours)} onChange={v => onUpdate(row.id, { regular_hours: v })} disabled={locked} />
       )}
       <div
-        title="Added automatically from approved leave requests — use Request Leave to take time off"
+        title="Added automatically from approved leave requests — use Request/Use Leave to take time off"
         className="w-full text-center px-1 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
         {Number(row.leave_hours)}
       </div>

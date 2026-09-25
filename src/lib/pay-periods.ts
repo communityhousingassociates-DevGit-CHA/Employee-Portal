@@ -91,17 +91,6 @@ export function getTimesheetDueDate(period: PayPeriod): string {
   return toDateOnly(addDays(end, 2))
 }
 
-// Payroll processing is due 12 days after a period ends — 5 days before the pay date (CHA's payroll for the period
-// ending 2026-09-12 was due 2026-09-24 and paid 2026-09-29). Inferred from that one data point, not from a published
-// payroll-cutoff calendar, so confirm it with Carrileen Edwards. Everything that locks a timesheet keys off this number.
-export const PAYROLL_DUE_DAYS_AFTER_PERIOD_END = 12
-
-/** Payroll processing due date for a period (YYYY-MM-DD). After it passes the period is "payroll-locked". */
-export function getPayrollDueDate(period: { end: string }): string {
-  const end = new Date(`${period.end}T00:00:00Z`)
-  return toDateOnly(addDays(end, PAYROLL_DUE_DAYS_AFTER_PERIOD_END))
-}
-
 /** Direct-deposit pay date for a period (YYYY-MM-DD): the Tuesday 17 days after it ends. */
 export function getPayDate(period: { end: string }): string {
   const end = new Date(`${period.end}T00:00:00Z`)
@@ -110,18 +99,17 @@ export function getPayDate(period: { end: string }): string {
 
 export interface PayCalendarEntry extends PayPeriod {
   timesheetDue: string
-  payrollDue: string
   payDate: string
   /** True if the pay date is on CHA's published schedule; false if projected from the same cycle. */
   confirmed: boolean
 }
 
-/** The current pay period and the next `count - 1`, each with its timesheet, payroll, and pay dates. */
+/** The current pay period and the next `count - 1`, each with its timesheet-due and pay dates. */
 export function getPayCalendar(count = 6, asOf: Date = new Date()): PayCalendarEntry[] {
   const current = getCurrentPeriod(PAY_PERIOD_ANCHOR, asOf)
   return getPayPeriods(current.start, count).map(p => {
     const payDate = getPayDate(p)
-    return { ...p, timesheetDue: getTimesheetDueDate(p), payrollDue: getPayrollDueDate(p), payDate, confirmed: payDate <= CONFIRMED_PAY_DATES_THROUGH }
+    return { ...p, timesheetDue: getTimesheetDueDate(p), payDate, confirmed: payDate <= CONFIRMED_PAY_DATES_THROUGH }
   })
 }
 
@@ -130,10 +118,6 @@ export function todayET(now: Date = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
-/** True once the payroll due date for the period ending `periodEnd` has passed — no ordinary reopening after this. */
-export function isPayrollLocked(periodEnd: string, now: Date = new Date()): boolean {
-  return todayET(now) > getPayrollDueDate({ end: periodEnd })
-}
 
 /** A range of dates accounting has closed out (inclusive). */
 export interface ClosedRange {
@@ -152,12 +136,11 @@ export function closedRangeOverlapping(start: string, end: string, ranges: Close
 }
 
 /**
- * Why a pay period is locked, if it is: 'closed' (accounting closed any date inside it) takes precedence over
- * 'payroll' (its payroll due date has passed). null = open. Both lock reopening to the CEO override.
+ * Whether a pay period is locked: 'closed' if accounting has closed any date inside it (Close Period), otherwise null.
+ * Closing is the only lock — reopening a locked period's timesheet takes the CEO override.
  */
-export function periodLockReason(period: { start: string; end: string }, ranges: ClosedRange[], now: Date = new Date()): 'closed' | 'payroll' | null {
-  if (closedRangeOverlapping(period.start, period.end, ranges)) return 'closed'
-  return isPayrollLocked(period.end, now) ? 'payroll' : null
+export function periodLockReason(period: { start: string; end: string }, ranges: ClosedRange[]): 'closed' | null {
+  return closedRangeOverlapping(period.start, period.end, ranges) ? 'closed' : null
 }
 
 /** True if `dateStr` (YYYY-MM-DD) is the start date of a pay period relative to `anchorDate`. */

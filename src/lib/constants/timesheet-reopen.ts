@@ -16,5 +16,5 @@ export function reopenReasonLabel(code: string | null | undefined): string {
   return REOPEN_REASON_CODES.find(c => c.value === code)?.label ?? 'Other'
 }
 
-// After the payroll due date, only these roles may reopen a timesheet (the "CEO override"). Change to change policy.
+// Once accounting has closed a period, only these roles may reopen a timesheet in it (the "CEO override"). Change to change policy.
 export const REOPEN_OVERRIDE_ROLES: Role[] = ['ceo']

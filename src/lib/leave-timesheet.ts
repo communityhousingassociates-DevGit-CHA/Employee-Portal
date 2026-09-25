@@ -159,7 +159,7 @@ export function distributeLeaveHours(startDate: string, endDate: string, totalHo
 export type LeavePostingSummary = {
   /** Submitted/approved timesheets (payroll not yet due) that were reopened to draft so the new leave can be reviewed and resubmitted. */
   reopened: { timesheetId: string; periodStart: string; periodEnd: string; wasApproved: boolean }[]
-  /** Timesheets past their payroll due date — leave was NOT written; a CEO override is needed if pay must change. */
+  /** Timesheets in a period accounting has closed — leave was NOT written; a CEO override is needed if pay must change. */
   held: { timesheetId: string; periodStart: string; periodEnd: string }[]
 }
 
@@ -172,8 +172,8 @@ export type LeavePostingSummary = {
  * mirroring the same invariant the timesheet UI enforces client-side.
  *
  * Locking rules ("late leave"): a draft timesheet is simply updated. A submitted or approved timesheet whose
- * payroll is not yet due is updated AND reopened to draft (reason code leave_change, logged) so it is re-reviewed
- * before pay. Once payroll is due, the timesheet is left untouched and reported as `held`.
+ * period is open is updated AND reopened to draft (reason code leave_change, logged) so it is re-reviewed
+ * before pay. Once accounting has closed the period, the timesheet is left untouched and reported as `held`.
  */
 export async function applyLeaveToTimesheets(
   admin: AdminClient,
@@ -233,7 +233,7 @@ export async function applyLeaveToTimesheets(
   for (const h of summary.held) {
     await logTimesheetEvent(admin, {
       timesheetId: h.timesheetId, actorId: ctx.actorId, action: 'leave_held', reasonCode: 'leave_change',
-      note: `${ctx.leaveLabel} was approved after payroll was due, so the timesheet was not changed. A CEO override is needed if pay must be adjusted.`,
+      note: `${ctx.leaveLabel} was approved for a period accounting has closed, so the timesheet was not changed. A CEO override is needed if pay must be adjusted.`,
     })
   }
   return summary

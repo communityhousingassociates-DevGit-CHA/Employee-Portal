@@ -23,8 +23,8 @@ function rangeLabel(start: string, end: string) {
 
 /**
  * Tells the right people what posting an approved leave request did to timesheets that were already
- * submitted/approved ("late leave"): reopened for re-review (payroll not yet due), or left untouched
- * because payroll was already due (needs a CEO override if pay must change).
+ * submitted/approved ("late leave"): reopened for re-review, or left untouched because the period
+ * is closed by accounting (needs a CEO override if pay must change).
  */
 async function announceLeavePosting(admin: ReturnType<typeof createAdminClient>, employeeId: string, summary: LeavePostingSummary, leaveLabel: string) {
   if (summary.reopened.length === 0 && summary.held.length === 0) return
@@ -52,14 +52,14 @@ async function announceLeavePosting(admin: ReturnType<typeof createAdminClient>,
     const period = fmtDateRange(h.periodStart, h.periodEnd)
     await notifyEmployee(admin, employeeId, {
       kind: 'returned',
-      title: 'Leave approved after payroll was due',
-      body: `Pay period ${period}\n${leaveLabel} was approved and your balance was updated, but payroll for that period was already due, so the timesheet was not changed. Contact your Accounting Manager if your pay needs adjusting.`,
+      title: 'Leave approved for a closed period',
+      body: `Pay period ${period}\n${leaveLabel} was approved and your balance was updated, but accounting has closed that period, so the timesheet was not changed. Contact your Accounting Manager if your pay needs adjusting.`,
       link: '/history',
       cta: 'View My Requests',
     })
     await notifyApprovers(admin, employeeId, REOPEN_OVERRIDE_ROLES, {
-      title: `Leave approved after payroll due: ${ownerName}`,
-      body: `${leaveLabel} falls in pay period ${period}, which is past its payroll due date. The timesheet was NOT changed. Use the CEO override (Approvals → Timesheets → Approved) if pay must be adjusted.`,
+      title: `Leave approved for a closed period: ${ownerName}`,
+      body: `${leaveLabel} falls in pay period ${period}, which accounting has closed. The timesheet was NOT changed. Use the CEO override (Approvals → Timesheets → Approved) if pay must be adjusted.`,
     })
   }
 }

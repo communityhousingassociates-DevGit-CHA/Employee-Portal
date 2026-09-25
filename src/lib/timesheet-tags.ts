@@ -14,7 +14,7 @@ export type TagKey =
   | 'holiday' | 'holiday_worked' | 'leave' | 'leave_pto' | 'leave_sick' | 'leave_vacation' | 'leave_bereavement' | 'leave_jury'
   | 'incomplete' | 'long_day' | 'short_day' | 'overtime'
   // timesheet-level
-  | 'correction_requested' | 'reopened' | 'late_leave' | 'closed' | 'payroll_locked'
+  | 'correction_requested' | 'reopened' | 'late_leave' | 'closed'
 
 type TagDef = { label: string; cls: string }
 
@@ -35,7 +35,6 @@ export const TAGS: Record<TagKey, TagDef> = {
   reopened: { label: 'Reopened', cls: 'bg-red-100 text-red-600' },
   late_leave: { label: 'Leave added late', cls: 'bg-amber-100 text-amber-700' },
   closed: { label: 'Closed by accounting', cls: 'bg-red-100 text-red-600' },
-  payroll_locked: { label: 'Payroll locked', cls: 'bg-gray-200 text-gray-600' },
 }
 
 // Thresholds. "Over 8 hrs" is informational; "Overtime" is the weekly standard (Regular hours past 40 in a calendar
@@ -158,7 +157,7 @@ export function timesheetTags(t: {
   status: string
   return_reason?: string | null
   correction_requested_at?: string | null
-  lock_reason?: 'closed' | 'payroll' | null
+  lock_reason?: 'closed' | null
   events?: { action: string }[]
 }): RowTag[] {
   const tags: RowTag[] = []
@@ -168,6 +167,5 @@ export function timesheetTags(t: {
     (t.status === 'draft' && !!t.return_reason && t.return_reason.startsWith('Leave added or changed'))
   if (lateLeave) tags.push(tag('late_leave', 'Leave was added after this timesheet was submitted'))
   if (t.lock_reason === 'closed') tags.push(tag('closed', 'Accounting closed these dates'))
-  else if (t.lock_reason === 'payroll') tags.push(tag('payroll_locked', 'Payroll for this period was already due'))
   return tags
 }
