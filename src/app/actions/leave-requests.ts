@@ -8,7 +8,7 @@ import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notificatio
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
-import { earliestLeaveDate, LEAVE_BACKDATE_DAYS } from '@/lib/leave-window'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping } from '@/lib/pay-periods'
 import type { LeaveType, Role } from '@/types'
@@ -83,6 +83,12 @@ export async function createLeaveRequest(data: {
     throw new Error('Jury Duty requests require the summons attached.')
   }
   if (data.end_date < data.start_date) throw new Error('The end date can’t be before the start date.')
+  if (data.leave_type === 'Sick' && data.end_date > latestSickLeaveDate()) {
+    throw new Error('Sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Vacation for planned time off.')
+  }
+  if (data.end_date > latestLeaveDate()) {
+    throw new Error(`Leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
+  }
   const earliest = earliestLeaveDate()
   if (data.start_date < earliest) {
     throw new Error(`Leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)

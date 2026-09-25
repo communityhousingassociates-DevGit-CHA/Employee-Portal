@@ -6,7 +6,7 @@ import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } fro
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
-import { earliestLeaveDate, LEAVE_BACKDATE_DAYS } from '@/lib/leave-window'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { getCurrentPeriod, isPayrollLocked, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
@@ -86,11 +86,15 @@ export default function RequestClient({
   const balAfter = selectedBalance !== null ? selectedBalance - hoursNum : null
   const isNegative = balAfter !== null && balAfter < 0
   const closedHit = start && end && start <= end ? closedRangeOverlapping(start, end, closedRanges) : null
-  const canSubmit = !closedHit && signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
   const earliest = earliestLeaveDate()
+  // Planned leave can be booked well ahead; sick leave can't (no one can schedule being sick).
+  const latest = leaveType === 'Sick' ? latestSickLeaveDate() : latestLeaveDate()
+  const beyondLatest = !!end && end > latest
+  const isFuture = !!start && start > latestSickLeaveDate()
   // Payroll already due for the period the leave starts in: the request is accepted but the timesheet isn't changed.
   const startInLockedPeriod = !!start && start >= earliest && isPayrollLocked(getCurrentPeriod(undefined, new Date(`${start}T00:00:00Z`)).end)
+  const canSubmit = !closedHit && !beyondLatest && signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -191,18 +195,25 @@ export default function RequestClient({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Start Date</label>
-                <input type="date" value={start} min={earliest} onChange={e => { setStart(e.target.value); setSigned(false) }}
+                <input type="date" value={start} min={earliest} max={latest} onChange={e => { setStart(e.target.value); setSigned(false) }}
                   className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">End Date</label>
-                <input type="date" value={end} min={start || earliest} onChange={e => { handleEndChange(e.target.value); setSigned(false) }}
+                <input type="date" value={end} min={start || earliest} max={latest} onChange={e => { handleEndChange(e.target.value); setSigned(false) }}
                   className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
             </div>
             <p className="text-[11px] text-gray-400 -mt-2 mb-4">
-              You can enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up — ideally request leave as it happens.
+              Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). <strong>Sick leave</strong> can only be for today or earlier. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
             </p>
+            {beyondLatest && (
+              <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">
+                {leaveType === 'Sick'
+                  ? 'Sick leave can’t be requested for future dates. Use PTO or Vacation for planned time off.'
+                  : `Leave can be requested through ${fmtDate(latestLeaveDate())}.`}
+              </div>
+            )}
             {closedHit && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">
                 {fmtDate(closedHit.start)} – {fmtDate(closedHit.end)} has been closed by accounting, so no new leave can be entered for those dates. Choose different dates or contact your Accounting Manager.
@@ -314,6 +325,7 @@ export default function RequestClient({
                     </div>
                   )}
                   {isNegative && <div className="mt-3 text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2">Negative balance will require manager approval.</div>}
+                  {isFuture && !isNegative && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">This leave is in the future — its hours come off your balance when it&apos;s approved.</div>}
                   {leaveType === 'Sick' && hoursNum > 0 && !isNegative && <div className="mt-3 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2">Sick leave is approved automatically when your balance covers it.</div>}
                 </>
               ) : <p className="text-[12px] text-gray-400">{leaveType} does not draw from your leave balance.</p>}

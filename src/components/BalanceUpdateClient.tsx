@@ -39,6 +39,12 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
   const [confirmed, setConfirmed] = useState(false)
 
   const [firstPeriod, setFirstPeriod] = useState(accrual.firstPeriodStart ?? '')
+  // Optionally switch accruals on in the same step as the override (the right order: override first, then accrue).
+  const ascending = [...periods].sort((a, b) => a.start.localeCompare(b.start))
+  const defaultFirst = (d: string) => (ascending.find(p => p.start === d) ?? ascending.find(p => p.start > d) ?? ascending[ascending.length - 1])?.start ?? ''
+  const [alsoAccrue, setAlsoAccrue] = useState(!accrual.enabled)
+  const [alsoFirst, setAlsoFirst] = useState('')
+  const chosenAlsoFirst = alsoFirst || defaultFirst(asOf)
   const [accrualMsg, setAccrualMsg] = useState('')
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 4000) }
@@ -69,7 +75,13 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
     setBusy(true); setError('')
     try {
       const res = await applyBalanceUpdate(okRows.map(r => ({ employeeId: r.employeeId, pto: r.file.pto, sick: r.file.sick, vacation: r.file.vacation })), asOf, note, fileName)
-      showToast(`Balances overridden for ${res.applied} employee${res.applied === 1 ? '' : 's'}`)
+      let extra = ''
+      if (alsoAccrue && chosenAlsoFirst) {
+        await saveAccrualSettings(chosenAlsoFirst, true)
+        const s = await runAccrualsNow()
+        extra = ` — accruals on from ${fmtDate(chosenAlsoFirst)} (${s.processed} credited${s.errors.length ? `, ${s.errors.length} error(s)` : ''})`
+      }
+      showToast(`Balances overridden for ${res.applied} employee${res.applied === 1 ? '' : 's'}${extra}`)
       setPreview(null); setFileRows([]); setFileName(''); setConfirmed(false); setNote('')
       if (fileRef.current) fileRef.current.value = ''
       router.refresh()
@@ -173,6 +185,18 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
               <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#02ACC0]" />
               <span>I&apos;ve reviewed the changes. Overwrite {okRows.length} employee{okRows.length === 1 ? '' : 's'}&apos; balances with these totals (as of {asOf ? fmtDate(asOf) : '—'}).</span>
             </label>
+            {!accrual.enabled && (
+              <div className="mt-3 border border-[#d4eef2] rounded-lg p-3 bg-[#f8fcfd]">
+                <label className="flex items-start gap-2.5 text-[13px] text-[#0b2b35] cursor-pointer">
+                  <input type="checkbox" checked={alsoAccrue} onChange={e => setAlsoAccrue(e.target.checked)} className="mt-0.5 w-4 h-4 accent-[#02ACC0]" />
+                  <span>Then switch accruals on and credit them now, starting with the pay period beginning:</span>
+                </label>
+                <select value={chosenAlsoFirst} onChange={e => setAlsoFirst(e.target.value)} disabled={!alsoAccrue} className={`${inputCls} mt-2 w-full max-w-sm`}>
+                  {ascending.map(p => <option key={p.start} value={p.start}>{fmtDateRange(p.start, p.end)}{p.start === currentStart ? ' (current)' : ''}</option>)}
+                </select>
+                <p className="text-[11px] text-gray-500 mt-1.5">Pick the first period the file&apos;s balances do <strong>not</strong> already include. Balances as of the start of a period don&apos;t include that period&apos;s accrual, so that period is the usual choice.</p>
+              </div>
+            )}
             <button onClick={handleApply} disabled={!confirmed || busy || okRows.length === 0}
               className="mt-3 bg-red-500 text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-red-600 disabled:opacity-40 disabled:cursor-not-allowed">
               {busy ? 'Applying…' : `Override ${okRows.length} balance${okRows.length === 1 ? '' : 's'}`}

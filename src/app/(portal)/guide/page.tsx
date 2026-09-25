@@ -153,7 +153,7 @@ export default async function GuidePage() {
               </table>
             </div>
             <Bullets items={[
-              <><strong>2. Pick your dates and hours.</strong> Enter a start and end date, then type in total hours or click <strong>Auto-fill</strong> (it skips weekends and scheduled holidays). 8 hours = 1 full day. You can enter dates up to <strong>14 days back</strong> to catch up, so try to request leave as it happens.</>,
+              <><strong>2. Pick your dates and hours.</strong> Enter a start and end date, then type in total hours or click <strong>Auto-fill</strong> (it skips weekends and scheduled holidays). 8 hours = 1 full day. Planned leave (PTO, Vacation, Bereavement, Jury Duty) can be booked as far ahead as you like — <strong>Sick leave</strong> can only be for today or earlier. You can also enter dates up to <strong>14 days back</strong> to catch up.</>,
               <><strong>3. Check the Balance Preview.</strong> Shows your current balance, what this request subtracts, and what would remain. A negative result still allows submission, flagged for manager approval.</>,
               <><strong>4. Check Team Coverage.</strong> Shows if anyone else already has leave overlapping your dates — informational, doesn&apos;t block your request.</>,
               <><strong>5. Add a note</strong> (optional) for your approver. Attach a file if you have one — <strong>required for Jury Duty</strong> (the summons), optional for every other type — then sign in the signature box.</>,

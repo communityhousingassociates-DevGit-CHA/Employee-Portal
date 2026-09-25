@@ -1,4 +1,5 @@
 import { todayET } from '@/lib/pay-periods'
+import { HOLIDAYS } from '@/lib/holidays'
 
 // How far back a leave request may start. Time is meant to be captured daily, but staff catching up on the
 // current pay period need the recent past open. Once accounting closes out a period, no further changes
@@ -18,4 +19,19 @@ export function earliestLeaveDate(now: Date = new Date()): string {
   const rolling = d.toISOString().slice(0, 10)
   if (today <= LEAVE_CATCHUP.through && LEAVE_CATCHUP.from < rolling) return LEAVE_CATCHUP.from
   return rolling
+}
+
+/**
+ * Furthest-ahead date leave can be requested for. Planned leave (PTO, Vacation, Bereavement, Jury Duty) has no
+ * short "advance" limit — a trip can be booked months out — but hours are auto-filled from the holiday calendar,
+ * so requests stop at the end of the last year that calendar covers (extend HOLIDAYS to extend this).
+ */
+export function latestLeaveDate(): string {
+  const lastYear = Math.max(...Object.keys(HOLIDAYS).map(d => Number(d.slice(0, 4))))
+  return `${lastYear}-12-31`
+}
+
+/** Sick leave can't be planned: it may only be entered for today or earlier (no one can schedule being sick). */
+export function latestSickLeaveDate(now: Date = new Date()): string {
+  return todayET(now)
 }
