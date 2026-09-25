@@ -39,3 +39,6 @@ export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string
 
 // Closing a date range for accounting (see closed_periods). Lifting a closure is restricted to the CEO override role.
 export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES
+
+// Approvers get a daily digest (weekdays) of anything that has been waiting on them longer than this many days.
+export const REMINDER_AFTER_DAYS = 2

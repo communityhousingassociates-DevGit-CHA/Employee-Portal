@@ -10,7 +10,7 @@ import type { BalanceFileRow } from '@/lib/import/balance-update-parser'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
 
-type HistoryItem = { batchId: string; asOf: string; file: string | null; note: string | null; at: string; by: string | null; employees: number }
+type HistoryItem = { batchId: string; asOf: string; file: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }
 
 const inputCls = 'px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white'
 const hrs = (n: number) => `${Number(n.toFixed(2))}`
@@ -243,11 +243,11 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
       {/* ---------- history ---------- */}
       {history.length > 0 && (
         <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
-          <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Recent overrides</p>
+          <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Recent overrides &amp; adjustments</p>
           <ul className="space-y-2">
             {history.map(h => (
               <li key={h.batchId} className="text-[12px] border-l-2 border-[#d4eef2] pl-3">
-                <p className="font-semibold text-[#0b2b35]">{h.employees} employee{h.employees === 1 ? '' : 's'} · balances as of {fmtDate(h.asOf)} <span className="font-normal text-gray-400">· applied {fmtDate(h.at)}{h.by ? ` by ${h.by}` : ''}</span></p>
+                <p className="font-semibold text-[#0b2b35]">{h.kind === 'adjustment' ? 'Adjustment' : 'Override'}: {h.employees} employee{h.employees === 1 ? '' : 's'} · {h.kind === 'adjustment' ? 'effective' : 'balances as of'} {fmtDate(h.asOf)} <span className="font-normal text-gray-400">· applied {fmtDate(h.at)}{h.by ? ` by ${h.by}` : ''}</span></p>
                 {(h.file || h.note) && <p className="text-gray-500 mt-0.5">{[h.file, h.note].filter(Boolean).join(' — ')}</p>}
               </li>
             ))}

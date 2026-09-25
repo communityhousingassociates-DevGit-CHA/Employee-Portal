@@ -6,6 +6,7 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { CLOSE_PERIOD_ROLES } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { loadClosedRanges } from '@/lib/period-lock'
+import { balancesAsOf } from '@/lib/balance-history'
 import { todayET, type ClosedRange } from '@/lib/pay-periods'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 
@@ -90,8 +91,21 @@ export async function closePeriod(start: string, end: string, note: string) {
   const actor = await requireRole(CLOSE_PERIOD_ROLES)
   validateRange(start, end)
   const admin = createAdminClient()
-  const { error } = await admin.from('closed_periods').insert({ start_date: start, end_date: end, note: note.trim() || null, closed_by: actor.id })
+  const { data: created, error } = await admin.from('closed_periods').insert({ start_date: start, end_date: end, note: note.trim() || null, closed_by: actor.id }).select('id').single()
   if (error) throw new Error(error.message)
+
+  // Save every employee's leave balances as of the last closed date — the number Sage should show once it has processed
+  // this period. Best-effort: the closure itself is what matters, and a snapshot can be rebuilt from the same history.
+  try {
+    const balances = await balancesAsOf(admin, end)
+    const rows = [...balances.values()].map(b => ({ closed_period_id: created.id, as_of: end, employee_id: b.employeeId, pto: b.asOf.pto, sick: b.asOf.sick, vacation: b.asOf.vacation, taken_by: actor.id }))
+    if (rows.length > 0) {
+      const { error: snapError } = await admin.from('balance_snapshots').insert(rows)
+      if (snapError) console.error('closePeriod: snapshot failed', snapError.message)
+    }
+  } catch (e) {
+    console.error('closePeriod: snapshot failed', e)
+  }
   revalidatePath('/close-period')
   revalidatePath('/timesheet')
   revalidatePath('/request')

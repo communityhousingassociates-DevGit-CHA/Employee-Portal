@@ -8,6 +8,7 @@ import { hasPayrollAccess } from '@/lib/constants/salary-access'
 import { PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { runAccruals, type AccrualRunSummary } from '@/lib/accruals'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
+import { balancesAsOf } from '@/lib/balance-history'
 import { todayET } from '@/lib/pay-periods'
 import { isPeriodBoundary } from '@/lib/pay-periods'
 import { parseBalanceUpdateFile, type BalanceFileRow } from '@/lib/import/balance-update-parser'
@@ -75,19 +76,13 @@ async function approvedLeaveSince(admin: ReturnType<typeof createAdminClient>, a
   return byEmployee
 }
 
-/** Matches file rows to employees and shows exactly what would change — nothing is written. */
-export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: string): Promise<BalancePreview> {
-  await requireBalanceManager()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the "as of" date of the balances')
-  const admin = createAdminClient()
+type MatchedRow = { row: BalanceFileRow; emp: { id: string; name: string } }
+type UnmatchedRow = { rowIndex: number; fileName: string; status: 'unmatched' | 'ambiguous' | 'duplicate'; message: string; employeeId?: string; employeeName?: string }
 
-  const [{ data: employees, error: empError }, { data: balances, error: balError }, deductions] = await Promise.all([
-    admin.from('employees').select('id, name, email, first_name, last_name').eq('is_active', true),
-    admin.from('leave_balances').select('employee_id, pto_hours, sick_hours, personal_hours'),
-    approvedLeaveSince(admin, asOf),
-  ])
-  if (empError) throw new Error(empError.message)
-  if (balError) throw new Error(balError.message)
+/** Matches file rows to active employees by email, then by first + last name. Shared by the override preview and the Sage comparison. */
+async function matchFileRows(admin: ReturnType<typeof createAdminClient>, fileRows: BalanceFileRow[]) {
+  const { data: employees, error } = await admin.from('employees').select('id, name, email, first_name, last_name').eq('is_active', true)
+  if (error) throw new Error(error.message)
 
   const byEmail = new Map((employees ?? []).map(e => [e.email.toLowerCase(), e]))
   const byName = new Map<string, typeof employees>()
@@ -95,21 +90,43 @@ export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: str
     const k = nameKey(`${e.first_name} ${e.last_name}`)
     byName.set(k, [...(byName.get(k) ?? []), e])
   }
-  const balanceById = new Map((balances ?? []).map(b => [b.employee_id as string, b]))
 
   const seen = new Set<string>()
-  const rows: BalancePreviewRow[] = fileRows.map(r => {
+  const matched: MatchedRow[] = []
+  const problems: UnmatchedRow[] = []
+  for (const r of fileRows) {
     const display = r.name || r.email || `row ${r.rowIndex + 1}`
     let emp = r.email ? byEmail.get(r.email.toLowerCase()) : undefined
     if (!emp && r.name) {
       const candidates = byName.get(nameKey(r.name)) ?? []
-      if (candidates.length > 1) return { rowIndex: r.rowIndex, fileName: display, status: 'ambiguous' as const, message: 'More than one employee has this name — add an Email column', flags: [] }
+      if (candidates.length > 1) { problems.push({ rowIndex: r.rowIndex, fileName: display, status: 'ambiguous', message: 'More than one employee has this name — add an Email column' }); continue }
       emp = candidates[0]
     }
-    if (!emp) return { rowIndex: r.rowIndex, fileName: display, status: 'unmatched' as const, message: 'No active employee matches this name/email', flags: [] }
-    if (seen.has(emp.id)) return { rowIndex: r.rowIndex, fileName: display, status: 'duplicate' as const, employeeId: emp.id, employeeName: emp.name, message: 'This employee appears more than once in the file', flags: [] }
+    if (!emp) { problems.push({ rowIndex: r.rowIndex, fileName: display, status: 'unmatched', message: 'No active employee matches this name/email' }); continue }
+    if (seen.has(emp.id)) { problems.push({ rowIndex: r.rowIndex, fileName: display, status: 'duplicate', employeeId: emp.id, employeeName: emp.name, message: 'This employee appears more than once in the file' }); continue }
     seen.add(emp.id)
+    matched.push({ row: r, emp: { id: emp.id, name: emp.name } })
+  }
+  const notInFile = (employees ?? []).filter(e => !seen.has(e.id)).map(e => ({ id: e.id, name: e.name }))
+  return { matched, problems, notInFile }
+}
 
+/** Matches file rows to employees and shows exactly what would change — nothing is written. */
+export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: string): Promise<BalancePreview> {
+  await requireBalanceManager()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the "as of" date of the balances')
+  const admin = createAdminClient()
+
+  const [{ matched, problems, notInFile }, { data: balances, error: balError }, deductions] = await Promise.all([
+    matchFileRows(admin, fileRows),
+    admin.from('leave_balances').select('employee_id, pto_hours, sick_hours, personal_hours'),
+    approvedLeaveSince(admin, asOf),
+  ])
+  if (balError) throw new Error(balError.message)
+  const balanceById = new Map((balances ?? []).map(b => [b.employee_id as string, b]))
+
+  const okRows: BalancePreviewRow[] = matched.map(({ row: r, emp }) => {
+    const display = r.name || r.email || `row ${r.rowIndex + 1}`
     const cur = balanceById.get(emp.id)
     const current: Buckets = { pto: Number(cur?.pto_hours ?? 0), sick: Number(cur?.sick_hours ?? 0), vacation: Number(cur?.personal_hours ?? 0) }
     // A blank cell in the file means "no change", never "zero it out".
@@ -132,8 +149,7 @@ export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: str
     return { rowIndex: r.rowIndex, fileName: display, status: 'ok' as const, employeeId: emp.id, employeeName: emp.name, current, file, deducted, final, flags }
   })
 
-  const matched = new Set(rows.filter(r => r.employeeId).map(r => r.employeeId!))
-  const notInFile = (employees ?? []).filter(e => !matched.has(e.id)).map(e => ({ id: e.id, name: e.name }))
+  const rows: BalancePreviewRow[] = [...okRows, ...problems.map(p => ({ ...p, flags: [] as string[] }))].sort((a, b) => a.rowIndex - b.rowIndex)
   return { rows, notInFile }
 }
 
@@ -210,17 +226,17 @@ export async function getBalanceUpdateHistory() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('balance_adjustments')
-    .select('batch_id, as_of, source_file, note, created_at, creator:employees!balance_adjustments_created_by_fkey(name)')
+    .select('batch_id, as_of, source_file, note, kind, created_at, creator:employees!balance_adjustments_created_by_fkey(name)')
     .order('created_at', { ascending: false })
     .limit(500)
   if (error) throw new Error(error.message)
-  const batches = new Map<string, { batchId: string; asOf: string; file: string | null; note: string | null; at: string; by: string | null; employees: number }>()
+  const batches = new Map<string, { batchId: string; asOf: string; file: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }>()
   for (const r of data ?? []) {
     const b = batches.get(r.batch_id)
     if (b) b.employees++
     else {
       const c = r.creator as unknown as { name: string } | { name: string }[] | null
-      batches.set(r.batch_id, { batchId: r.batch_id, asOf: r.as_of, file: r.source_file, note: r.note, at: r.created_at, by: (Array.isArray(c) ? c[0]?.name : c?.name) ?? null, employees: 1 })
+      batches.set(r.batch_id, { batchId: r.batch_id, asOf: r.as_of, file: r.source_file, note: r.note, kind: r.kind, at: r.created_at, by: (Array.isArray(c) ? c[0]?.name : c?.name) ?? null, employees: 1 })
     }
   }
   return [...batches.values()].slice(0, 10)
@@ -278,4 +294,159 @@ export async function runAccrualsNow(): Promise<AccrualRunSummary> {
   revalidatePath('/admin/balances')
   revalidatePath('/dashboard')
   return summary
+}
+
+
+// ------------------------------------------------------------------------------------------------------------------
+// Reconciliation with Sage: closing snapshots, compare-only mode, and manual adjustments
+// ------------------------------------------------------------------------------------------------------------------
+
+export type SnapshotRow = {
+  employeeId: string
+  name: string
+  snapshot: Buckets
+  live: Buckets
+  /** What moved the live balance since the snapshot date. */
+  since: { accrued: Buckets; leaveTaken: Buckets; adjustments: Buckets }
+}
+
+/** The latest closing snapshot per employee beside the live balance — "at last close" vs "today". */
+export async function getSnapshotOverview(): Promise<{ asOf: string | null; rows: SnapshotRow[] }> {
+  await requireBalanceManager()
+  const admin = createAdminClient()
+  const { data: latest } = await admin.from('balance_snapshots').select('as_of').order('as_of', { ascending: false }).limit(1)
+  const asOf = latest?.[0]?.as_of as string | undefined
+  if (!asOf) return { asOf: null, rows: [] }
+
+  const [{ data: snaps, error }, history, { data: emps }] = await Promise.all([
+    admin.from('balance_snapshots').select('employee_id, pto, sick, vacation').eq('as_of', asOf),
+    balancesAsOf(admin, asOf),
+    admin.from('employees').select('id, name').eq('is_active', true),
+  ])
+  if (error) throw new Error(error.message)
+  const nameById = new Map((emps ?? []).map(e => [e.id as string, e.name as string]))
+
+  const rows: SnapshotRow[] = (snaps ?? []).flatMap(sn => {
+    const h = history.get(sn.employee_id as string)
+    if (!h) return []
+    return [{
+      employeeId: sn.employee_id as string,
+      name: nameById.get(sn.employee_id as string) ?? 'Unknown',
+      snapshot: { pto: Number(sn.pto), sick: Number(sn.sick), vacation: Number(sn.vacation) },
+      live: h.live,
+      since: h.since,
+    }]
+  }).sort((a, b) => a.name.localeCompare(b.name))
+  return { asOf, rows }
+}
+
+export type ComparisonRow = {
+  rowIndex: number
+  fileName: string
+  employeeId: string
+  employeeName: string
+  portal: Buckets
+  file: Buckets
+  variance: Buckets // file − portal, per bucket
+}
+
+export type ComparisonResult = {
+  asOf: string
+  source: 'snapshot' | 'reconstructed'
+  rows: ComparisonRow[]
+  problems: { fileName: string; message: string }[]
+  notInFile: string[]
+}
+
+/**
+ * Compare-only: lines a Sage balance file up against the portal's balances AS OF the same date (the closing snapshot if
+ * one exists for it, otherwise rebuilt from history) and reports the differences. Nothing is changed.
+ */
+export async function compareBalancesToSage(fileRows: BalanceFileRow[], asOf: string): Promise<ComparisonResult> {
+  await requireBalanceManager()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date the Sage balances are as of')
+  const admin = createAdminClient()
+
+  const [{ matched, problems, notInFile }, { data: snaps }] = await Promise.all([
+    matchFileRows(admin, fileRows),
+    admin.from('balance_snapshots').select('employee_id, pto, sick, vacation').eq('as_of', asOf),
+  ])
+  const snapById = new Map((snaps ?? []).map(sn => [sn.employee_id as string, { pto: Number(sn.pto), sick: Number(sn.sick), vacation: Number(sn.vacation) }]))
+  const rebuilt = snapById.size > 0 ? null : await balancesAsOf(admin, asOf, matched.map(m => m.emp.id))
+
+  const round = (n: number) => Math.round(n * 100) / 100
+  const rows: ComparisonRow[] = matched.map(({ row, emp }) => {
+    const portal = snapById.get(emp.id) ?? rebuilt?.get(emp.id)?.asOf ?? { pto: 0, sick: 0, vacation: 0 }
+    const file: Buckets = { pto: row.pto ?? portal.pto, sick: row.sick ?? portal.sick, vacation: row.vacation ?? portal.vacation }
+    return {
+      rowIndex: row.rowIndex, fileName: row.name || row.email || `row ${row.rowIndex + 1}`, employeeId: emp.id, employeeName: emp.name, portal, file,
+      variance: { pto: round(file.pto - portal.pto), sick: round(file.sick - portal.sick), vacation: round(file.vacation - portal.vacation) },
+    }
+  })
+  return { asOf, source: snapById.size > 0 ? 'snapshot' : 'reconstructed', rows, problems: problems.map(p => ({ fileName: p.fileName, message: p.message })), notInFile: notInFile.map(e => e.name) }
+}
+
+/**
+ * Posts a hand-entered correction: changes each balance by the given number of hours (positive or negative), records
+ * who/why, and never touches closed timesheets or leave requests. This is the home for prior-period corrections and for
+ * variances found against Sage.
+ */
+export async function postBalanceAdjustments(
+  items: { employeeId: string; pto: number; sick: number; vacation: number }[],
+  effectiveDate: string,
+  reason: string,
+) {
+  const actor = await requireBalanceManager()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw new Error('Choose the date the correction is effective')
+  const why = reason.trim()
+  if (!why) throw new Error('Give a reason for the adjustment')
+  const changes = items.filter(i => [i.pto, i.sick, i.vacation].every(n => Number.isFinite(n)) && (i.pto !== 0 || i.sick !== 0 || i.vacation !== 0))
+  if (changes.length === 0) throw new Error('Nothing to adjust — every change is zero')
+
+  const admin = createAdminClient()
+  const ids = changes.map(c => c.employeeId)
+  const [{ data: balances, error: balError }, { data: employees, error: empError }] = await Promise.all([
+    admin.from('leave_balances').select('employee_id, pto_hours, sick_hours, personal_hours').in('employee_id', ids),
+    admin.from('employees').select('id').in('id', ids).eq('is_active', true),
+  ])
+  if (balError) throw new Error(balError.message)
+  if (empError) throw new Error(empError.message)
+  const valid = new Set((employees ?? []).map(e => e.id as string))
+  const current = new Map((balances ?? []).map(b => [b.employee_id as string, b]))
+
+  const batchId = randomUUID()
+  const audit: Record<string, unknown>[] = []
+  for (const c of changes) {
+    if (!valid.has(c.employeeId)) continue
+    const old = current.get(c.employeeId)
+    const next = {
+      pto_hours: Number(old?.pto_hours ?? 0) + c.pto,
+      sick_hours: Number(old?.sick_hours ?? 0) + c.sick,
+      personal_hours: Number(old?.personal_hours ?? 0) + c.vacation,
+    }
+    const { error } = old
+      ? await admin.from('leave_balances').update({ ...next, updated_at: new Date().toISOString() }).eq('employee_id', c.employeeId)
+      : await admin.from('leave_balances').insert({ employee_id: c.employeeId, ...next })
+    if (error) throw new Error(error.message)
+    audit.push({
+      batch_id: batchId, kind: 'adjustment', reason: why, note: why, employee_id: c.employeeId, as_of: effectiveDate, created_by: actor.id,
+      old_pto: Number(old?.pto_hours ?? 0), old_sick: Number(old?.sick_hours ?? 0), old_personal: Number(old?.personal_hours ?? 0),
+      new_pto: next.pto_hours, new_sick: next.sick_hours, new_personal: next.personal_hours,
+    })
+  }
+  const { error: auditError } = await admin.from('balance_adjustments').insert(audit)
+  if (auditError) console.error('postBalanceAdjustments: audit insert failed', auditError.message)
+
+  revalidatePath('/admin/balances')
+  revalidatePath('/dashboard')
+  return { applied: audit.length }
+}
+
+/** Active employees for the manual-adjustment picker. */
+export async function getAdjustableEmployees() {
+  await requireBalanceManager()
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('employees').select('id, name').eq('is_active', true).order('name')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as { id: string; name: string }[]
 }
