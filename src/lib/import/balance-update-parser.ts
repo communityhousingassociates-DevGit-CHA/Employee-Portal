@@ -65,3 +65,17 @@ export async function parseBalanceUpdateFile(buffer: ArrayBuffer): Promise<Balan
   }
   throw new Error('Couldn’t find a header row with a Name or Email column and PTO / Sick / Vacation balance columns')
 }
+
+/**
+ * The "As Of Date" typed into the top of CHA's Leave Balance Validation workbook (cell B2 of the Validation sheet),
+ * or null if the file isn't that template or the cell is blank / not a date. Used to pre-fill — never to replace — the
+ * as-of date a person must confirm.
+ */
+export function readTemplateAsOf(buffer: ArrayBuffer): string | null {
+  const wb = XLSX.read(buffer, { type: 'array' })
+  const ws = wb.Sheets['Validation']
+  if (!ws) return null
+  const grid: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' })
+  const v = String(grid[1]?.[1] ?? '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null
+}

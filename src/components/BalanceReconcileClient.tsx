@@ -38,13 +38,15 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
 
   async function handleCompare() {
     const file = fileRef.current?.files?.[0]
-    if (!file || !asOf) { setError('Choose the Sage file and the date it is as of'); return }
+    if (!file) { setError('Choose the Sage file'); return }
     setBusy(true); setError(''); setResult(null)
     try {
       const fd = new FormData(); fd.set('file', file)
-      const rows = await parseBalanceFileForUpdate(fd)
+      const { rows, fileAsOf } = await parseBalanceFileForUpdate(fd)
       setFileRows(rows)
-      const res = await compareBalancesToSage(rows, asOf)
+      const date = asOf || fileAsOf || ''
+      if (!asOf && fileAsOf) setAsOf(fileAsOf)
+      const res = await compareBalancesToSage(rows, date)
       setResult(res)
       setPicked(new Set(res.rows.filter(r => r.variance.pto || r.variance.sick || r.variance.vacation).map(r => r.employeeId)))
       setReason(`Reconciliation to Sage as of ${fmtDate(asOf)}`)

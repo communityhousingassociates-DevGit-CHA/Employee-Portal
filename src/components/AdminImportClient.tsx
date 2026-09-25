@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import {
   parseEmployeeFile, parseBalanceFile, parseSalaryFile, validateImport, commitImport, inviteEmployees,
-  submitImportForReview, getPendingImportBatch, discardImportBatch,
+  submitImportForReview, getPendingImportBatch, discardImportBatch, readBalanceFileAsOf,
 } from '@/app/actions/import'
 import type { ParsedEmployeeRow, ParsedBalanceRow, ParsedSalaryRow, ImportPreview } from '@/lib/import/types'
 import { fmtDateTime } from '@/lib/format-date'
@@ -57,6 +57,8 @@ export default function AdminImportClient({
   const [submittedForReview, setSubmittedForReview] = useState(false)
   const [employeeFileName, setEmployeeFileName] = useState('')
   const [balanceFileName, setBalanceFileName] = useState('')
+  // Required: the date the balance file's numbers describe. Pre-filled from the file's own As Of Date when it has one.
+  const [balancesAsOf, setBalancesAsOf] = useState('')
   const [salaryFileName, setSalaryFileName] = useState('')
   const employeeFileRef = useRef<HTMLInputElement>(null)
   const balanceFileRef = useRef<HTMLInputElement>(null)
@@ -124,6 +126,7 @@ export default function AdminImportClient({
       setPreview(batch.preview)
       setEmployeeFileName(batch.employeeFileName ?? '')
       setBalanceFileName(batch.balanceFileName ?? '')
+      setBalancesAsOf(batch.balancesAsOf ?? '')
       setSalaryFileName(batch.salaryFileName ?? '')
       setAcknowledged(false)
       setCurrentBatchId(batchId)
@@ -164,6 +167,7 @@ export default function AdminImportClient({
         employeeFileName,
         balanceFileName,
         salaryFileName: salaryFileName || null,
+        balancesAsOf,
       })
       setSubmittedForReview(true)
     } catch (e: unknown) {
@@ -181,7 +185,7 @@ export default function AdminImportClient({
       const okEmployees = preview.employees.filter(r => r.status !== 'error').map(r => r.data)
       const okBalances = preview.balances.filter(r => r.status !== 'error').map(r => r.data)
       const okSalaries = preview.salaries.filter(r => r.status !== 'error').map(r => r.data)
-      const res = await commitImport({ employees: okEmployees, balances: okBalances, salaries: okSalaries, batchId: currentBatchId ?? undefined })
+      const res = await commitImport({ employees: okEmployees, balances: okBalances, salaries: okSalaries, batchId: currentBatchId ?? undefined, balancesAsOf, balanceFileName })
       if (currentBatchId) setPendingBatches(bs => bs.filter(b => b.id !== currentBatchId))
       setResult(res)
       setStep('done')
@@ -220,6 +224,7 @@ export default function AdminImportClient({
     setCurrentBatchId(null)
     setSubmittedForReview(false)
     if (employeeFileRef.current) employeeFileRef.current.value = ''
+    setBalancesAsOf('')
     if (balanceFileRef.current) balanceFileRef.current.value = ''
     if (salaryFileRef.current) salaryFileRef.current.value = ''
   }
@@ -302,7 +307,22 @@ export default function AdminImportClient({
                 {balanceFileName || 'Click to choose a file'}
               </button>
               <input ref={balanceFileRef} type="file" accept=".xlsx" className="hidden"
-                onChange={e => setBalanceFileName(e.target.files?.[0]?.name ?? '')} />
+                onChange={async e => {
+                  const f = e.target.files?.[0]
+                  setBalanceFileName(f?.name ?? '')
+                  if (!f) return
+                  try {
+                    const fd = new FormData(); fd.set('file', f)
+                    const detected = await readBalanceFileAsOf(fd)
+                    if (detected && !balancesAsOf) setBalancesAsOf(detected)
+                  } catch { /* the date is entered by hand if it can't be read */ }
+                }} />
+              <div className="flex flex-col gap-1 mt-1">
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Balances as of <span className="normal-case font-normal text-red-500">(required)</span></label>
+                <input type="date" value={balancesAsOf} max={new Date().toISOString().slice(0, 10)} onChange={e => setBalancesAsOf(e.target.value)}
+                  className="px-3 py-2 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white" />
+                <span className="text-[10px] text-gray-400">The date the balances in this file describe — recorded with the load as an audit trail.</span>
+              </div>
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Salary Data Intake (.xlsx) <span className="normal-case font-normal text-gray-400">— optional</span></label>
@@ -314,7 +334,7 @@ export default function AdminImportClient({
                 onChange={e => setSalaryFileName(e.target.files?.[0]?.name ?? '')} />
             </div>
           </div>
-          <button onClick={handleParseAndValidate} disabled={!employeeFileName || !balanceFileName || loading}
+          <button onClick={handleParseAndValidate} disabled={!employeeFileName || !balanceFileName || !balancesAsOf || loading}
             className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {loading ? 'Parsing…' : 'Parse & Review'}
           </button>

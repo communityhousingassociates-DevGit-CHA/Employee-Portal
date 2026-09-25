@@ -11,7 +11,7 @@ import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
 import { balancesAsOf } from '@/lib/balance-history'
 import { todayET } from '@/lib/pay-periods'
 import { isPeriodBoundary } from '@/lib/pay-periods'
-import { parseBalanceUpdateFile, type BalanceFileRow } from '@/lib/import/balance-update-parser'
+import { parseBalanceUpdateFile, readTemplateAsOf, type BalanceFileRow } from '@/lib/import/balance-update-parser'
 import type { Employee } from '@/types'
 
 /** Overriding leave balances is limited to the payroll-access group (Nico, Carrileen, super admin). */
@@ -55,11 +55,19 @@ export async function setBulkOverrideLock(locked: boolean, reason: string) {
   revalidatePath('/admin/balances')
 }
 
-export async function parseBalanceFileForUpdate(formData: FormData): Promise<BalanceFileRow[]> {
+/** Parses the file and, if it's CHA's template, reports the As Of Date typed into it so the screen can pre-fill (not replace) the date. */
+export async function parseBalanceFileForUpdate(formData: FormData): Promise<{ rows: BalanceFileRow[]; fileAsOf: string | null }> {
   await requireBalanceManager()
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file uploaded')
-  return parseBalanceUpdateFile(await file.arrayBuffer())
+  const buffer = await file.arrayBuffer()
+  return { rows: await parseBalanceUpdateFile(buffer), fileAsOf: readTemplateAsOf(buffer) }
+}
+
+/** A balance file must say what date it describes, and that date can't be in the future. */
+function assertAsOf(asOf: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date these balances are as of')
+  if (asOf > todayET()) throw new Error('The “as of” date can’t be in the future')
 }
 
 type Buckets = { pto: number; sick: number; vacation: number }
@@ -148,7 +156,7 @@ async function matchFileRows(admin: ReturnType<typeof createAdminClient>, fileRo
 /** Matches file rows to employees and shows exactly what would change — nothing is written. */
 export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: string): Promise<BalancePreview> {
   await requireBalanceManager()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the "as of" date of the balances')
+  assertAsOf(asOf)
   const admin = createAdminClient()
 
   const [{ matched, problems, notInFile }, { data: balances, error: balError }, deductions] = await Promise.all([
@@ -199,7 +207,7 @@ export async function applyBalanceUpdate(
   fileName: string,
 ) {
   const actor = await requireBalanceManager()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the "as of" date of the balances')
+  assertAsOf(asOf)
   if (updates.length === 0) throw new Error('Nothing to apply')
   const admin = createAdminClient()
   if ((await getBulkLockState()).locked) {
@@ -401,7 +409,7 @@ export type ComparisonResult = {
  */
 export async function compareBalancesToSage(fileRows: BalanceFileRow[], asOf: string): Promise<ComparisonResult> {
   await requireBalanceManager()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date the Sage balances are as of')
+  assertAsOf(asOf)
   const admin = createAdminClient()
 
   const [{ matched, problems, notInFile }, { data: snaps }] = await Promise.all([

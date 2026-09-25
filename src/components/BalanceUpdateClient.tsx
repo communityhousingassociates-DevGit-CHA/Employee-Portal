@@ -28,7 +28,9 @@ function Delta({ from, to }: { from: number; to: number }) {
 export default function BalanceUpdateClient({ bulkLock, accrual, history, periods, currentStart }: { bulkLock: BulkLockState; accrual: AccrualState; history: HistoryItem[]; periods: PayPeriod[]; currentStart: string }) {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [asOf, setAsOf] = useState('2026-09-13')
+  // No default on purpose: the date a balance file describes must be stated, not assumed. (Pre-filled from the file when it has one.)
+  const [asOf, setAsOf] = useState('')
+  const [fileAsOf, setFileAsOf] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [fileName, setFileName] = useState('')
   const [fileRows, setFileRows] = useState<BalanceFileRow[]>([])
@@ -57,9 +59,12 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
     setBusy(true); setError(''); setPreview(null); setConfirmed(false)
     try {
       const fd = new FormData(); fd.set('file', file)
-      const rows = await parseBalanceFileForUpdate(fd)
-      setFileName(file.name); setFileRows(rows)
-      setPreview(await previewBalanceUpdate(rows, asOf))
+      const { rows, fileAsOf: detected } = await parseBalanceFileForUpdate(fd)
+      setFileName(file.name); setFileRows(rows); setFileAsOf(detected)
+      const date = asOf || detected || ''
+      if (!asOf && detected) setAsOf(detected)
+      if (!date) { setError('This file doesn’t state a date — enter the date its balances are as of, then it will preview.'); return }
+      setPreview(await previewBalanceUpdate(rows, date))
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t read that file') } finally { setBusy(false) }
   }
 
@@ -156,7 +161,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Balances are as of</label>
             <input type="date" value={asOf} onChange={e => refreshPreview(e.target.value)} className={inputCls} />
-            <span className="text-[11px] text-gray-400">Approved leave dated on/after this day is taken back off the file&apos;s totals.</span>
+            <span className="text-[11px] text-gray-400">Required. {fileAsOf ? <>The file says <strong>{fmtDate(fileAsOf)}</strong>. </> : ''}Approved leave already taken on/after this day is taken back off the file&apos;s totals.</span>
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Note <span className="normal-case font-normal text-gray-400">(optional)</span></label>
