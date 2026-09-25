@@ -8,7 +8,7 @@ import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
-import { todayET, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { todayET, deductThroughDate, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
@@ -96,9 +96,10 @@ export default function RequestClient({
   }
 
   const hoursNum = Number(hours) || 0
-  // Leave that starts in the future is judged against the balance PROJECTED for its start date (accruals land in between,
-  // and other approved future leave is already reserved), not today's balance.
-  const startsLater = !!start && start > todayET()
+  // Leave that starts within the next two pay periods comes off today's balance when approved. Leave planned further out is
+  // only reserved, so it is judged against the balance PROJECTED for its start date (accruals land in between, and other
+  // reserved leave is already spoken for).
+  const startsLater = !!start && start > deductThroughDate()
   const balType = balanceTypeFor(leaveType)
   const projection = startsLater && balType && selectedBalance !== null
     ? projectedAvailable({ type: balType, onDate: start, current: selectedBalance, reserved: outlook.reserved, hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn })
@@ -348,7 +349,8 @@ export default function RequestClient({
                     </div>
                   )}
                   {isNegative && <div className="mt-3 text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2">{projection ? `Your projected balance on ${fmtDate(start)} doesn’t cover this request, so it can’t be approved as is.` : 'Negative balance will require manager approval.'}</div>}
-                  {startsLater && !isNegative && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">Future leave is <strong>reserved</strong> when approved and comes off your balance on the start date. The projected balance above must actually be available on that day for the leave to be valid.{!outlook.accrualsOn && ' (Accruals aren’t switched on yet, so none are projected.)'}</div>}
+                  {startsLater && !isNegative && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">Leave starting more than two pay periods out is <strong>reserved</strong> when approved. It comes off your balance once it is within two pay periods of the start date, and the projected balance above must actually be available then for the leave to be valid.{!outlook.accrualsOn && ' (Accruals aren’t switched on yet, so none are projected.)'}</div>}
+                  {!startsLater && !!start && start > todayET() && !isNegative && hoursNum > 0 && balType && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">This leave starts within the next two pay periods, so the hours come off your balance as soon as it is approved.</div>}
                   {leaveType === 'Sick' && hoursNum > 0 && !isNegative && <div className="mt-3 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2">Sick leave is approved automatically when your balance covers it.</div>}
                 </>
               ) : <p className="text-[12px] text-gray-400">{leaveType} does not draw from your leave balance.</p>}

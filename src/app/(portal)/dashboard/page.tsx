@@ -200,7 +200,7 @@ export default async function DashboardPage() {
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-bold text-[#0b2b35]">Reserved for approved future leave</p>
               <p className="text-[12px] text-gray-500 mt-0.5">
-                These hours haven&apos;t come off your balance yet — they&apos;re reserved and deducted on each start date. Your <strong>projected</strong> balance must actually be available on that day for the leave to be valid.
+                This leave is planned more than two pay periods out, so it&apos;s reserved rather than deducted yet. It comes off your balance once it&apos;s within two pay periods of its start date. Your <strong>projected</strong> balance must actually be available on that day for the leave to be valid.
                 {!outlook.accrualsOn && ' Accruals aren’t switched on yet, so no future accruals are counted.'}
               </p>
               <ul className="mt-3 space-y-2">

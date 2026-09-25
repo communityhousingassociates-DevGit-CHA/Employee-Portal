@@ -49,6 +49,19 @@ export function getCurrentPeriod(anchorDate: string = PAY_PERIOD_ANCHOR, asOf: D
   return { start: toDateOnly(start), end: toDateOnly(end) }
 }
 
+/**
+ * Approved leave that starts within this many pay periods after the current one comes off the balance the moment it is
+ * approved (and the daily job sweeps leave in as it gets that close). Leave planned further out is only RESERVED until then.
+ * Management policy (2026-09-25); change here if it does.
+ */
+export const DEDUCT_AHEAD_PERIODS = 2
+
+/** The last date whose leave should already be deducted from the balance: the end of the pay period `DEDUCT_AHEAD_PERIODS` after the current one. */
+export function deductThroughDate(today: string = todayET()): string {
+  const current = getCurrentPeriod(undefined, new Date(`${today}T00:00:00Z`))
+  return toDateOnly(addDays(new Date(`${current.end}T00:00:00Z`), DEDUCT_AHEAD_PERIODS * PERIOD_DAYS))
+}
+
 /** Returns the `count` most recent pay periods up to and including the current one, most recent first. */
 export function getRecentPeriods(count = 6, anchorDate: string = PAY_PERIOD_ANCHOR, asOf: Date = new Date()): PayPeriod[] {
   const current = getCurrentPeriod(anchorDate, asOf)

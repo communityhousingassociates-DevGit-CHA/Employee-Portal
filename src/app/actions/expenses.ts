@@ -1,5 +1,6 @@
 'use server'
 
+import { denyReasonProblem } from '@/lib/deny-reason'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
@@ -171,20 +172,22 @@ export async function approveExpense(id: string) {
 
 export async function denyExpense(id: string, reason: string) {
   const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const reasonProblem = denyReasonProblem(reason)
+  if (reasonProblem) throw new Error(reasonProblem)
   const admin = createAdminClient()
   const expense = await getPendingExpense(admin, id, actor)
   const { error } = await admin.from('expenses').update({
     status: 'denied',
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
-    deny_reason: reason,
+    deny_reason: reason.trim(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
 
   await notifyEmployee(admin, expense.employee_id, {
     kind: 'denied',
     title: 'Your expense was denied',
-    body: `${expenseSummary(expense)}\nDenied by ${actor.name}.${reason ? `\nReason: ${reason}` : ''}`,
+    body: `${expenseSummary(expense)}\nDenied by ${actor.name}.\nReason: ${reason.trim()}`,
     link: '/expenses',
     cta: 'View My Expenses',
   })

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
+import { todayET } from '@/lib/pay-periods'
 import type { LeaveRequest } from '@/types'
 
 type Request = LeaveRequest & { approver_name: string | null }
@@ -37,10 +38,10 @@ function daysAgo(iso: string) {
   return `${Math.floor(diff / 365)}yr ago`
 }
 
-// Mirrors cancelMyLeaveRequest: pending, auto-approved, or approved-but-not-yet-taken leave can be undone by the employee.
+// Mirrors cancelMyLeaveRequest: pending, auto-approved, or approved leave that hasn't started yet can be undone by the employee.
 function canCancel(r: Request) {
   if (r.status === 'pending') return true
-  return r.status === 'approved' && (!r.approver_id || !r.balance_deducted_at)
+  return r.status === 'approved' && (!r.approver_id || r.start_date > todayET())
 }
 
 function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expanded: boolean; onToggle: () => void; allowCancel: boolean }) {

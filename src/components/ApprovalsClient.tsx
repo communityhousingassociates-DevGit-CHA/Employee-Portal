@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { denyReasonProblem } from '@/lib/deny-reason'
 import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
 import { approveTimesheet, returnTimesheet, reopenTimesheet, adjustRowTags } from '@/app/actions/timesheets'
@@ -173,10 +174,11 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
         {confirming === 'deny' && (
           <div className="mt-4 bg-red-50 border border-red-200 rounded-xl p-4">
             <p className="text-[13px] font-semibold text-red-800 mb-1">Deny this request</p>
-            <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} placeholder="Optional: add a reason for the employee…" rows={2}
+            <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} placeholder="Required: tell the employee why (they will see this)…" rows={2}
               className="w-full text-[12px] border border-red-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:border-red-400 bg-white resize-none" />
+            {denyReason.trim() !== '' && denyReasonProblem(denyReason) && <p className="text-[11px] text-red-600 -mt-2 mb-2">{denyReasonProblem(denyReason)}</p>}
             <div className="flex gap-2">
-              <button onClick={submitDeny} disabled={busy} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">
+              <button onClick={submitDeny} disabled={busy || !!denyReasonProblem(denyReason)} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">
                 {busy ? 'Confirming…' : '✕ Confirm Denial'}
               </button>
               <button onClick={() => { setConfirming(null); setDenyReason('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors">Cancel</button>
@@ -250,10 +252,11 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
       )}
       {confirming === 'deny' && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} placeholder="Optional: reason…" rows={2}
+          <textarea value={denyReason} onChange={e => setDenyReason(e.target.value)} placeholder="Required: tell the employee why (they will see this)…" rows={2}
             className="w-full text-[12px] border border-red-200 rounded-lg px-3 py-2 mb-3 focus:outline-none focus:border-red-400 bg-white resize-none" />
+          {denyReason.trim() !== '' && denyReasonProblem(denyReason) && <p className="text-[11px] text-red-600 -mt-2 mb-2">{denyReasonProblem(denyReason)}</p>}
           <div className="flex gap-2">
-            <button onClick={submitDeny} disabled={busy} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">{busy ? 'Confirming…' : '✕ Confirm Denial'}</button>
+            <button onClick={submitDeny} disabled={busy || !!denyReasonProblem(denyReason)} className="bg-red-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">{busy ? 'Confirming…' : '✕ Confirm Denial'}</button>
             <button onClick={() => { setConfirming(null); setDenyReason('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-100 transition-colors">Cancel</button>
           </div>
         </div>

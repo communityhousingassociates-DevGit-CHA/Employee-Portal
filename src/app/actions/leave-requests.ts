@@ -10,7 +10,8 @@ import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_L
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
-import { closedRangeOverlapping, todayET } from '@/lib/pay-periods'
+import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
+import { denyReasonProblem } from '@/lib/deny-reason'
 import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
 import { balanceTypeFor, projectedAvailable } from '@/lib/leave-projection'
 import type { LeaveType, Role } from '@/types'
@@ -339,19 +340,20 @@ export async function approveLeaveRequest(id: string) {
   const overage = await dailyLeaveOverage(admin, request.employee_id, request.start_date, request.end_date, Number(request.hours), id)
   if (overage) throw new Error(`${overage} Deny this request instead.`)
 
-  // Leave that has already begun comes off the balance now (and must be covered by it). Leave that starts in the
-  // future is RESERVED instead: it's judged against the balance projected for its start date (today's balance plus
-  // the accruals that will land by then, minus other reserved leave) and comes off when the day arrives.
+  // Leave that has begun, or starts within the next two pay periods, comes off the balance now (and must be covered by
+  // it). Leave planned further out is RESERVED instead: it's judged against the balance projected for its start date
+  // (today's balance plus the accruals that will land by then, minus other reserved leave) and is deducted by the daily
+  // job once it comes within that window.
   const col = balanceColumnFor(request.leave_type as LeaveType)
   const balanceType = balanceTypeFor(request.leave_type as LeaveType)
-  const startsLater = request.start_date > todayET()
+  const startsLater = request.start_date > deductThroughDate()
   if (col && balanceType) {
     const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', request.employee_id).maybeSingle()
     if (balError) throw new Error(balError.message)
     const current = balance ? Number(balance[col]) : 0
     if (!startsLater) {
       if (current < Number(request.hours)) {
-        throw new Error(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs`)
+        throw new Error(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs. Leave this close comes off the current balance when approved.`)
       }
     } else {
       const ctx = await loadProjectionContext(admin, request.employee_id)
@@ -398,6 +400,8 @@ export async function approveLeaveRequest(id: string) {
 
 export async function denyLeaveRequest(id: string, reason: string) {
   const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const reasonProblem = denyReasonProblem(reason)
+  if (reasonProblem) throw new Error(reasonProblem)
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
@@ -409,14 +413,14 @@ export async function denyLeaveRequest(id: string, reason: string) {
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
     approver_signed_at: new Date().toISOString(),
-    deny_reason: reason || null,
+    deny_reason: reason.trim(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
 
   await notifyEmployee(admin, request.employee_id, {
     kind: 'denied',
     title: `Your ${request.leave_type} request was denied`,
-    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nDenied by ${actor.name}.${reason ? `\nReason: ${reason}` : ''}`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nDenied by ${actor.name}.\nReason: ${reason.trim()}`,
     link: '/history',
     cta: 'View My Requests',
   })
@@ -428,8 +432,8 @@ export async function denyLeaveRequest(id: string, reason: string) {
 
 /**
  * Lets employees undo their own mistake without an approver: a pending request, an auto-approved one (Sick), or approved
- * leave that hasn't started yet (still only reserved). Leave an approver already approved and that has come off the
- * balance stays with the approvers. Restores any deducted balance and takes the hours back off the timesheet.
+ * leave that hasn't started yet (its hours go back on the balance if they were already deducted). Leave an approver
+ * approved that has started stays with the approvers. Restores any deducted balance and takes the hours back off the timesheet.
  */
 export async function cancelMyLeaveRequest(id: string) {
   const employee = await getCurrentEmployee()
@@ -441,8 +445,8 @@ export async function cancelMyLeaveRequest(id: string) {
   if (request.status === 'denied' || request.status === 'cancelled') throw new Error('This request is already closed.')
 
   const deducted = !!request.balance_deducted_at
-  const selfService = request.status === 'pending' || !request.approver_id || !deducted
-  if (!selfService) throw new Error('This leave was approved by an approver and has already been taken off your balance. Ask your Accounting Manager to change it.')
+  const selfService = request.status === 'pending' || !request.approver_id || request.start_date > todayET()
+  if (!selfService) throw new Error('This leave was approved by an approver and has already started, so it needs your Accounting Manager to change it.')
 
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
   if (closedHit) throw new Error(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)

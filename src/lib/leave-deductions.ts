@@ -2,7 +2,7 @@
 // employees and must only run behind an authorised caller (an approval action, or the daily cron).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { todayET } from '@/lib/pay-periods'
+import { deductThroughDate } from '@/lib/pay-periods'
 import { balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
@@ -49,19 +49,20 @@ export async function deductRequestFromBalance(admin: SupabaseClient, request: {
 }
 
 /**
- * Deducts approved leave whose start date has arrived. If the balance can't cover it on the day, the hours are still
+ * Deducts approved leave whose start date has arrived or is within the next two pay periods (see DEDUCT_AHEAD_PERIODS). If
+ * the balance can't cover it then, the hours are still
  * taken (the balance goes negative) and the employee and approvers are told — the reservation was only valid if the
  * projected balance actually materialised.
  */
 export async function applyDueLeaveDeductions(admin: SupabaseClient): Promise<{ deducted: number; shortfalls: number }> {
-  const today = todayET()
+  const through = deductThroughDate()
   const { data, error } = await admin
     .from('leave_requests')
     .select('id, employee_id, leave_type, start_date, end_date, hours')
     .eq('status', 'approved')
     .is('balance_deducted_at', null)
     .in('leave_type', ['PTO', 'Sick', 'Personal'])
-    .lte('start_date', today)
+    .lte('start_date', through)
     .order('start_date')
   if (error) throw new Error(error.message)
 
@@ -78,13 +79,13 @@ export async function applyDueLeaveDeductions(admin: SupabaseClient): Promise<{ 
         await notifyEmployee(admin, r.employee_id, {
           kind: 'returned',
           title: 'Leave started with an insufficient balance',
-          body: `${label} was approved against a projected balance that wasn't available on the day, so your balance is now ${Number(res.newBalance.toFixed(2))} hrs. Contact your Accounting Manager.`,
+          body: `${label} was approved against a projected balance that wasn't there once the leave came due, so your balance is now ${Number(res.newBalance.toFixed(2))} hrs. Contact your Accounting Manager.`,
           link: '/dashboard',
           cta: 'View My Balances',
         })
         await notifyApprovers(admin, r.employee_id, LEAVE_EXPENSE_APPROVER_ROLES, {
           title: 'Approved leave exceeded the available balance',
-          body: `${label} left the balance at ${Number(res.newBalance.toFixed(2))} hrs. The projected accruals it depended on weren't there on the start date.`,
+          body: `${label} left the balance at ${Number(res.newBalance.toFixed(2))} hrs. The projected accruals it depended on weren't there when the leave came due.`,
         })
       }
     } catch (e) {
