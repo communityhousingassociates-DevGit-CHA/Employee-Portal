@@ -11,7 +11,7 @@ import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense, TimesheetTag } from '@/types'
-import { periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod } from '@/lib/pay-periods'
+import { getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 const AUTOSAVE_DELAY_MS = 1500
@@ -94,7 +94,7 @@ export default function TimesheetClient({
   const savingRef = useRef(false)
 
   const period = periods[periodIdx]
-  const dueDate = addDays(period.end, 2)
+  const dueDate = getTimesheetDueDate(period)
   const submitted = timesheet.status === 'submitted' || timesheet.status === 'approved'
   // Accounting closed dates in this period: a never-submitted draft can't be edited or submitted (a deliberately reopened one can — that's the CEO override).
   const closedHit = closedRangeOverlapping(period.start, period.end, closedRanges)

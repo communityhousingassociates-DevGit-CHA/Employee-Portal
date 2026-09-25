@@ -38,8 +38,9 @@ export async function runAccruals(admin: SupabaseClient, firstPeriodStart: strin
       const { data: balance, error: balError } = await admin.from('leave_balances').select('pto_hours, sick_hours').eq('employee_id', emp.id).maybeSingle()
       if (balError || !balance) { summary.errors.push(`${emp.id}: no leave_balances row (${balError?.message ?? 'not found'})`); continue }
 
-      const newPto = emp.pto_uncapped ? Number(balance.pto_hours) + ptoRate : Math.min(Number(balance.pto_hours) + ptoRate, PTO_CARRYOVER_CAP)
-      const newSick = Number(balance.sick_hours) + SICK_RATE_PER_PERIOD
+      const round2 = (n: number) => Math.round(n * 100) / 100 // keep balances to cents — no floating-point tails
+      const newPto = round2(emp.pto_uncapped ? Number(balance.pto_hours) + ptoRate : Math.min(Number(balance.pto_hours) + ptoRate, PTO_CARRYOVER_CAP))
+      const newSick = round2(Number(balance.sick_hours) + SICK_RATE_PER_PERIOD)
 
       const logRows = []
       if (!done.has(`${emp.id}:pto`)) logRows.push({ employee_id: emp.id, accrual_type: 'pto', hours: ptoRate, period_start: period.start })

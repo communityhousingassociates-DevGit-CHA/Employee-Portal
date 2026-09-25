@@ -178,7 +178,7 @@ export default async function StaffSopPage() {
               rows={[
                 ['Pay period cadence', 'Bi-weekly (14 days), Sunday through Saturday — per CHA&apos;s payroll schedule'],
                 ['Pay period anchor / start date', 'Periods start 2026-09-13 and every 14 days after (2026-09-27, 2026-10-11, …), continuing through 2027 on the same cycle'],
-                ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
+                ['Timesheet submission cutoff', '2 calendar days after each period ends. One-time extension for the first period (09-13 – 09-26): due Friday 10-02-2026.'],
                 ['Pay date', 'Direct deposit on the Tuesday 17 days after each period ends. CHA&apos;s schedule is confirmed through 2027-01-05; later dates follow the same cycle and may shift for bank holidays.'],
               ]}
             />

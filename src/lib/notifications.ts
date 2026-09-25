@@ -96,6 +96,11 @@ export async function notify(
 export async function getApprovers(admin: SupabaseClient, excludeEmployeeId: string, roles: Role[]): Promise<Recipient[]> {
   const base = () =>
     admin.from('employees').select('id, email, name, role').in('role', roles).eq('is_active', true).neq('id', excludeEmployeeId)
+  // In test mode the dev/test accounts are legitimate approvers (that's who is doing the testing).
+  if (NOTIFICATION_TEST_MODE.enabled) {
+    const { data: all } = await base()
+    if (all && all.length > 0) return all as Recipient[]
+  }
   const { data } = await base().eq('is_test_account', false)
   if (data && data.length > 0) return data as Recipient[]
   const { data: fallback } = await base()

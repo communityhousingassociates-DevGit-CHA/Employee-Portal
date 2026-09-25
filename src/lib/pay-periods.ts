@@ -85,8 +85,17 @@ export function getPreviousPeriod(anchorDate: string = PAY_PERIOD_ANCHOR, asOf: 
   return { start: toDateOnly(start), end: toDateOnly(end) }
 }
 
-/** Timesheet submission cutoff for a period — 2 calendar days after it ends (confirmed policy). */
+// One-time extensions to a period's timesheet due date, keyed by the period's start date. Go-live: staff are still
+// entering the leave they took since the balances were loaded as of 2026-09-13, so the first period (9/13–9/26,
+// normally due Monday 9/28) is due Friday 10/2 instead.
+const TIMESHEET_DUE_OVERRIDES: Record<string, string> = {
+  '2026-09-13': '2026-10-02',
+}
+
+/** Timesheet submission cutoff for a period — 2 calendar days after it ends (confirmed policy), unless extended above. */
 export function getTimesheetDueDate(period: PayPeriod): string {
+  const extended = TIMESHEET_DUE_OVERRIDES[period.start]
+  if (extended) return extended
   const end = new Date(`${period.end}T00:00:00Z`)
   return toDateOnly(addDays(end, 2))
 }

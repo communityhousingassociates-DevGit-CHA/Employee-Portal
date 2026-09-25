@@ -33,7 +33,8 @@ export function canSelfApprove(role: Role): boolean {
 // In-portal notifications (the bell) are unaffected. Flip `enabled` to false to go live.
 export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string[]; neverEmailRoles: Role[] } = {
   enabled: true,
-  emailRecipients: ['cedwards@communityhousingmd.org', 'advisor@globalist.pro'],
+  // 2026-09-26: approver alerts go to johnnyrio22 for the Test User → JRio approval test. Add Carrileen back for her testing.
+  emailRecipients: ['johnnyrio22@gmail.com'],
   neverEmailRoles: ['ceo'],
 }
 
