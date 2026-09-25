@@ -40,6 +40,19 @@ function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: Notification
     </div>`
 }
 
+export type EmailLogEntry = { source: 'notification' | 'issue_report'; kind?: string; recipient_email: string; subject: string; status: 'sent' | 'failed' | 'skipped'; resend_id?: string | null; error?: string | null }
+
+/** Records the outcome of an email send in `email_log`. Never throws — logging must not break the action that sent the email. */
+export async function logEmails(admin: SupabaseClient, entries: EmailLogEntry[]) {
+  if (entries.length === 0) return
+  try {
+    const { error } = await admin.from('email_log').insert(entries.map(e => ({ ...e, kind: e.kind ?? null, resend_id: e.resend_id ?? null, error: e.error ?? null })))
+    if (error) console.error('logEmails: could not save email log', error.message)
+  } catch (e) {
+    console.error('logEmails: could not save email log', e)
+  }
+}
+
 /**
  * Notifies each recipient in-portal (a `notifications` row, shown in the topbar
  * bell) and by email. Best-effort by design: the request/expense/timesheet the
@@ -67,25 +80,35 @@ export async function notify(
 
   if (!process.env.RESEND_API_KEY) {
     console.error('notify: RESEND_API_KEY not set — skipping email')
+    await logEmails(admin, recipients.map(r => ({ source: 'notification', kind: n.kind, recipient_email: r.email, subject: `[CHA Portal] ${n.title}`, status: 'skipped', error: 'RESEND_API_KEY not set' })))
     return
   }
   const emailTo = email?.to ?? recipients.filter(r => !(NOTIFICATION_TEST_MODE.enabled && r.role && NOTIFICATION_TEST_MODE.neverEmailRoles.includes(r.role)))
   if (emailTo.length === 0) return
   const resend = new Resend(process.env.RESEND_API_KEY)
+  const subject = `${email?.testNote ? '[TEST] ' : ''}[CHA Portal] ${n.title}`
   const results = await Promise.allSettled(
     emailTo.map(r =>
       resend.emails.send({
         from: FROM,
         to: r.email,
-        subject: `${email?.testNote ? '[TEST] ' : ''}[CHA Portal] ${n.title}`,
+        subject,
         html: renderEmail(r, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, testNote: email?.testNote }),
       }),
     ),
   )
+  const log: EmailLogEntry[] = []
   results.forEach((res, i) => {
-    if (res.status === 'rejected') console.error(`notify: email to ${emailTo[i].email} failed`, res.reason)
-    else if (res.value.error) console.error(`notify: email to ${emailTo[i].email} failed`, res.value.error)
+    const base = { source: 'notification' as const, kind: n.kind, recipient_email: emailTo[i].email, subject }
+    if (res.status === 'rejected') {
+      console.error(`notify: email to ${emailTo[i].email} failed`, res.reason)
+      log.push({ ...base, status: 'failed', error: String(res.reason instanceof Error ? res.reason.message : res.reason) })
+    } else if (res.value.error) {
+      console.error(`notify: email to ${emailTo[i].email} failed`, res.value.error)
+      log.push({ ...base, status: 'failed', error: res.value.error.message })
+    } else log.push({ ...base, status: 'sent', resend_id: res.value.data?.id ?? null })
   })
+  await logEmails(admin, log)
 }
 
 /**

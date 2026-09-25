@@ -4,6 +4,7 @@ import { Resend } from 'resend'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
+import { logEmails } from '@/lib/notifications'
 import type { IssueCategory, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -53,12 +54,13 @@ export async function reportIssue(data: { category: IssueCategory; description: 
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY!)
-    await resend.emails.send({
+    const reportSubject = `[CHA Portal] ${categoryLabel} — ${employee.name}`
+    const sent = await resend.emails.send({
       from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
       to: REPORT_TO,
       cc: REPORT_CC,
       replyTo: employee.email,
-      subject: `[CHA Portal] ${categoryLabel} — ${employee.name}`,
+      subject: reportSubject,
       html: `
         <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
           <div style="background:#0b2b35;padding:16px 20px;border-radius:12px 12px 0 0">
@@ -79,6 +81,8 @@ export async function reportIssue(data: { category: IssueCategory; description: 
         </div>
       `,
     })
+    const recipients = [REPORT_TO, REPORT_CC]
+    await logEmails(admin, recipients.map(r => ({ source: 'issue_report' as const, recipient_email: r, subject: reportSubject, status: sent.error ? 'failed' as const : 'sent' as const, resend_id: sent.data?.id ?? null, error: sent.error?.message ?? null })))
   } catch (e) {
     console.error('reportIssue: email notification failed (ticket still logged)', e)
   }
