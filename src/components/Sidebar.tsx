@@ -8,9 +8,9 @@ type Role = 'employee' | 'accounting_manager' | 'ceo' | 'admin'
 
 const portalItems = [
   { href: '/dashboard', icon: '🏠', label: 'Dashboard' },
+  { href: '/timesheet', icon: '⏱', label: 'Timesheets' },
   { href: '/request', icon: '📋', label: 'Request/Use Leave' },
   { href: '/history', icon: '🕐', label: 'My Requests' },
-  { href: '/timesheet', icon: '⏱', label: 'Timesheets' },
   { href: '/calendar', icon: '📅', label: 'Leave Calendar' },
   { href: '/expenses', icon: '🧾', label: 'Expenses' },
 ]
