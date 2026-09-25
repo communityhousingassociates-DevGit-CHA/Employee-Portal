@@ -134,7 +134,7 @@ export async function createLeaveRequest(data: {
   if (error) throw new Error(error.message)
 
   if (autoApprove && col) {
-    const { error: deductError } = await admin.from('leave_balances').update({ [col]: balanceBefore - data.hours }).eq('employee_id', employee.id)
+    const { error: deductError } = await admin.from('leave_balances').update({ [col]: Math.round((balanceBefore - data.hours) * 100) / 100 }).eq('employee_id', employee.id)
     if (deductError) {
       await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
       throw new Error(deductError.message)

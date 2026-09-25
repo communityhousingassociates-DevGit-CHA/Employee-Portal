@@ -40,7 +40,7 @@ export async function deductRequestFromBalance(admin: SupabaseClient, request: {
   const col = COLUMN[type]
   const { data: balance, error } = await admin.from('leave_balances').select('*').eq('employee_id', request.employee_id).maybeSingle()
   if (error) throw new Error(error.message)
-  const newBalance = Number(balance?.[col] ?? 0) - Number(request.hours)
+  const newBalance = Math.round((Number(balance?.[col] ?? 0) - Number(request.hours)) * 100) / 100
   const { error: upError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', request.employee_id)
   if (upError) throw new Error(upError.message)
   const { error: stampError } = await admin.from('leave_requests').update({ balance_deducted_at: new Date().toISOString() }).eq('id', request.id)
