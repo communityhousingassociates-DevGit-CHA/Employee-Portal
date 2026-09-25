@@ -49,8 +49,10 @@ export default function RequestClient({
   outlook: { hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
   const [leaveType, setLeaveType] = useState<LeaveType>('PTO')
-  const [start, setStart] = useState('')
-  const [end, setEnd] = useState('')
+  // Leave defaults to a single day: From starts at today and To follows From until the employee picks a later To.
+  const [start, setStart] = useState(() => todayET())
+  const [end, setEnd] = useState(() => todayET())
+  const [endTouched, setEndTouched] = useState(false)
   const [hours, setHours] = useState('')
   const [note, setNote] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
@@ -87,8 +89,14 @@ export default function RequestClient({
     setHours(String(workdaysBetween(start, end) * 8))
   }
 
+  function handleStartChange(val: string) {
+    setStart(val)
+    if (!endTouched || !end || end < val) { setEnd(val); setEndTouched(false) }
+  }
+
   function handleEndChange(val: string) {
     setEnd(val)
+    setEndTouched(true)
     if (!hours && start && val) {
       const days = workdaysBetween(start, val)
       if (days > 0) setHours(String(days * 8))
@@ -153,7 +161,7 @@ export default function RequestClient({
           </p>
           <div className="flex flex-col gap-2">
             <Link href="/history" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">View My Requests</Link>
-            <button onClick={() => { setSubmitted(false); setSigned(false); setStart(''); setEnd(''); setHours(''); setNote(''); setAttachment(null) }}
+            <button onClick={() => { setSubmitted(false); setSigned(false); setStart(todayET()); setEnd(todayET()); setEndTouched(false); setHours(''); setNote(''); setAttachment(null) }}
               className="text-[13px] text-[#02ACC0] font-semibold hover:underline">Submit another request</button>
           </div>
         </div>
@@ -211,18 +219,21 @@ export default function RequestClient({
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Dates &amp; Hours</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="flex flex-wrap gap-4 mb-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Start Date</label>
-                <input type="date" value={start} min={earliest} max={latest} onChange={e => { setStart(e.target.value); setSigned(false) }}
-                  className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">From</label>
+                <input type="date" value={start} min={earliest} max={latest} onChange={e => { handleStartChange(e.target.value); setSigned(false) }}
+                  className="w-[9.5rem] px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">End Date</label>
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">To</label>
                 <input type="date" value={end} min={start || earliest} max={latest} onChange={e => { handleEndChange(e.target.value); setSigned(false) }}
-                  className="px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
+                  className="w-[9.5rem] px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
               </div>
             </div>
+            <p className="text-[11px] text-gray-400 -mt-2 mb-3">
+              A request covers one day unless you pick a later <strong>To</strong> date. A day holds up to 8 hours — for a half day enter 4. To split time across days or leave types (say 4 hours of PTO one afternoon and 4 hours the next morning), submit a separate request for each day.
+            </p>
             <p className="text-[11px] text-gray-400 -mt-2 mb-4">
               Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). <strong>Sick leave</strong> can only be for today or earlier. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
             </p>
