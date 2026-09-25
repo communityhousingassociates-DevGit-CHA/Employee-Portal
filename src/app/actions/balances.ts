@@ -8,6 +8,7 @@ import { hasPayrollAccess } from '@/lib/constants/salary-access'
 import { PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { runAccruals, type AccrualRunSummary } from '@/lib/accruals'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
+import { storeBalanceFile, signedBalanceFileUrl } from '@/lib/balance-files'
 import { balancesAsOf } from '@/lib/balance-history'
 import { todayET } from '@/lib/pay-periods'
 import { isPeriodBoundary } from '@/lib/pay-periods'
@@ -56,12 +57,15 @@ export async function setBulkOverrideLock(locked: boolean, reason: string) {
 }
 
 /** Parses the file and, if it's CHA's template, reports the As Of Date typed into it so the screen can pre-fill (not replace) the date. */
-export async function parseBalanceFileForUpdate(formData: FormData): Promise<{ rows: BalanceFileRow[]; fileAsOf: string | null }> {
+export async function parseBalanceFileForUpdate(formData: FormData): Promise<{ rows: BalanceFileRow[]; fileAsOf: string | null; filePath: string }> {
   await requireBalanceManager()
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file uploaded')
   const buffer = await file.arrayBuffer()
-  return { rows: await parseBalanceUpdateFile(buffer), fileAsOf: readTemplateAsOf(buffer) }
+  const rows = await parseBalanceUpdateFile(buffer)
+  // Keep the original: what was sent, and the date written on it, must stay retrievable.
+  const filePath = await storeBalanceFile(createAdminClient(), file, formData.get('purpose') === 'compare' ? 'compare' : 'override')
+  return { rows, fileAsOf: readTemplateAsOf(buffer), filePath }
 }
 
 /** A balance file must say what date it describes, and that date can't be in the future. */
@@ -205,6 +209,7 @@ export async function applyBalanceUpdate(
   asOf: string,
   note: string,
   fileName: string,
+  filePath: string | null = null,
 ) {
   const actor = await requireBalanceManager()
   assertAsOf(asOf)
@@ -244,7 +249,7 @@ export async function applyBalanceUpdate(
     if (error) throw new Error(error.message)
 
     audit.push({
-      batch_id: batchId, employee_id: u.employeeId, as_of: asOf, source_file: fileName || null, note: note.trim() || null, created_by: actor.id,
+      batch_id: batchId, employee_id: u.employeeId, as_of: asOf, source_file: fileName || null, source_file_path: filePath, note: note.trim() || null, created_by: actor.id,
       old_pto: old ? Number(old.pto_hours) : null, old_sick: old ? Number(old.sick_hours) : null, old_personal: old ? Number(old.personal_hours) : null,
       new_pto: next.pto_hours, new_sick: next.sick_hours, new_personal: next.personal_hours,
     })
@@ -271,17 +276,17 @@ export async function getBalanceUpdateHistory() {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('balance_adjustments')
-    .select('batch_id, as_of, source_file, note, kind, created_at, creator:employees!balance_adjustments_created_by_fkey(name)')
+    .select('batch_id, as_of, source_file, source_file_path, note, kind, created_at, creator:employees!balance_adjustments_created_by_fkey(name)')
     .order('created_at', { ascending: false })
     .limit(500)
   if (error) throw new Error(error.message)
-  const batches = new Map<string, { batchId: string; asOf: string; file: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }>()
+  const batches = new Map<string, { batchId: string; asOf: string; file: string | null; filePath: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }>()
   for (const r of data ?? []) {
     const b = batches.get(r.batch_id)
     if (b) b.employees++
     else {
       const c = r.creator as unknown as { name: string } | { name: string }[] | null
-      batches.set(r.batch_id, { batchId: r.batch_id, asOf: r.as_of, file: r.source_file, note: r.note, kind: r.kind, at: r.created_at, by: (Array.isArray(c) ? c[0]?.name : c?.name) ?? null, employees: 1 })
+      batches.set(r.batch_id, { batchId: r.batch_id, asOf: r.as_of, file: r.source_file, filePath: (r.source_file_path as string | null) ?? null, note: r.note, kind: r.kind, at: r.created_at, by: (Array.isArray(c) ? c[0]?.name : c?.name) ?? null, employees: 1 })
     }
   }
   return [...batches.values()].slice(0, 10)
@@ -494,4 +499,10 @@ export async function getAdjustableEmployees() {
   const { data, error } = await admin.from('employees').select('id, name').eq('is_active', true).order('name')
   if (error) throw new Error(error.message)
   return (data ?? []) as { id: string; name: string }[]
+}
+
+/** A short-lived download link for a stored balance file (payroll-access group only). */
+export async function getBalanceFileUrl(path: string): Promise<string> {
+  await requireBalanceManager()
+  return signedBalanceFileUrl(createAdminClient(), path)
 }

@@ -3,14 +3,14 @@
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  parseBalanceFileForUpdate, previewBalanceUpdate, applyBalanceUpdate, saveAccrualSettings, runAccrualsNow,
+  parseBalanceFileForUpdate, previewBalanceUpdate, applyBalanceUpdate, saveAccrualSettings, runAccrualsNow, getBalanceFileUrl,
   setBulkOverrideLock, type BalancePreview, type BalancePreviewRow, type AccrualState, type BulkLockState,
 } from '@/app/actions/balances'
 import type { BalanceFileRow } from '@/lib/import/balance-update-parser'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { PayPeriod } from '@/lib/pay-periods'
 
-type HistoryItem = { batchId: string; asOf: string; file: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }
+type HistoryItem = { batchId: string; asOf: string; file: string | null; filePath: string | null; note: string | null; kind: string; at: string; by: string | null; employees: number }
 
 const inputCls = 'px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white'
 const hrs = (n: number) => `${Number(n.toFixed(2))}`
@@ -33,6 +33,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
   const [fileAsOf, setFileAsOf] = useState<string | null>(null)
   const [note, setNote] = useState('')
   const [fileName, setFileName] = useState('')
+  const [filePath, setFilePath] = useState<string | null>(null)
   const [fileRows, setFileRows] = useState<BalanceFileRow[]>([])
   const [preview, setPreview] = useState<BalancePreview | null>(null)
   const [busy, setBusy] = useState(false)
@@ -51,6 +52,10 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
   const chosenAlsoFirst = alsoFirst || defaultFirst(asOf)
   const [accrualMsg, setAccrualMsg] = useState('')
 
+  async function openFile(path: string) {
+    try { window.open(await getBalanceFileUrl(path), '_blank') } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t open the file') }
+  }
+
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 4000) }
 
   async function handleFile() {
@@ -59,8 +64,8 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
     setBusy(true); setError(''); setPreview(null); setConfirmed(false)
     try {
       const fd = new FormData(); fd.set('file', file)
-      const { rows, fileAsOf: detected } = await parseBalanceFileForUpdate(fd)
-      setFileName(file.name); setFileRows(rows); setFileAsOf(detected)
+      const { rows, fileAsOf: detected, filePath: stored } = await parseBalanceFileForUpdate(fd)
+      setFileName(file.name); setFilePath(stored); setFileRows(rows); setFileAsOf(detected)
       const date = asOf || detected || ''
       if (!asOf && detected) setAsOf(detected)
       if (!date) { setError('This file doesn’t state a date — enter the date its balances are as of, then it will preview.'); return }
@@ -81,7 +86,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
   async function handleApply() {
     setBusy(true); setError('')
     try {
-      const res = await applyBalanceUpdate(okRows.map(r => ({ employeeId: r.employeeId, pto: r.file.pto, sick: r.file.sick, vacation: r.file.vacation })), asOf, note, fileName)
+      const res = await applyBalanceUpdate(okRows.map(r => ({ employeeId: r.employeeId, pto: r.file.pto, sick: r.file.sick, vacation: r.file.vacation })), asOf, note, fileName, filePath)
       let extra = ''
       if (alsoAccrue && chosenAlsoFirst) {
         await saveAccrualSettings(chosenAlsoFirst, true)
@@ -89,7 +94,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
         extra = ` — accruals on from ${fmtDate(chosenAlsoFirst)} (${s.processed} credited${s.errors.length ? `, ${s.errors.length} error(s)` : ''})`
       }
       showToast(`Balances overridden for ${res.applied} employee${res.applied === 1 ? '' : 's'}${extra}`)
-      setPreview(null); setFileRows([]); setFileName(''); setConfirmed(false); setNote('')
+      setPreview(null); setFileRows([]); setFileName(''); setFilePath(null); setConfirmed(false); setNote('')
       if (fileRef.current) fileRef.current.value = ''
       router.refresh()
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to apply') } finally { setBusy(false) }
@@ -292,7 +297,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
             {history.map(h => (
               <li key={h.batchId} className="text-[12px] border-l-2 border-[#d4eef2] pl-3">
                 <p className="font-semibold text-[#0b2b35]">{h.kind === 'adjustment' ? 'Adjustment' : 'Override'}: {h.employees} employee{h.employees === 1 ? '' : 's'} · {h.kind === 'adjustment' ? 'effective' : 'balances as of'} {fmtDate(h.asOf)} <span className="font-normal text-gray-400">· applied {fmtDate(h.at)}{h.by ? ` by ${h.by}` : ''}</span></p>
-                {(h.file || h.note) && <p className="text-gray-500 mt-0.5">{[h.file, h.note].filter(Boolean).join(' — ')}</p>}
+                {(h.file || h.note) && <p className="text-gray-500 mt-0.5">{[h.file, h.note].filter(Boolean).join(' — ')}{h.filePath && <> · <button onClick={() => openFile(h.filePath!)} className="text-[#02ACC0] font-semibold hover:underline">Download original</button></>}</p>}
               </li>
             ))}
           </ul>

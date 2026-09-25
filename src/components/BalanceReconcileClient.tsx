@@ -41,7 +41,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
     if (!file) { setError('Choose the Sage file'); return }
     setBusy(true); setError(''); setResult(null)
     try {
-      const fd = new FormData(); fd.set('file', file)
+      const fd = new FormData(); fd.set('file', file); fd.set('purpose', 'compare')
       const { rows, fileAsOf } = await parseBalanceFileForUpdate(fd)
       setFileRows(rows)
       const date = asOf || fileAsOf || ''

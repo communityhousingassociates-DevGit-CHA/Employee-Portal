@@ -7,6 +7,7 @@ import { parseEmployeeWorkbook } from '@/lib/import/employee-parser'
 import { randomUUID } from 'crypto'
 import { parseBalanceWorkbook } from '@/lib/import/balance-parser'
 import { readTemplateAsOf } from '@/lib/import/balance-update-parser'
+import { storeBalanceFile } from '@/lib/balance-files'
 import { todayET } from '@/lib/pay-periods'
 import { parseSalaryWorkbook } from '@/lib/import/salary-parser'
 import { buildPreview } from '@/lib/import/validate'
@@ -49,6 +50,14 @@ export async function readBalanceFileAsOf(formData: FormData): Promise<string | 
   return readTemplateAsOf(await file.arrayBuffer())
 }
 
+/** Saves a copy of the uploaded balance workbook and returns its path, so the original (and the date written on it) is never lost. */
+export async function storeBalanceFileForImport(formData: FormData): Promise<string | null> {
+  await requireRole(['admin'])
+  const file = formData.get('file')
+  if (!(file instanceof File)) return null
+  return storeBalanceFile(createAdminClient(), file, 'import')
+}
+
 /** Every balance load must say what date its numbers describe, and that date can't be in the future. */
 function assertBalancesAsOf(asOf: string | null | undefined): string {
   if (!asOf || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date the leave balances are as of')
@@ -80,6 +89,7 @@ export async function commitImport(payload: {
   batchId?: string
   balancesAsOf?: string
   balanceFileName?: string
+  balanceFilePath?: string | null
 }): Promise<{
   employeesCreated: number
   balancesCreated: number
@@ -93,10 +103,12 @@ export async function commitImport(payload: {
   // The date these balances describe is recorded with the load — from the reviewed batch if there is one, else the payload.
   let asOfInput = payload.balancesAsOf
   let balanceFile = payload.balanceFileName
+  let balanceFilePath = payload.balanceFilePath ?? null
   if (payload.batchId) {
-    const { data: batch } = await admin.from('import_batches').select('balances_as_of, balance_file_name').eq('id', payload.batchId).maybeSingle()
+    const { data: batch } = await admin.from('import_batches').select('balances_as_of, balance_file_name, balance_file_path').eq('id', payload.batchId).maybeSingle()
     asOfInput = asOfInput ?? (batch?.balances_as_of as string | null) ?? undefined
     balanceFile = balanceFile ?? (batch?.balance_file_name as string | null) ?? undefined
+    balanceFilePath = balanceFilePath ?? (batch?.balance_file_path as string | null) ?? null
   }
   const balancesAsOf = assertBalancesAsOf(asOfInput)
 
@@ -191,7 +203,7 @@ export async function commitImport(payload: {
     // Audit trail: what was loaded, as of when, from which file, by whom.
     const batchId = randomUUID()
     const { error: auditError } = await admin.from('balance_adjustments').insert(freshBalances.map(r => ({
-      batch_id: batchId, kind: 'override', employee_id: r.employee_id, as_of: balancesAsOf, source_file: balanceFile ?? null,
+      batch_id: batchId, kind: 'override', employee_id: r.employee_id, as_of: balancesAsOf, source_file: balanceFile ?? null, source_file_path: balanceFilePath,
       note: 'Initial load from Data Import', created_by: actor.id,
       old_pto: null, old_sick: null, old_personal: null,
       new_pto: r.pto_hours, new_sick: r.sick_hours, new_personal: r.personal_hours,
@@ -249,6 +261,7 @@ export async function submitImportForReview(payload: {
   balanceFileName: string
   salaryFileName: string | null
   balancesAsOf: string
+  balanceFilePath?: string | null
 }): Promise<{ id: string }> {
   const actor = await requireRole(['admin'])
   const admin = createAdminClient()
@@ -268,6 +281,7 @@ export async function submitImportForReview(payload: {
       balance_file_name: payload.balanceFileName,
       salary_file_name: payload.salaryFileName,
       balances_as_of: balancesAsOf,
+      balance_file_path: payload.balanceFilePath ?? null,
       employee_rows: payload.employees,
       balance_rows: payload.balances,
       salary_rows: payload.salaries,
@@ -334,6 +348,7 @@ export async function getPendingImportBatch(id: string): Promise<{
   balanceFileName: string | null
   salaryFileName: string | null
   balancesAsOf: string | null
+  balanceFilePath: string | null
   preparedByName: string | null
 }> {
   await requireSuperAdmin()
@@ -363,6 +378,7 @@ export async function getPendingImportBatch(id: string): Promise<{
     balanceFileName: batch.balance_file_name,
     salaryFileName: batch.salary_file_name,
     balancesAsOf: (batch.balances_as_of as string | null) ?? null,
+    balanceFilePath: (batch.balance_file_path as string | null) ?? null,
     preparedByName: preparedByName ?? null,
   }
 }

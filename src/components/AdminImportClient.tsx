@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import {
   parseEmployeeFile, parseBalanceFile, parseSalaryFile, validateImport, commitImport, inviteEmployees,
-  submitImportForReview, getPendingImportBatch, discardImportBatch, readBalanceFileAsOf,
+  submitImportForReview, getPendingImportBatch, discardImportBatch, readBalanceFileAsOf, storeBalanceFileForImport,
 } from '@/app/actions/import'
 import type { ParsedEmployeeRow, ParsedBalanceRow, ParsedSalaryRow, ImportPreview } from '@/lib/import/types'
 import { fmtDateTime } from '@/lib/format-date'
@@ -59,6 +59,7 @@ export default function AdminImportClient({
   const [balanceFileName, setBalanceFileName] = useState('')
   // Required: the date the balance file's numbers describe. Pre-filled from the file's own As Of Date when it has one.
   const [balancesAsOf, setBalancesAsOf] = useState('')
+  const [balanceFilePath, setBalanceFilePath] = useState<string | null>(null)
   const [salaryFileName, setSalaryFileName] = useState('')
   const employeeFileRef = useRef<HTMLInputElement>(null)
   const balanceFileRef = useRef<HTMLInputElement>(null)
@@ -127,6 +128,7 @@ export default function AdminImportClient({
       setEmployeeFileName(batch.employeeFileName ?? '')
       setBalanceFileName(batch.balanceFileName ?? '')
       setBalancesAsOf(batch.balancesAsOf ?? '')
+      setBalanceFilePath(batch.balanceFilePath ?? null)
       setSalaryFileName(batch.salaryFileName ?? '')
       setAcknowledged(false)
       setCurrentBatchId(batchId)
@@ -168,6 +170,7 @@ export default function AdminImportClient({
         balanceFileName,
         salaryFileName: salaryFileName || null,
         balancesAsOf,
+        balanceFilePath,
       })
       setSubmittedForReview(true)
     } catch (e: unknown) {
@@ -185,7 +188,7 @@ export default function AdminImportClient({
       const okEmployees = preview.employees.filter(r => r.status !== 'error').map(r => r.data)
       const okBalances = preview.balances.filter(r => r.status !== 'error').map(r => r.data)
       const okSalaries = preview.salaries.filter(r => r.status !== 'error').map(r => r.data)
-      const res = await commitImport({ employees: okEmployees, balances: okBalances, salaries: okSalaries, batchId: currentBatchId ?? undefined, balancesAsOf, balanceFileName })
+      const res = await commitImport({ employees: okEmployees, balances: okBalances, salaries: okSalaries, batchId: currentBatchId ?? undefined, balancesAsOf, balanceFileName, balanceFilePath })
       if (currentBatchId) setPendingBatches(bs => bs.filter(b => b.id !== currentBatchId))
       setResult(res)
       setStep('done')
@@ -225,6 +228,7 @@ export default function AdminImportClient({
     setSubmittedForReview(false)
     if (employeeFileRef.current) employeeFileRef.current.value = ''
     setBalancesAsOf('')
+    setBalanceFilePath(null)
     if (balanceFileRef.current) balanceFileRef.current.value = ''
     if (salaryFileRef.current) salaryFileRef.current.value = ''
   }
@@ -313,8 +317,9 @@ export default function AdminImportClient({
                   if (!f) return
                   try {
                     const fd = new FormData(); fd.set('file', f)
-                    const detected = await readBalanceFileAsOf(fd)
+                    const [detected, path] = await Promise.all([readBalanceFileAsOf(fd), storeBalanceFileForImport(fd)])
                     if (detected && !balancesAsOf) setBalancesAsOf(detected)
+                    setBalanceFilePath(path)
                   } catch { /* the date is entered by hand if it can't be read */ }
                 }} />
               <div className="flex flex-col gap-1 mt-1">
