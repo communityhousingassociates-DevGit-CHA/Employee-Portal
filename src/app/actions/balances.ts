@@ -7,6 +7,8 @@ import { getCurrentEmployee } from '@/lib/auth/session'
 import { hasPayrollAccess } from '@/lib/constants/salary-access'
 import { PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { runAccruals, type AccrualRunSummary } from '@/lib/accruals'
+import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
+import { todayET } from '@/lib/pay-periods'
 import { isPeriodBoundary } from '@/lib/pay-periods'
 import { parseBalanceUpdateFile, type BalanceFileRow } from '@/lib/import/balance-update-parser'
 import type { Employee } from '@/types'
@@ -57,8 +59,10 @@ function nameKey(raw: string): string {
   return parts.length <= 1 ? parts.join(' ') : `${parts[0]} ${parts[parts.length - 1]}`
 }
 
+// Approved leave that has already begun (on/after the as-of date, up to today) is missing from the file, so it comes back off
+// the overridden balance. Leave still in the future stays RESERVED — it's deducted on its start date, not now.
 async function approvedLeaveSince(admin: ReturnType<typeof createAdminClient>, asOf: string) {
-  const { data, error } = await admin.from('leave_requests').select('employee_id, leave_type, hours').eq('status', 'approved').gte('start_date', asOf)
+  const { data, error } = await admin.from('leave_requests').select('employee_id, leave_type, hours').eq('status', 'approved').gte('start_date', asOf).lte('start_date', todayET())
   if (error) throw new Error(error.message)
   const byEmployee = new Map<string, Buckets>()
   for (const r of data ?? []) {
@@ -122,7 +126,7 @@ export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: str
     for (const [label, a, b] of [['PTO', current.pto, file.pto], ['Sick', current.sick, file.sick], ['Vacation', current.vacation, file.vacation]] as const) {
       if (Math.abs(a - b) >= 40) flags.push(`${label} changes by ${Math.round((b - a) * 100) / 100} hrs`)
     }
-    if (deducted.pto + deducted.sick + deducted.vacation > 0) flags.push('Approved leave since the as-of date will be re-deducted')
+    if (deducted.pto + deducted.sick + deducted.vacation > 0) flags.push('Leave already taken since the as-of date will be re-deducted')
     if (final.pto < 0 || final.sick < 0 || final.vacation < 0) flags.push('Result would be negative')
 
     return { rowIndex: r.rowIndex, fileName: display, status: 'ok' as const, employeeId: emp.id, employeeName: emp.name, current, file, deducted, final, flags }
@@ -185,6 +189,13 @@ export async function applyBalanceUpdate(
     })
     applied++
   }
+  // Re-sync deduction bookkeeping with the new balances: leave already begun (and re-deducted above) is stamped deducted;
+  // leave still in the future goes back to reserved so it comes off on its start date.
+  const balanceTypes = ['PTO', 'Sick', 'Personal']
+  const nowIso = new Date().toISOString()
+  await admin.from('leave_requests').update({ balance_deducted_at: nowIso }).eq('status', 'approved').in('employee_id', ids).in('leave_type', balanceTypes).gte('start_date', asOf).lte('start_date', todayET())
+  await admin.from('leave_requests').update({ balance_deducted_at: null }).eq('status', 'approved').in('employee_id', ids).in('leave_type', balanceTypes).gt('start_date', todayET())
+
   const { error: auditError } = await admin.from('balance_adjustments').insert(audit)
   if (auditError) console.error('applyBalanceUpdate: audit insert failed', auditError.message)
 
@@ -263,6 +274,7 @@ export async function runAccrualsNow(): Promise<AccrualRunSummary> {
   if (error) throw new Error(error.message)
   if (!settings?.enabled || !settings.first_period_start) throw new Error('Switch accruals on first')
   const summary = await runAccruals(admin, settings.first_period_start)
+  await applyDueLeaveDeductions(admin).catch(e => summary.errors.push(`leave deductions: ${e instanceof Error ? e.message : e}`))
   revalidatePath('/admin/balances')
   revalidatePath('/dashboard')
   return summary

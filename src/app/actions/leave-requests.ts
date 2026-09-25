@@ -10,7 +10,9 @@ import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_L
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
-import { closedRangeOverlapping } from '@/lib/pay-periods'
+import { closedRangeOverlapping, todayET } from '@/lib/pay-periods'
+import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
+import { balanceTypeFor, projectedAvailable } from '@/lib/leave-projection'
 import type { LeaveType, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -121,6 +123,8 @@ export async function createLeaveRequest(data: {
     attachment_url: data.attachment_path || null,
     status: autoApprove ? 'approved' : 'pending',
     approved_at: autoApprove ? now : null,
+    // Auto-approved leave is never in the future (sick can't be planned), so its hours come off right away.
+    balance_deducted_at: autoApprove ? now : null,
     employee_signed_at: now,
   }).select('id').single()
   if (error) throw new Error(error.message)
@@ -321,16 +325,30 @@ export async function approveLeaveRequest(id: string) {
     throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
   }
 
+  // Leave that has already begun comes off the balance now (and must be covered by it). Leave that starts in the
+  // future is RESERVED instead: it's judged against the balance projected for its start date (today's balance plus
+  // the accruals that will land by then, minus other reserved leave) and comes off when the day arrives.
   const col = balanceColumnFor(request.leave_type as LeaveType)
-  if (col) {
+  const balanceType = balanceTypeFor(request.leave_type as LeaveType)
+  const startsLater = request.start_date > todayET()
+  if (col && balanceType) {
     const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', request.employee_id).maybeSingle()
     if (balError) throw new Error(balError.message)
     const current = balance ? Number(balance[col]) : 0
-    if (current < Number(request.hours)) {
-      throw new Error(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs`)
+    if (!startsLater) {
+      if (current < Number(request.hours)) {
+        throw new Error(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs`)
+      }
+    } else {
+      const ctx = await loadProjectionContext(admin, request.employee_id)
+      const proj = projectedAvailable({ type: balanceType, onDate: request.start_date, current, reserved: ctx.reserved.filter(r => r.id !== id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      if (proj.projected < Number(request.hours)) {
+        throw new Error(
+          `Projected balance on ${fmtDate(request.start_date)} is ${proj.projected} hrs (${current} now + ${proj.accrued} accruing − ${proj.reservedBefore} already reserved)` +
+          `${ctx.accrualsOn ? '' : ' — accruals are not switched on, so none are projected'}; this request is for ${request.hours} hrs.`,
+        )
+      }
     }
-    const { error: updateBalError } = await admin.from('leave_balances').update({ [col]: current - Number(request.hours) }).eq('employee_id', request.employee_id)
-    if (updateBalError) throw new Error(updateBalError.message)
   }
 
   const { error } = await admin.from('leave_requests').update({
@@ -340,6 +358,7 @@ export async function approveLeaveRequest(id: string) {
     approver_signed_at: new Date().toISOString(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+  if (col && !startsLater) await deductRequestFromBalance(admin, { id, employee_id: request.employee_id, leave_type: request.leave_type as LeaveType, hours: Number(request.hours) })
 
   // Push the approved days onto the employee's timesheet(s), creating a
   // timesheet for any pay period they haven't opened yet. Pending/denied
@@ -391,4 +410,27 @@ export async function denyLeaveRequest(id: string, reason: string) {
   revalidatePath('/approvals')
   revalidatePath('/history')
   revalidatePath('/dashboard')
+}
+
+/**
+ * What the employee's balances will look like: today's balance, the approved-but-not-yet-deducted ("reserved") leave, and
+ * whether each reservation is covered by the balance projected for its start date. Feeds the dashboard note and the
+ * projection on the request form.
+ */
+export async function getMyLeaveOutlook() {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const ctx = await loadProjectionContext(admin, employee.id)
+  const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+  const current = { pto: Number(balance?.pto_hours ?? 0), sick: Number(balance?.sick_hours ?? 0), vacation: Number(balance?.personal_hours ?? 0) }
+
+  const reservedDetail = [...ctx.reserved]
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .map(r => {
+      const type = balanceTypeFor(r.leave_type)!
+      const proj = projectedAvailable({ type, onDate: r.start_date, current: current[type], reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      return { ...r, projectedBefore: proj.projected, covered: proj.projected >= r.hours }
+    })
+  return { hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, reserved: ctx.reserved, reservedDetail }
 }

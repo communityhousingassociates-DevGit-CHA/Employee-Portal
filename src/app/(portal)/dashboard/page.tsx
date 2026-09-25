@@ -4,7 +4,7 @@ import { getCurrentEmployee } from '@/lib/auth/session'
 import DashboardGreeting from '@/components/DashboardGreeting'
 import WeatherBadge from '@/components/WeatherBadge'
 import TimesheetAlertBell from '@/components/TimesheetAlertBell'
-import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals } from '@/app/actions/leave-requests'
+import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals, getMyLeaveOutlook } from '@/app/actions/leave-requests'
 import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
 import { getCurrentPeriod } from '@/lib/pay-periods'
@@ -45,7 +45,7 @@ export default async function DashboardPage() {
   const firstName = employee.name.split(' ')[0] || 'there'
 
   const period = getCurrentPeriod()
-  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder, pendingExpenses, pendingTimesheets] = await Promise.all([
+  const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder, pendingExpenses, pendingTimesheets, outlook] = await Promise.all([
     getMyBalance(),
     getMyRecentRequests(4),
     getNextApprovedLeave(),
@@ -55,6 +55,7 @@ export default async function DashboardPage() {
     getTimesheetReminderStatus(),
     isManager ? getPendingExpenseApprovals() : Promise.resolve([]),
     isManager ? getPendingTimesheetApprovals() : Promise.resolve([]),
+    getMyLeaveOutlook(),
   ])
 
   const pendingCount = pendingApprovals.length + pendingExpenses.length + pendingTimesheets.length
@@ -189,6 +190,31 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {outlook.reservedDetail.length > 0 && (
+        <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-[18px]">🔖</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-[#0b2b35]">Reserved for approved future leave</p>
+              <p className="text-[12px] text-gray-500 mt-0.5">
+                These hours haven&apos;t come off your balance yet — they&apos;re reserved and deducted on each start date. Your <strong>projected</strong> balance must actually be available on that day for the leave to be valid.
+                {!outlook.accrualsOn && ' Accruals aren’t switched on yet, so no future accruals are counted.'}
+              </p>
+              <ul className="mt-3 space-y-2">
+                {outlook.reservedDetail.map(r => (
+                  <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-[12px] bg-[#f8fcfd] rounded-lg px-3 py-2">
+                    <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Vacation' : r.leave_type} · {r.hours} hrs · starts {fmtDate(r.start_date)}</span>
+                    <span className={r.covered ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>
+                      {r.covered ? '✓' : '⚠'} Projected {Number(r.projectedBefore.toFixed(2))} hrs available then{r.covered ? '' : ' — not enough'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
