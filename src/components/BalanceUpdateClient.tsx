@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   parseBalanceFileForUpdate, previewBalanceUpdate, applyBalanceUpdate, saveAccrualSettings, runAccrualsNow,
-  type BalancePreview, type BalancePreviewRow, type AccrualState,
+  setBulkOverrideLock, type BalancePreview, type BalancePreviewRow, type AccrualState, type BulkLockState,
 } from '@/app/actions/balances'
 import type { BalanceFileRow } from '@/lib/import/balance-update-parser'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
@@ -25,7 +25,7 @@ function Delta({ from, to }: { from: number; to: number }) {
   )
 }
 
-export default function BalanceUpdateClient({ accrual, history, periods, currentStart }: { accrual: AccrualState; history: HistoryItem[]; periods: PayPeriod[]; currentStart: string }) {
+export default function BalanceUpdateClient({ bulkLock, accrual, history, periods, currentStart }: { bulkLock: BulkLockState; accrual: AccrualState; history: HistoryItem[]; periods: PayPeriod[]; currentStart: string }) {
   const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const [asOf, setAsOf] = useState('2026-09-13')
@@ -37,6 +37,8 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [confirmed, setConfirmed] = useState(false)
+  const [unlockReason, setUnlockReason] = useState('')
+  const [showUnlock, setShowUnlock] = useState(false)
 
   const [firstPeriod, setFirstPeriod] = useState(accrual.firstPeriodStart ?? '')
   // Optionally switch accruals on in the same step as the override (the right order: override first, then accrue).
@@ -88,6 +90,16 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
     } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to apply') } finally { setBusy(false) }
   }
 
+  async function handleLock(locked: boolean) {
+    setBusy(true); setError('')
+    try {
+      await setBulkOverrideLock(locked, unlockReason)
+      showToast(locked ? 'Bulk overrides locked' : 'Bulk overrides unlocked')
+      setShowUnlock(false); setUnlockReason('')
+      router.refresh()
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+  }
+
   async function handleAccrualSave(enabled: boolean) {
     setBusy(true); setAccrualMsg(''); setError('')
     try {
@@ -120,6 +132,26 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
       {/* ---------- Step 1: override ---------- */}
       <div className="bg-white rounded-xl border border-[#d4eef2] p-5 mb-6">
         <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">1 · Override balances from a file</p>
+        {bulkLock.locked ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-[13px] font-semibold text-amber-800">🔒 Bulk overrides are locked</p>
+            <p className="text-[12px] text-amber-700 mt-1">
+              Balances were validated{bulkLock.at ? ` and locked ${fmtDate(bulkLock.at)}` : ''}{bulkLock.by ? ` by ${bulkLock.by}` : ''}. After validation, balances should rarely change and never in bulk — use <strong>Adjust one balance</strong> below for a correction, with a reason.
+            </p>
+            {!showUnlock ? (
+              <button onClick={() => setShowUnlock(true)} className="mt-3 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-100">Unlock…</button>
+            ) : (
+              <div className="mt-3">
+                <input value={unlockReason} onChange={e => setUnlockReason(e.target.value)} placeholder="Why does a bulk override need to run again?" className={`${inputCls} w-full mb-2`} />
+                <div className="flex gap-2">
+                  <button onClick={() => handleLock(false)} disabled={busy || !unlockReason.trim()} className="bg-amber-500 text-white text-[12px] font-semibold px-4 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-40">Unlock bulk overrides</button>
+                  <button onClick={() => { setShowUnlock(false); setUnlockReason('') }} className="text-[12px] font-semibold px-4 py-2 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-100">Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Balances are as of</label>
@@ -202,6 +234,13 @@ export default function BalanceUpdateClient({ accrual, history, periods, current
               {busy ? 'Applying…' : `Override ${okRows.length} balance${okRows.length === 1 ? '' : 's'}`}
             </button>
           </div>
+        )}
+
+        <div className="mt-5 pt-4 border-t border-[#f0f7f8] flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[12px] text-gray-500">When balances are validated, lock this so a bulk file can&apos;t overwrite them again.{bulkLock.lastUnlockReason ? ` (Last unlocked: ${bulkLock.lastUnlockReason})` : ''}</p>
+          <button onClick={() => handleLock(true)} disabled={busy} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-[#d4eef2] hover:bg-[#f0f7f8] disabled:opacity-40">🔒 Lock bulk overrides</button>
+        </div>
+        </>
         )}
       </div>
 

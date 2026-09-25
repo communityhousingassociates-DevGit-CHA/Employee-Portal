@@ -21,6 +21,40 @@ async function requireBalanceManager(): Promise<Employee> {
   return employee
 }
 
+export type BulkLockState = { locked: boolean; at: string | null; by: string | null; lastUnlockReason: string | null }
+
+/** Once balances are validated they're locked against bulk file overrides; only single adjustments remain. */
+export async function getBulkLockState(): Promise<BulkLockState> {
+  await requireBalanceManager()
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('accrual_settings')
+    .select('bulk_override_locked, bulk_override_locked_at, bulk_override_unlock_reason, locker:employees!accrual_settings_bulk_override_locked_by_fkey(name)')
+    .maybeSingle()
+  const l = data?.locker as unknown as { name: string } | { name: string }[] | null | undefined
+  return {
+    locked: !!data?.bulk_override_locked,
+    at: (data?.bulk_override_locked_at as string | null) ?? null,
+    by: (Array.isArray(l) ? l[0]?.name : l?.name) ?? null,
+    lastUnlockReason: (data?.bulk_override_unlock_reason as string | null) ?? null,
+  }
+}
+
+/** Lock (no reason needed) or unlock (reason required, recorded) bulk balance overrides. */
+export async function setBulkOverrideLock(locked: boolean, reason: string) {
+  const actor = await requireBalanceManager()
+  if (!locked && !reason.trim()) throw new Error('Give a reason for unlocking bulk overrides')
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('accrual_settings')
+    .update(locked
+      ? { bulk_override_locked: true, bulk_override_locked_at: new Date().toISOString(), bulk_override_locked_by: actor.id }
+      : { bulk_override_locked: false, bulk_override_unlock_reason: `${reason.trim()} (${actor.name}, ${new Date().toISOString().slice(0, 10)})` })
+    .eq('id', true)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/balances')
+}
+
 export async function parseBalanceFileForUpdate(formData: FormData): Promise<BalanceFileRow[]> {
   await requireBalanceManager()
   const file = formData.get('file')
@@ -168,6 +202,9 @@ export async function applyBalanceUpdate(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the "as of" date of the balances')
   if (updates.length === 0) throw new Error('Nothing to apply')
   const admin = createAdminClient()
+  if ((await getBulkLockState()).locked) {
+    throw new Error('Bulk overrides are locked because balances have been validated. Use “Adjust one balance” for a correction, or unlock with a reason.')
+  }
 
   for (const u of updates) {
     if (![u.pto, u.sick, u.vacation].every(n => Number.isFinite(n) && n >= 0)) throw new Error('Balances must be zero or positive numbers')
