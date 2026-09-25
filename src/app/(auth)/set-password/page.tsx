@@ -23,11 +23,27 @@ function SetPasswordForm() {
   const [loading, setLoading] = useState(false)
   const [ready, setReady] = useState(false)
 
+  // Email links now carry a one-time token_hash that is only redeemed when the person presses "Set Password" — never on
+  // page load. Email security scanners (and link previewers) open every link in a message; a link that signed the visitor
+  // in on load was burned before the real person clicked it ("expired or already used").
+  const tokenHash = searchParams.get('token_hash')
+  const tokenType = searchParams.get('type') === 'invite' ? 'invite' : 'recovery'
+
   useEffect(() => {
     const supabase = createClient()
     const code = searchParams.get('code')
 
     async function establishSession() {
+      if (tokenHash) {
+        setReady(true) // nothing is redeemed until the form is submitted
+        return
+      }
+      // Older links redirect here with the outcome in the URL hash — surface a real error instead of a generic one.
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      if (hash.get('error_code') === 'otp_expired' || hash.get('error')) {
+        setError('This link has expired or was already used — ask for a new invitation, or use “Forgot password?” on the sign-in page.')
+        return
+      }
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
@@ -59,6 +75,14 @@ function SetPasswordForm() {
     }
     setLoading(true)
     const supabase = createClient()
+    if (tokenHash) {
+      const { error: verifyError } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: tokenType })
+      if (verifyError) {
+        setError('This link has expired or was already used — ask for a new invitation, or use “Forgot password?” on the sign-in page.')
+        setLoading(false)
+        return
+      }
+    }
     const { error } = await supabase.auth.updateUser({ password })
     if (error) {
       setError(error.message)
