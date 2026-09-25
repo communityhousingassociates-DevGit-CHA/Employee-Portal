@@ -1,11 +1,15 @@
 // Bi-weekly pay period helpers.
 //
-// Anchor confirmed 2026-09-22 against CHA's actual payroll cutoff: cutoff for
-// the period ending 2026-09-22 is 2026-09-24 (the standing "2 days after
-// period end" rule), which requires a period boundary on 2026-09-09. Any date
-// 14*n days from 2026-01-14 lands on that boundary.
-const PAY_PERIOD_ANCHOR = '2026-01-14'
+// Schedule confirmed 2026-09-25 from CHA's payroll calendar: bi-weekly SUNDAY–SATURDAY periods (9/13–9/26/2026,
+// 9/27–10/10, …), paid by direct deposit on the Tuesday 17 days after each period ends. Any date 14*n days from the
+// anchor is a period start, so the same cycle carries straight through 2027 and beyond.
+const PAY_PERIOD_ANCHOR = '2026-09-13'
 const PERIOD_DAYS = 14
+
+// Pay date = 17 days after period end (verified against all seven CHA rows through 1/5/2027). Dates after
+// CONFIRMED_PAY_DATES_THROUGH are projected from the same cycle and may shift for bank holidays.
+export const PAY_DATE_DAYS_AFTER_PERIOD_END = 17
+export const CONFIRMED_PAY_DATES_THROUGH = '2027-01-05'
 
 export interface PayPeriod {
   start: string // YYYY-MM-DD
@@ -87,15 +91,38 @@ export function getTimesheetDueDate(period: PayPeriod): string {
   return toDateOnly(addDays(end, 2))
 }
 
-// PROVISIONAL (2026-09-24): CHA's payroll for the period ending 2026-09-12 was due 2026-09-24 (paid 2026-09-29
-// by direct deposit) — 12 days after period end. Replace with CHA's real payroll schedule once Carrileen
-// Edwards confirms it. Everything that locks a timesheet keys off this one number.
+// Payroll processing is due 12 days after a period ends — 5 days before the pay date (CHA's payroll for the period
+// ending 2026-09-12 was due 2026-09-24 and paid 2026-09-29). Inferred from that one data point, not from a published
+// payroll-cutoff calendar, so confirm it with Carrileen Edwards. Everything that locks a timesheet keys off this number.
 export const PAYROLL_DUE_DAYS_AFTER_PERIOD_END = 12
 
 /** Payroll processing due date for a period (YYYY-MM-DD). After it passes the period is "payroll-locked". */
 export function getPayrollDueDate(period: { end: string }): string {
   const end = new Date(`${period.end}T00:00:00Z`)
   return toDateOnly(addDays(end, PAYROLL_DUE_DAYS_AFTER_PERIOD_END))
+}
+
+/** Direct-deposit pay date for a period (YYYY-MM-DD): the Tuesday 17 days after it ends. */
+export function getPayDate(period: { end: string }): string {
+  const end = new Date(`${period.end}T00:00:00Z`)
+  return toDateOnly(addDays(end, PAY_DATE_DAYS_AFTER_PERIOD_END))
+}
+
+export interface PayCalendarEntry extends PayPeriod {
+  timesheetDue: string
+  payrollDue: string
+  payDate: string
+  /** True if the pay date is on CHA's published schedule; false if projected from the same cycle. */
+  confirmed: boolean
+}
+
+/** The current pay period and the next `count - 1`, each with its timesheet, payroll, and pay dates. */
+export function getPayCalendar(count = 6, asOf: Date = new Date()): PayCalendarEntry[] {
+  const current = getCurrentPeriod(PAY_PERIOD_ANCHOR, asOf)
+  return getPayPeriods(current.start, count).map(p => {
+    const payDate = getPayDate(p)
+    return { ...p, timesheetDue: getTimesheetDueDate(p), payrollDue: getPayrollDueDate(p), payDate, confirmed: payDate <= CONFIRMED_PAY_DATES_THROUGH }
+  })
 }
 
 /** Today's date in CHA's timezone (America/New_York), as YYYY-MM-DD. */

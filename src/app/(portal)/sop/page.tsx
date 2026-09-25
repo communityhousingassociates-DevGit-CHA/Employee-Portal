@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
+import { getPayCalendar } from '@/lib/pay-periods'
+import { fmtDate, fmtDateRange } from '@/lib/format-date'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +77,7 @@ const TOC = [
 ]
 
 export default async function StaffSopPage() {
+  const payCalendar = getPayCalendar(6)
   const employee = await getCurrentEmployee()
   if (!employee) redirect('/login')
   const isManager = MANAGER_ROLES.includes(employee.role)
@@ -169,18 +172,22 @@ export default async function StaffSopPage() {
           </Section>
 
           <Section id="payroll" title="6. Payroll Cutoff & Pay Dates">
-            <p>Pay period cadence, anchor, and the timesheet submission cutoff are confirmed below. Payroll processing cutoff and pay date(s) remain pending.</p>
+            <p>Pay periods run bi-weekly, Sunday through Saturday, and pay is deposited directly on the Tuesday 17 days after a period ends. The portal follows this schedule.</p>
             <Table
               head={['Item', 'Value']}
               rows={[
-                ['Pay period cadence', 'Bi-weekly (14 days) — confirmed'],
-                ['Pay period anchor / start date', 'Periods start 2026-01-14 and every 14 days after (e.g. 2026-09-09, 2026-09-23, 2026-10-07, …)'],
+                ['Pay period cadence', 'Bi-weekly (14 days), Sunday through Saturday — per CHA&apos;s payroll schedule'],
+                ['Pay period anchor / start date', 'Periods start 2026-09-13 and every 14 days after (2026-09-27, 2026-10-11, …), continuing through 2027 on the same cycle'],
                 ['Timesheet submission cutoff', '2 calendar days after each period ends.'],
-                ['Payroll processing cutoff', '12 calendar days after each period ends — PROVISIONAL, pending confirmation of CHA&apos;s payroll schedule (e.g. payroll for the period ending 2026-09-12 was due 2026-09-24)'],
-                ['Pay date(s)', 'TBD — pending CHA&apos;s payroll schedule (direct deposit for the period ending 2026-09-12 is 2026-09-29)'],
+                ['Payroll processing cutoff', '12 calendar days after each period ends (5 days before the pay date) — inferred from CHA&apos;s payroll for the period ending 2026-09-12, which was due 2026-09-24; to be confirmed with the Accounting Manager'],
+                ['Pay date', 'Direct deposit on the Tuesday 17 days after each period ends. CHA&apos;s schedule is confirmed through 2027-01-05; later dates follow the same cycle and may shift for bank holidays.'],
               ]}
             />
-            <p>Until pay dates are confirmed, continue following CHA&apos;s existing payroll calendar for actual pay timing — the portal&apos;s period display should not yet be treated as authoritative for pay dates.</p>
+            <p className="font-semibold text-[#0b2b35] mt-4">Upcoming pay periods</p>
+            <Table
+              head={['Pay period', 'Timesheet due', 'Payroll due', 'Pay date']}
+              rows={payCalendar.map(c => [fmtDateRange(c.start, c.end), fmtDate(c.timesheetDue), fmtDate(c.payrollDue), `${fmtDate(c.payDate)}${c.confirmed ? '' : ' (projected)'}`])}
+            />
           </Section>
 
           <Section id="issues" title="7. Error, Discrepancy & Issue Reporting">
