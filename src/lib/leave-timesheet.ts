@@ -301,49 +301,80 @@ export async function removeLeaveFromTimesheets(
   return summary
 }
 
+export type LeaveDay = { date: string; hours: number }
+
+/**
+ * The day-by-day hours of leave requests. Requests made with the day picker have rows in `leave_request_days`; older
+ * requests don't, so their total is spread across the workdays in their range (the original behaviour).
+ */
+export async function loadRequestDays(
+  admin: AdminClient,
+  requests: { id: string; start_date: string; end_date: string; hours: number | string }[],
+): Promise<Map<string, LeaveDay[]>> {
+  const out = new Map<string, LeaveDay[]>()
+  if (requests.length === 0) return out
+  const { data, error } = await admin.from('leave_request_days').select('request_id, work_date, hours').in('request_id', requests.map(r => r.id)).order('work_date')
+  if (error) throw new Error(error.message)
+  for (const row of data ?? []) {
+    const list = out.get(row.request_id) ?? []
+    list.push({ date: row.work_date, hours: Number(row.hours) })
+    out.set(row.request_id, list)
+  }
+  for (const r of requests) {
+    if (!out.has(r.id)) out.set(r.id, distributeLeaveHours(r.start_date, r.end_date, Number(r.hours)))
+  }
+  return out
+}
+
 /**
  * Guardrail: a person can't take more than a full (8 hr) day of leave on any workday, counting every leave request that
- * is pending or approved (any type). Returns a plain-language reason when the request would break that, else null.
- * `excludeId` skips the request being approved so it isn't compared with itself.
+ * is pending or approved (any type). Also refuses weekends/holidays and hours outside 0–8 for a day. Returns a
+ * plain-language reason when the days would break that, else null. `excludeId` skips the request being approved so it
+ * isn't compared with itself.
  */
 export async function dailyLeaveOverage(
   admin: AdminClient,
   employeeId: string,
-  startDate: string,
-  endDate: string,
-  hours: number,
+  days: LeaveDay[],
   excludeId?: string,
 ): Promise<string | null> {
-  const days = workdaysBetween(startDate, endDate)
-  if (days.length === 0) return 'That date range has no workdays (weekends and holidays don’t take leave).'
-  const max = days.length * SALARIED_DAILY_HOURS
-  if (hours > max) {
-    return `${hours} hrs is more than ${days.length} workday${days.length === 1 ? '' : 's'} can hold — a day can’t exceed ${SALARIED_DAILY_HOURS} hrs (max ${max} hrs for these dates).`
+  if (days.length === 0) return 'Add at least one day.'
+  const fmt = (d: string) => `${d.slice(5, 7)}-${d.slice(8)}-${d.slice(0, 4)}`
+  const perDate = new Map<string, number>()
+  for (const d of days) {
+    if (!(d.hours > 0)) return `${fmt(d.date)}: enter the hours for this day.`
+    if (workdaysBetween(d.date, d.date).length === 0) return `${fmt(d.date)} is a weekend or holiday — leave can only be taken on workdays.`
+    perDate.set(d.date, (perDate.get(d.date) ?? 0) + d.hours)
+  }
+  for (const [date, hrs] of perDate) {
+    if (hrs > SALARIED_DAILY_HOURS + 1e-9) return `${fmt(date)}: ${hrs} hrs is more than a day can hold — a day can’t exceed ${SALARIED_DAILY_HOURS} hrs.`
   }
 
+  const dates = [...perDate.keys()].sort()
   const { data, error } = await admin
     .from('leave_requests')
     .select('id, leave_type, status, start_date, end_date, hours')
     .eq('employee_id', employeeId)
     .in('status', ['pending', 'approved'])
-    .lte('start_date', endDate)
-    .gte('end_date', startDate)
+    .lte('start_date', dates[dates.length - 1])
+    .gte('end_date', dates[0])
   if (error) throw new Error(error.message)
 
+  const others = (data ?? []).filter(r => r.id !== excludeId)
+  const daysByRequest = await loadRequestDays(admin, others)
   const existing = new Map<string, { hours: number; labels: string[] }>()
-  for (const r of data ?? []) {
-    if (r.id === excludeId) continue
-    for (const a of distributeLeaveHours(r.start_date, r.end_date, Number(r.hours))) {
+  for (const r of others) {
+    for (const a of daysByRequest.get(r.id) ?? []) {
       const cur = existing.get(a.date) ?? { hours: 0, labels: [] }
       cur.hours += a.hours
       cur.labels.push(`${r.leave_type === 'Personal' ? 'Vacation' : r.leave_type}, ${r.status}`)
       existing.set(a.date, cur)
     }
   }
-  for (const a of distributeLeaveHours(startDate, endDate, hours)) {
-    const cur = existing.get(a.date)
-    if (cur && cur.hours + a.hours > SALARIED_DAILY_HOURS + 1e-9) {
-      return `You already have ${cur.hours} hrs of leave on ${a.date.slice(5, 7)}-${a.date.slice(8)}-${a.date.slice(0, 4)} (${cur.labels.join('; ')}). A day can’t exceed ${SALARIED_DAILY_HOURS} hrs, so this request would go over. Cancel or shorten the other request first.`
+  for (const [date, hrs] of perDate) {
+    const cur = existing.get(date)
+    if (cur && cur.hours + hrs > SALARIED_DAILY_HOURS + 1e-9) {
+      return `You already have ${cur.hours} hrs of leave on ${fmt(date)} (${cur.labels.join('; ')}). A day can’t exceed ${SALARIED_DAILY_HOURS} hrs, so this request would go over. Cancel or shorten the other request first.`
     }
   }
   return null

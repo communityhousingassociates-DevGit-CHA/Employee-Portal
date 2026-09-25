@@ -128,6 +128,8 @@ export interface LeaveRequest {
   employee_signed_at: string | null
   approver_signed_at: string | null
   balance_deducted_at?: string | null
+  /** Day-by-day hours (present on results from the leave actions). */
+  days?: { date: string; hours: number }[]
   created_at: string
 }
 

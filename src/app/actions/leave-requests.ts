@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
-import { distributeLeaveHours, applyLeaveToTimesheets, removeLeaveFromTimesheets, dailyLeaveOverage, type LeavePostingSummary } from '@/lib/leave-timesheet'
+import { applyLeaveToTimesheets, removeLeaveFromTimesheets, dailyLeaveOverage, loadRequestDays, type LeaveDay, type LeavePostingSummary } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notifications'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
@@ -72,92 +72,40 @@ function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'p
   return null // Bereavement, Jury Duty — no balance column tracks these
 }
 
-type LeaveDay = { date: string; hours: number }
-
-/** Everything that can reject one day of leave before anything is saved. Throws a plain-language message. */
-async function checkLeaveDay(admin: ReturnType<typeof createAdminClient>, employeeId: string, leaveType: LeaveType, day: LeaveDay, closedRanges: Awaited<ReturnType<typeof loadClosedRanges>>) {
-  const label = fmtDate(day.date)
-  if (!(day.hours > 0)) throw new Error(`${label}: enter the hours for this day.`)
-  if (leaveType === 'Sick' && day.date > latestSickLeaveDate()) {
-    throw new Error(`${label}: sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Vacation for planned time off.`)
-  }
-  if (day.date > latestLeaveDate()) {
-    throw new Error(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
-  }
+/** Everything that can reject a set of leave days before anything is saved. Throws a plain-language message. */
+async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, employeeId: string, leaveType: LeaveType, days: LeaveDay[]) {
+  const closedRanges = await loadClosedRanges(admin)
   const earliest = earliestLeaveDate()
-  if (day.date < earliest) {
-    throw new Error(`${label}: leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
+  for (const day of days) {
+    const label = fmtDate(day.date)
+    if (leaveType === 'Sick' && day.date > latestSickLeaveDate()) {
+      throw new Error(`${label}: sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Vacation for planned time off.`)
+    }
+    if (day.date > latestLeaveDate()) {
+      throw new Error(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
+    }
+    if (day.date < earliest) {
+      throw new Error(`${label}: leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
+    }
+    const closedHit = closedRangeOverlapping(day.date, day.date, closedRanges)
+    if (closedHit) {
+      throw new Error(`${label} is in ${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}, which accounting has closed, so no new leave can be entered for it. Contact your Accounting Manager.`)
+    }
   }
-  const closedHit = closedRangeOverlapping(day.date, day.date, closedRanges)
-  if (closedHit) {
-    throw new Error(`${label} is in ${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}, which accounting has closed, so no new leave can be entered for it. Contact your Accounting Manager.`)
-  }
-  const overage = await dailyLeaveOverage(admin, employeeId, day.date, day.date, day.hours)
-  if (overage) throw new Error(`${label}: ${overage}`)
+  const overage = await dailyLeaveOverage(admin, employeeId, days)
+  if (overage) throw new Error(overage)
 }
 
-type CreatedDay = { id: string; date: string; hours: number; autoApproved: boolean; overBalance: boolean; balanceAfter: number | null }
-
-/** Saves one day of leave as its own request (auto-approving Sick that the balance covers). Notifications are sent by the caller. */
-async function createLeaveDay(
-  admin: ReturnType<typeof createAdminClient>,
-  employee: { id: string },
-  common: { leave_type: LeaveType; note: string; attachment_path?: string },
-  day: LeaveDay,
-): Promise<CreatedDay> {
-  const col = balanceColumnFor(common.leave_type)
-  let autoApprove = false
-  let balanceBefore = 0
-  if (col && AUTO_APPROVED_LEAVE_TYPES.includes(common.leave_type)) {
-    const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
-    if (balError) throw new Error(balError.message)
-    balanceBefore = balance ? Number(balance[col]) : 0
-    autoApprove = balanceBefore >= day.hours
-  }
-
-  const now = new Date().toISOString()
-  const { data: created, error } = await admin.from('leave_requests').insert({
-    employee_id: employee.id,
-    leave_type: common.leave_type,
-    start_date: day.date,
-    end_date: day.date,
-    hours: day.hours,
-    note: common.note || null,
-    attachment_url: common.attachment_path || null,
-    status: autoApprove ? 'approved' : 'pending',
-    approved_at: autoApprove ? now : null,
-    // Auto-approved leave is never in the future (sick can't be planned), so its hours come off right away.
-    balance_deducted_at: autoApprove ? now : null,
-    employee_signed_at: now,
-  }).select('id').single()
-  if (error) throw new Error(error.message)
-
-  let balanceAfter: number | null = null
-  if (autoApprove && col) {
-    balanceAfter = Math.round((balanceBefore - day.hours) * 100) / 100
-    const { error: deductError } = await admin.from('leave_balances').update({ [col]: balanceAfter }).eq('employee_id', employee.id)
-    if (deductError) {
-      await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
-      throw new Error(deductError.message)
-    }
-    const allocations = distributeLeaveHours(day.date, day.date, day.hours)
-    const leaveLabel = `${common.leave_type} leave (${fmtDate(day.date)})`
-    const posting = await applyLeaveToTimesheets(admin, employee.id, common.leave_type, allocations, { actorId: employee.id, leaveLabel })
-    await announceLeavePosting(admin, employee.id, posting, leaveLabel)
-  }
-  return {
-    id: created.id, date: day.date, hours: day.hours, autoApproved: autoApprove,
-    overBalance: !!col && AUTO_APPROVED_LEAVE_TYPES.includes(common.leave_type) && !autoApprove,
-    balanceAfter,
-  }
+function daysLabel(days: LeaveDay[]) {
+  return days.map(d => `${fmtDate(d.date)} · ${d.hours} hrs`).join('\n')
 }
 
 /**
- * Every day is its own request, so each day carries its own hours (a half day is 4 hrs), and approvers approve or deny —
- * and employees cancel — one day at a time. All days are validated before any is saved; approvers get one combined
- * alert (and the employee one combined confirmation for auto-approved Sick) rather than a message per day.
+ * One request that can cover several days, each with its own hours (a full week off, or a half day here and there). It is
+ * approved, denied, and cancelled as a single request; approvers still see every day listed. All days are checked before
+ * anything is saved. Sick leave the balance covers is approved automatically.
  */
-export async function createLeaveRequests(data: {
+export async function createLeaveRequest(data: {
   leave_type: LeaveType
   days: LeaveDay[]
   note: string
@@ -168,47 +116,74 @@ export async function createLeaveRequests(data: {
   if (data.leave_type === 'Jury Duty' && !data.attachment_path) {
     throw new Error('Jury Duty requests require the summons attached.')
   }
-  const days = [...data.days].map(d => ({ date: d.date, hours: Number(d.hours) })).sort((a, b) => a.date.localeCompare(b.date))
-  if (days.length === 0) throw new Error('Add at least one day.')
-  if (days.length > 31) throw new Error('A single submission can cover up to 31 days.')
-
-  // The same date entered twice can't add up to more than a full day.
-  const perDate = new Map<string, number>()
-  for (const d of days) perDate.set(d.date, (perDate.get(d.date) ?? 0) + d.hours)
-  for (const [date, hrs] of perDate) {
-    if (hrs > 8) throw new Error(`${fmtDate(date)}: the hours you entered for this date add up to ${hrs}, but a day can’t exceed 8 hours.`)
-  }
-
+  const days = data.days.map(d => ({ date: d.date, hours: Number(d.hours) })).sort((a, b) => a.date.localeCompare(b.date))
+  if (days.length === 0) throw new Error('Select at least one day.')
+  if (days.length > 45) throw new Error('A single request can cover up to 45 days.')
+  if (new Set(days.map(d => d.date)).size !== days.length) throw new Error('Each date can only appear once in a request.')
   const admin = createAdminClient()
-  const closedRanges = await loadClosedRanges(admin)
-  for (const d of days) if (!(d.hours > 0)) throw new Error(`${fmtDate(d.date)}: enter the hours for this day.`)
-  // Check each date's total against leave already saved (rows for the same date are judged together).
-  for (const [date, hours] of perDate) {
-    await checkLeaveDay(admin, employee.id, data.leave_type, { date, hours }, closedRanges)
+  await checkLeaveDays(admin, employee.id, data.leave_type, days)
+
+  const totalHours = Math.round(days.reduce((sum, d) => sum + d.hours, 0) * 100) / 100
+  const startDate = days[0].date
+  const endDate = days[days.length - 1].date
+
+  // Auto-approved types (Sick) skip the approver when the balance covers the request.
+  const col = balanceColumnFor(data.leave_type)
+  let autoApprove = false
+  let balanceBefore = 0
+  if (col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)) {
+    const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+    if (balError) throw new Error(balError.message)
+    balanceBefore = balance ? Number(balance[col]) : 0
+    autoApprove = balanceBefore >= totalHours
   }
 
-  const common = { leave_type: data.leave_type, note: data.note, attachment_path: data.attachment_path }
-  const created: CreatedDay[] = []
-  for (const d of days) created.push(await createLeaveDay(admin, employee, common, d))
+  const now = new Date().toISOString()
+  const { data: created, error } = await admin.from('leave_requests').insert({
+    employee_id: employee.id,
+    leave_type: data.leave_type,
+    start_date: startDate,
+    end_date: endDate,
+    hours: totalHours,
+    note: data.note || null,
+    attachment_url: data.attachment_path || null,
+    status: autoApprove ? 'approved' : 'pending',
+    approved_at: autoApprove ? now : null,
+    // Auto-approved leave is never in the future (sick can't be planned), so its hours come off right away.
+    balance_deducted_at: autoApprove ? now : null,
+    employee_signed_at: now,
+  }).select('id').single()
+  if (error) throw new Error(error.message)
 
-  const lines = (list: CreatedDay[]) => list.map(c => `${fmtDate(c.date)} · ${c.hours} hrs`).join('\n')
-  const auto = created.filter(c => c.autoApproved)
-  const pending = created.filter(c => !c.autoApproved)
-  const lastBalance = auto.length > 0 ? auto[auto.length - 1].balanceAfter : null
-  if (auto.length > 0) {
+  const { error: daysError } = await admin.from('leave_request_days').insert(days.map(d => ({ request_id: created.id, work_date: d.date, hours: d.hours })))
+  if (daysError) {
+    await admin.from('leave_requests').delete().eq('id', created.id)
+    throw new Error(daysError.message)
+  }
+
+  if (autoApprove && col) {
+    const newBalance = Math.round((balanceBefore - totalHours) * 100) / 100
+    const { error: deductError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', employee.id)
+    if (deductError) {
+      await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
+      throw new Error(deductError.message)
+    }
+    const leaveLabel = `${data.leave_type} leave (${rangeLabel(startDate, endDate)})`
+    const posting = await applyLeaveToTimesheets(admin, employee.id, data.leave_type, days.map(d => ({ date: d.date, hours: d.hours })), { actorId: employee.id, leaveLabel })
+    await announceLeavePosting(admin, employee.id, posting, leaveLabel)
+
     await notifyEmployee(admin, employee.id, {
       kind: 'approved',
-      title: auto.length === 1 ? `Your ${data.leave_type} leave was recorded` : `Your ${data.leave_type} leave was recorded (${auto.length} days)`,
-      body: `${data.leave_type}\n${lines(auto)}\nApproved automatically — ${data.leave_type} leave needs no approval while your balance covers it.${lastBalance !== null ? ` New balance: ${lastBalance} hrs.` : ''}`,
+      title: `Your ${data.leave_type} leave was recorded`,
+      body: `${data.leave_type}\n${daysLabel(days)}\nApproved automatically — ${data.leave_type} leave needs no approval while your balance covers it. New balance: ${newBalance} hrs.`,
       link: '/history',
       cta: 'View My Requests',
     })
-  }
-  if (pending.length > 0) {
-    const over = pending.some(p => p.overBalance)
+  } else {
+    const overBalance = col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)
     await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
-      title: pending.length === 1 ? `Leave request from ${employee.name}` : `Leave request from ${employee.name} (${pending.length} days)`,
-      body: `${data.leave_type}${pending.length > 1 ? ` — each day is its own request` : ''}\n${lines(pending)}${over ? '\n(Exceeds the available sick balance — needs approval.)' : ''}${data.note ? `\nNote: ${data.note}` : ''}`,
+      title: `Leave request from ${employee.name}${days.length > 1 ? ` (${days.length} days)` : ''}`,
+      body: `${data.leave_type}\n${daysLabel(days)}${days.length > 1 ? `\nTotal: ${totalHours} hrs` : ''}${overBalance ? ` (exceeds available balance of ${balanceBefore} hrs — needs approval)` : ''}${data.note ? `\nNote: ${data.note}` : ''}`,
     })
   }
 
@@ -216,21 +191,16 @@ export async function createLeaveRequests(data: {
   revalidatePath('/history')
   revalidatePath('/dashboard')
   revalidatePath('/timesheet')
-  return { autoApproved: pending.length === 0, autoApprovedDays: auto.length, pendingDays: pending.length }
+  return { autoApproved: autoApprove }
 }
 
-/** Live check for the request form: null when every day fits, otherwise why not (the first problem found). */
+/** Live check for the request form: null when the days fit, otherwise why not. */
 export async function checkMyLeaveDays(days: LeaveDay[]) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
-  const admin = createAdminClient()
-  const perDate = new Map<string, number>()
-  for (const d of days) if (d.date && d.hours > 0) perDate.set(d.date, (perDate.get(d.date) ?? 0) + Number(d.hours))
-  for (const [date, hours] of perDate) {
-    const problem = await dailyLeaveOverage(admin, employee.id, date, date, hours)
-    if (problem) return `${fmtDate(date)}: ${problem}`
-  }
-  return null
+  const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
+  if (ready.length === 0) return null
+  return dailyLeaveOverage(createAdminClient(), employee.id, ready)
 }
 
 export async function getLeaveAttachmentUploadUrl(fileName: string) {
@@ -269,10 +239,11 @@ export async function getLeaveHistory(employeeId?: string) {
     .eq('employee_id', targetId)
     .order('start_date', { ascending: false })
   if (error) throw new Error(error.message)
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
   return (data ?? []).map(r => {
     const approver = r.approver as unknown as { name: string } | { name: string }[] | null
     const approver_name = Array.isArray(approver) ? approver[0]?.name : approver?.name
-    return { ...r, approver_name: approver_name ?? null }
+    return { ...r, approver_name: approver_name ?? null, days: daysByRequest.get(r.id) ?? [] }
   })
 }
 
@@ -351,6 +322,7 @@ export async function getPendingLeaveApprovals() {
   const { data, error } = await query.order('created_at')
   if (error) throw new Error(error.message)
 
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
   const results = []
   for (const r of data ?? []) {
     const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', r.employee_id).maybeSingle()
@@ -374,6 +346,7 @@ export async function getPendingLeaveApprovals() {
       balance_after: current !== null ? current - Number(r.hours) : null,
       reserve_only: reserveOnly,
       projected_after: projectedAfter,
+      days: daysByRequest.get(r.id) ?? [],
     })
   }
   return results
@@ -389,9 +362,10 @@ export async function getReviewedLeaveApprovals(limit = 30) {
     .order('approved_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(error.message)
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
   return (data ?? []).map(r => {
     const emp = r.employee as unknown as { name: string } | { name: string }[]
-    return { ...r, employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name }
+    return { ...r, employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name, days: daysByRequest.get(r.id) ?? [] }
   })
 }
 
@@ -408,7 +382,8 @@ export async function approveLeaveRequest(id: string) {
     throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
   }
 
-  const overage = await dailyLeaveOverage(admin, request.employee_id, request.start_date, request.end_date, Number(request.hours), id)
+  const requestDays = (await loadRequestDays(admin, [request])).get(request.id) ?? []
+  const overage = await dailyLeaveOverage(admin, request.employee_id, requestDays, id)
   if (overage) throw new Error(`${overage} Deny this request instead.`)
 
   // Leave that has begun, or starts within the next two pay periods, comes off the balance now (and must be covered by
@@ -450,7 +425,7 @@ export async function approveLeaveRequest(id: string) {
   // Push the approved days onto the employee's timesheet(s), creating a
   // timesheet for any pay period they haven't opened yet. Pending/denied
   // requests never reach this — only an approval touches the timesheet.
-  const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
+  const allocations = requestDays
   const leaveLabel = `${request.leave_type} leave (${rangeLabel(request.start_date, request.end_date)})`
   const posting = await applyLeaveToTimesheets(admin, request.employee_id, request.leave_type as LeaveType, allocations, { actorId: actor.id, leaveLabel })
   await announceLeavePosting(admin, request.employee_id, posting, leaveLabel)
@@ -540,7 +515,7 @@ export async function cancelMyLeaveRequest(id: string) {
   }
 
   if (request.status === 'approved') {
-    const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
+    const allocations = (await loadRequestDays(admin, [request])).get(request.id) ?? []
     const leaveLabel = `${request.leave_type} leave (${rangeLabel(request.start_date, request.end_date)})`
     await removeLeaveFromTimesheets(admin, employee.id, request.leave_type, allocations, { actorId: employee.id, leaveLabel })
   }

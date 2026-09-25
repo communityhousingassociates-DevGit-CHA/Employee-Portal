@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { createLeaveRequests, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
+import { createLeaveRequest, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
-import { todayET, deductThroughDate, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
 
-type DayRow = { id: number; date: string; hours: string }
+type DayRow = { id: string; date: string; hours: string }
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
 const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
@@ -41,9 +41,10 @@ export default function RequestClient({
   outlook: { hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
   const [leaveType, setLeaveType] = useState<LeaveType>('PTO')
-  // Every day is its own request with its own hours. The form starts with one day (today, a full 8 hours).
-  const [days, setDays] = useState<DayRow[]>(() => [{ id: 1, date: todayET(), hours: '8' }])
-  const nextId = useRef(2)
+  // Days are picked on a timesheet-style grid: date -> hours. One request covers all of them; each day keeps its own hours.
+  const [picked, setPicked] = useState<Record<string, string>>({})
+  const [viewStart, setViewStart] = useState(() => getCurrentPeriod(undefined, new Date(`${todayET()}T00:00:00Z`)).start)
+  const days: DayRow[] = Object.keys(picked).sort().map(date => ({ id: date, date, hours: picked[date] }))
   const [note, setNote] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -81,23 +82,30 @@ export default function RequestClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayKey])
 
-  function updateDay(id: number, patch: Partial<DayRow>) {
-    setDays(ds => ds.map(d => d.id === id ? { ...d, ...patch } : d))
+  function toggleDay(date: string) {
+    setPicked(p => {
+      const next = { ...p }
+      if (date in next) delete next[date]
+      else next[date] = '8'
+      return next
+    })
     setSigned(false)
   }
 
-  function addDay() {
-    // Next calendar day after the latest one, skipping weekends and holidays.
-    const last = dates[dates.length - 1] ?? todayET()
-    const d = new Date(`${last}T00:00:00`)
-    do { d.setDate(d.getDate() + 1) } while (d.getDay() === 0 || d.getDay() === 6 || holidayOn(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`))
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    setDays(ds => [...ds, { id: nextId.current++, date: iso, hours: '8' }])
+  function setDayHours(date: string, hours: string) {
+    setPicked(p => ({ ...p, [date]: hours }))
     setSigned(false)
   }
 
-  function removeDay(id: number) {
-    setDays(ds => ds.length > 1 ? ds.filter(d => d.id !== id) : ds)
+  /** Selects every available weekday of the week at a full day, or clears them if they are all already selected. */
+  function toggleWeek(weekDates: string[]) {
+    const open = weekDates.filter(d => !unavailableReason(d))
+    setPicked(p => {
+      const next = { ...p }
+      if (open.length > 0 && open.every(d => d in next)) open.forEach(d => delete next[d])
+      else open.forEach(d => { if (!(d in next)) next[d] = '8' })
+      return next
+    })
     setSigned(false)
   }
 
@@ -120,6 +128,29 @@ export default function RequestClient({
   // Planned leave can be booked well ahead; sick leave can't (no one can schedule being sick).
   const latest = leaveType === 'Sick' ? latestSickLeaveDate() : latestLeaveDate()
   const beyondLatest = !!end && end > latest
+
+  // Why a weekday can't be picked (null when it can).
+  function unavailableReason(date: string): string | null {
+    const holiday = holidayOn(date)
+    if (holiday) return holiday
+    if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
+    if (date > latest) return leaveType === 'Sick' ? 'Sick leave can’t be planned' : 'Too far ahead'
+    if (closedRangeOverlapping(date, date, closedRanges)) return 'Period closed'
+    return null
+  }
+
+  const viewDates = Array.from({ length: 14 }, (_, n) => {
+    const d = new Date(`${viewStart}T00:00:00`)
+    d.setDate(d.getDate() + n)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+  const viewWeeks = [viewDates.slice(0, 7), viewDates.slice(7)].map(w => w.filter(d => { const dow = new Date(`${d}T00:00:00`).getDay(); return dow !== 0 && dow !== 6 }))
+  const viewEnd = viewDates[13]
+  function shiftView(days: number) {
+    const d = new Date(`${viewStart}T00:00:00`)
+    d.setDate(d.getDate() + days)
+    setViewStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+  }
   const badRows = days.some(d => !d.date || !isWorkday(d.date) || !(Number(d.hours) > 0) || Number(d.hours) > 8)
   const canSubmit = !closedHit && !dayOverage && !beyondLatest && !badRows && signed && !submitting && (!attachmentRequired || !!attachment)
 
@@ -134,7 +165,7 @@ export default function RequestClient({
         if (!res.ok) throw new Error('Attachment upload failed — please try again')
         attachment_path = path
       }
-      const result = await createLeaveRequests({ leave_type: leaveType, days: days.map(d => ({ date: d.date, hours: Number(d.hours) })), note, attachment_path })
+      const result = await createLeaveRequest({ leave_type: leaveType, days: days.map(d => ({ date: d.date, hours: Number(d.hours) })), note, attachment_path })
       setAutoApproved(result.autoApproved)
       setSubmitted(true)
     } catch (e: unknown) {
@@ -157,12 +188,12 @@ export default function RequestClient({
           <p className="text-[13px] text-gray-500 mb-6">
             {autoApproved
               ? 'Approved automatically — your balance covers it. Your balance is updated and the days are on your timesheet.'
-              : dayCount > 1 ? 'Each day was submitted as its own request. Your approvers have been notified and will review them in the portal. You\u2019ll be notified of each decision.'
+              : dayCount > 1 ? 'Your approvers have been notified and will review all the days together in the portal. You\u2019ll be notified of the decision.'
               : 'Your approvers have been notified by email and will review it in the portal. You\u2019ll be notified of the decision.'}
           </p>
           <div className="flex flex-col gap-2">
             <Link href="/history" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">View My Requests</Link>
-            <button onClick={() => { setSubmitted(false); setSigned(false); setDays([{ id: nextId.current++, date: todayET(), hours: '8' }]); setNote(''); setAttachment(null) }}
+            <button onClick={() => { setSubmitted(false); setSigned(false); setPicked({}); setNote(''); setAttachment(null) }}
               className="text-[13px] text-[#02ACC0] font-semibold hover:underline">Submit another request</button>
           </div>
         </div>
@@ -220,46 +251,68 @@ export default function RequestClient({
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Dates &amp; Hours</p>
-            <p className="text-[11px] text-gray-500 mb-3">
-              <strong>Each day is its own request</strong>, so every day has its own hours: 8 is a full day, 4 a half day. Need a full week, or a half day one day and a half day the next? Add a row for each day. Approvers approve or deny — and you can cancel — one day at a time.
+            <p className="text-[12px] text-gray-500 mb-4">
+              Pick the days you&apos;ll be out, like a timesheet. Each day keeps its own hours (8 is a full day, 4 a half day), and everything you pick goes to your approver as <strong>one request</strong> — they see each day listed and approve or deny it together.
             </p>
-            <div className="space-y-3 mb-4">
-              <div className="grid grid-cols-[11rem_7rem_1fr] gap-x-8 text-[10px] uppercase tracking-wide font-semibold text-gray-400 px-0.5">
-                <span>Date</span><span>Hours</span><span />
+            <div className="border border-[#d4eef2] rounded-xl overflow-hidden mb-3">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-[#f8fcfd] border-b border-[#d4eef2]">
+                <button type="button" onClick={() => shiftView(-14)} disabled={viewEnd <= earliest}
+                  className="text-[12px] font-semibold text-[#02ACC0] px-2 py-1 rounded-lg hover:bg-[#e0f5f8] disabled:opacity-30 disabled:hover:bg-transparent">‹ Prev</button>
+                <div className="text-center">
+                  <p className="text-[12px] font-bold text-[#0b2b35]">Pay period {fmtDate(viewStart)} – {fmtDate(viewEnd)}</p>
+                  <button type="button" onClick={() => setViewStart(getCurrentPeriod(undefined, new Date(`${todayET()}T00:00:00Z`)).start)} className="text-[10px] text-gray-400 hover:text-[#02ACC0]">Jump to today</button>
+                </div>
+                <button type="button" onClick={() => shiftView(14)} disabled={viewStart > latest}
+                  className="text-[12px] font-semibold text-[#02ACC0] px-2 py-1 rounded-lg hover:bg-[#e0f5f8] disabled:opacity-30 disabled:hover:bg-transparent">Next ›</button>
               </div>
-              {days.map(d => {
-                const notWorkday = !!d.date && !isWorkday(d.date)
-                const chip = (label: string, hrs: string) => (
-                  <button type="button" onClick={() => updateDay(d.id, { hours: hrs })}
-                    className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-colors ${d.hours === hrs ? 'bg-[#e0f5f8] border-[#02ACC0] text-[#028a9e]' : 'border-[#d4eef2] text-gray-500 hover:bg-[#f0f7f8]'}`}>
-                    {label}
-                  </button>
-                )
+              {viewWeeks.map((week, wi) => {
+                const openDates = week.filter(d => !unavailableReason(d))
+                const allOn = openDates.length > 0 && openDates.every(d => d in picked)
                 return (
-                  <div key={d.id}>
-                    <div className="grid grid-cols-[11rem_7rem_1fr] gap-x-8 items-center">
-                      <input type="date" value={d.date} min={earliest} max={latest} onChange={e => updateDay(d.id, { date: e.target.value })}
-                        className="w-full px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
-                      <div className="relative">
-                        <input type="number" min="0.5" max="8" step="0.5" value={d.hours} onChange={e => updateDay(d.id, { hours: e.target.value })}
-                          className="w-full pl-3 pr-10 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none">hrs</span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {chip('Full day · 8', '8')}
-                        {chip('Half day · 4', '4')}
-                        {days.length > 1 && (
-                          <button type="button" onClick={() => removeDay(d.id)} className="ml-auto text-[11px] text-gray-400 hover:text-red-500">Remove</button>
-                        )}
-                      </div>
+                  <div key={wi}>
+                    <div className="flex items-center justify-between px-4 py-1.5 bg-[#f0f7f8] text-[10px] uppercase tracking-wide font-semibold text-gray-500">
+                      <span>Week of {fmtDate(viewDates[wi * 7])}</span>
+                      {openDates.length > 0 && (
+                        <button type="button" onClick={() => toggleWeek(week)} className="normal-case text-[11px] text-[#028a9e] hover:underline">
+                          {allOn ? 'Clear week' : 'Select full week'}
+                        </button>
+                      )}
                     </div>
-                    {notWorkday && <p className="text-[11px] text-red-500 mt-1">That date is a weekend or holiday — leave can only be taken on workdays.</p>}
-                    {Number(d.hours) > 8 && <p className="text-[11px] text-red-500 mt-1">A day can’t exceed 8 hours.</p>}
+                    {week.map(date => {
+                      const reason = unavailableReason(date)
+                      const on = date in picked
+                      const label = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short' })
+                      return (
+                        <div key={date} onClick={() => { if (!reason) toggleDay(date) }}
+                          className={`flex items-center gap-4 px-4 py-2 border-b border-[#f0f7f8] last:border-0 ${reason ? 'opacity-50' : 'cursor-pointer hover:bg-[#fafefe]'} ${on ? 'bg-[#f0fbfc]' : ''}`}>
+                          <input type="checkbox" checked={on} disabled={!!reason} onChange={() => toggleDay(date)} onClick={e => e.stopPropagation()} className="accent-[#02ACC0] w-4 h-4" />
+                          <div className="w-28 text-[13px] text-[#0b2b35]"><span className="inline-block w-9 text-gray-400">{label}</span>{fmtDate(date)}</div>
+                          {reason ? (
+                            <span className="text-[11px] text-gray-400">{reason}</span>
+                          ) : on ? (
+                            <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                              <div className="relative">
+                                <input type="number" min="0.5" max="8" step="0.5" value={picked[date]} onChange={e => setDayHours(date, e.target.value)}
+                                  className="w-24 pl-3 pr-9 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white" />
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none">hrs</span>
+                              </div>
+                              {[['Full', '8'], ['Half', '4']].map(([lbl, hrs]) => (
+                                <button key={lbl} type="button" onClick={() => setDayHours(date, hrs)}
+                                  className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${picked[date] === hrs ? 'bg-[#e0f5f8] border-[#02ACC0] text-[#028a9e]' : 'border-[#d4eef2] text-gray-500 hover:bg-[#f0f7f8]'}`}>{lbl}</button>
+                              ))}
+                              {(Number(picked[date]) > 8 || !(Number(picked[date]) > 0)) && <span className="text-[11px] text-red-500">Enter 0.5–8 hrs</span>}
+                            </div>
+                          ) : <span className="text-[11px] text-gray-300">Click to add</span>}
+                        </div>
+                      )
+                    })}
                   </div>
                 )
               })}
             </div>
-            <button type="button" onClick={addDay} className="text-[12px] font-semibold text-[#02ACC0] hover:underline mb-4">+ Add another day</button>
+            <p className="text-[12px] text-gray-500 mb-3">
+              {dayCount === 0 ? 'No days selected yet.' : <><strong className="text-[#0b2b35]">{dayCount} day{dayCount === 1 ? '' : 's'}</strong> selected · <strong className="text-[#0b2b35]">{hoursNum} hrs</strong> total{dates.some(d => d < viewStart || d > viewEnd) ? ' (including other pay periods — use Prev/Next to review)' : ''}</>}
+            </p>
             <p className="text-[11px] text-gray-400 -mt-2 mb-4">
               Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). <strong>Sick leave</strong> can only be for today or earlier. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
             </p>
@@ -386,7 +439,7 @@ export default function RequestClient({
               <p className="text-[11px] uppercase tracking-widest text-gray-400 mb-3">Request Summary</p>
               <div className="space-y-2 text-[12px]">
                 <div className="flex justify-between"><span className="text-gray-400">Type</span><span className="font-semibold text-[#0b2b35]">{leaveType}</span></div>
-                <div className="flex justify-between"><span className="text-gray-400">Requests</span><span className="font-semibold text-[#0b2b35]">{dayCount} (one per day)</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Requests</span><span className="font-semibold text-[#0b2b35]">{dayCount === 1 ? '1 day' : `${dayCount} days`} · one request</span></div>
                 {[...days].filter(d => d.date).sort((a, b) => a.date.localeCompare(b.date)).map(d => (
                   <div key={d.id} className="flex justify-between"><span className="text-gray-400">{fmtDate(d.date)}</span><span className="font-semibold text-[#0b2b35]">{Number(d.hours) || 0} hrs</span></div>
                 ))}

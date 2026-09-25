@@ -13,6 +13,7 @@ import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
+import LeaveDaysList from '@/components/LeaveDaysList'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null; reserve_only?: boolean; projected_after?: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -124,7 +125,8 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
           <div className="sm:col-span-2 bg-[#f8fcfd] rounded-xl p-4">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Date Range</p>
             <p className="text-[14px] font-semibold text-[#0b2b35]">{dateRange}</p>
-            <p className="text-[12px] text-gray-400 mt-0.5">{item.hours} hours requested</p>
+            <p className="text-[12px] text-gray-400 mt-0.5">{item.hours} hours requested{item.days && item.days.length > 1 ? ` across ${item.days.length} days` : ''}</p>
+            {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-3" />}
           </div>
           <div className="bg-[#f8fcfd] rounded-xl p-4">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{item.reserve_only ? 'On Approval' : 'Balance After'}</p>
@@ -204,7 +206,8 @@ function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
       <div className="p-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="font-bold text-[14px] text-[#0b2b35]">{item.employee_name} <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{item.leave_type}</span></p>
-          <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs</p>
+          <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs{item.days && item.days.length > 1 ? ` · ${item.days.length} days` : ''}</p>
+          {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-2 max-w-xs" />}
           {item.status === 'denied' && item.deny_reason && <p className="text-[12px] text-red-500 mt-1">&ldquo;{item.deny_reason}&rdquo;</p>}
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 ${item.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>

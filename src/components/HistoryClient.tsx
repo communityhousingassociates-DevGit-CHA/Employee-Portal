@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
+import LeaveDaysList from '@/components/LeaveDaysList'
 import { todayET } from '@/lib/pay-periods'
 import type { LeaveRequest } from '@/types'
 
@@ -64,7 +65,8 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
     }
   }
   const tc = TYPE_STYLE[r.leave_type] || TYPE_STYLE.PTO
-  const hasNote = !!(r.note || r.attachment_url || (r.status === 'denied' && r.deny_reason))
+  const multiDay = (r.days?.length ?? 0) > 1
+  const hasNote = !!(r.note || r.attachment_url || multiDay || (r.status === 'denied' && r.deny_reason))
 
   async function viewAttachment(e: React.MouseEvent) {
     e.stopPropagation()
@@ -87,7 +89,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
             <span className="text-[13px] font-semibold text-[#0b2b35]">{fmtRange(r.start_date, r.end_date)}</span>
           </div>
           <p className="text-[11px] text-gray-400">
-            {r.hours} hrs · Submitted {daysAgo(r.created_at)}
+            {r.hours} hrs{multiDay ? ` · ${r.days!.length} days` : ''} · Submitted {daysAgo(r.created_at)}
             {r.approver_name && r.status !== 'denied' && <> · Approved by {r.approver_name}</>}
             {r.status === 'denied' && r.approver_name && <> · Reviewed by {r.approver_name}</>}
           </p>
@@ -106,6 +108,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
 
       {expanded && (
         <div className="bg-[#f8fcfd] border-b border-[#e8f4f7] px-6 py-4 space-y-2">
+          {multiDay && <LeaveDaysList days={r.days!} className="max-w-xs" />}
           {r.note && (
             <div className="flex gap-2.5">
               <div className="w-0.5 bg-[#d4eef2] rounded-full flex-shrink-0" />
