@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { getLeaveAttachmentViewUrl } from '@/app/actions/leave-requests'
+import { useRouter } from 'next/navigation'
+import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { LeaveRequest } from '@/types'
 
@@ -20,6 +21,7 @@ const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-emerald-100 text-emerald-700',
   denied: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-100 text-gray-500',
 }
 
 function fmtRange(start: string, end: string) {
@@ -35,7 +37,31 @@ function daysAgo(iso: string) {
   return `${Math.floor(diff / 365)}yr ago`
 }
 
-function RequestRow({ r, expanded, onToggle }: { r: Request; expanded: boolean; onToggle: () => void }) {
+// Mirrors cancelMyLeaveRequest: pending, auto-approved, or approved-but-not-yet-taken leave can be undone by the employee.
+function canCancel(r: Request) {
+  if (r.status === 'pending') return true
+  return r.status === 'approved' && (!r.approver_id || !r.balance_deducted_at)
+}
+
+function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expanded: boolean; onToggle: () => void; allowCancel: boolean }) {
+  const router = useRouter()
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+
+  async function cancel(e: React.MouseEvent) {
+    e.stopPropagation()
+    const taken = r.status === 'approved' && !!r.balance_deducted_at
+    if (!window.confirm(`Cancel this ${r.leave_type} request for ${fmtRange(r.start_date, r.end_date)}?${taken ? ` The ${r.hours} hrs will go back to your balance and come off your timesheet.` : ''}`)) return
+    setCancelling(true)
+    setCancelError('')
+    try {
+      await cancelMyLeaveRequest(r.id)
+      router.refresh()
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Could not cancel this request.')
+      setCancelling(false)
+    }
+  }
   const tc = TYPE_STYLE[r.leave_type] || TYPE_STYLE.PTO
   const hasNote = !!(r.note || r.attachment_url || (r.status === 'denied' && r.deny_reason))
 
@@ -64,8 +90,14 @@ function RequestRow({ r, expanded, onToggle }: { r: Request; expanded: boolean; 
             {r.approver_name && r.status !== 'denied' && <> · Approved by {r.approver_name}</>}
             {r.status === 'denied' && r.approver_name && <> · Reviewed by {r.approver_name}</>}
           </p>
+          {cancelError && <p className="text-[11px] text-red-600 mt-1">{cancelError}</p>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {allowCancel && canCancel(r) && (
+            <button onClick={cancel} disabled={cancelling} className="text-[11px] font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-2.5 py-1 rounded-full disabled:opacity-50">
+              {cancelling ? 'Cancelling…' : 'Cancel'}
+            </button>
+          )}
           <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize ${STATUS_STYLE[r.status]}`}>{r.status}</span>
           {hasNote && <span className={`text-gray-300 text-[13px] transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>}
         </div>
@@ -122,6 +154,7 @@ export default function HistoryClient({
   const pending = requests.filter(r => r.status === 'pending').length
   const approved = requests.filter(r => r.status === 'approved').length
   const denied = requests.filter(r => r.status === 'denied').length
+  const cancelled = requests.filter(r => r.status === 'cancelled').length
   const leaveTypes = ['All', ...Array.from(new Set(requests.map(r => r.leave_type)))]
 
   const filtered = useMemo(() => {
@@ -165,6 +198,7 @@ export default function HistoryClient({
             { label: 'Pending', count: pending },
             { label: 'Approved', count: approved },
             { label: 'Denied', count: denied },
+            ...(cancelled > 0 ? [{ label: 'Cancelled', count: cancelled }] : []),
           ].map(t => (
             <button key={t.label} onClick={() => setStatusFilter(t.label)}
               className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors flex items-center gap-1.5 ${statusFilter === t.label ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
@@ -185,7 +219,7 @@ export default function HistoryClient({
         ) : (
           <div>
             {filtered.map(r => (
-              <RequestRow key={r.id} r={r} expanded={expanded === r.id} onToggle={() => setExpanded(prev => prev === r.id ? null : r.id)} />
+              <RequestRow key={r.id} r={r} allowCancel={showNewRequestLink} expanded={expanded === r.id} onToggle={() => setExpanded(prev => prev === r.id ? null : r.id)} />
             ))}
           </div>
         )}

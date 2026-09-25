@@ -238,3 +238,65 @@ export async function applyLeaveToTimesheets(
   }
   return summary
 }
+
+/**
+ * Reverses applyLeaveToTimesheets for a cancelled leave request: each affected day loses the leave hours that came from
+ * this leave type (salaried days go back to full Regular hours; a "Sick Leave"/"Vacation" description goes back to
+ * "Regular Hours"). Same locking rules as posting: drafts are edited, submitted/approved timesheets in an open period are
+ * reopened for re-review, and periods accounting has closed are left untouched (callers refuse the cancel up front).
+ */
+export async function removeLeaveFromTimesheets(
+  admin: AdminClient,
+  employeeId: string,
+  leaveType: LeaveType,
+  allocations: { date: string; hours: number }[],
+  ctx: { actorId: string | null; leaveLabel: string } = { actorId: null, leaveLabel: leaveType },
+): Promise<LeavePostingSummary> {
+  const summary: LeavePostingSummary = { reopened: [], held: [] }
+  if (allocations.length === 0) return summary
+  const isSalaried = await isSalariedEmployee(admin, employeeId)
+  const closedRanges = await loadClosedRanges(admin)
+  const reopenIds = new Set<string>()
+  const heldIds = new Set<string>()
+
+  for (const { date } of allocations) {
+    const period = getCurrentPeriod(undefined, new Date(`${date}T00:00:00Z`))
+    const { timesheet, rows } = await getOrCreateTimesheetForEmployee(admin, employeeId, period.start, period.end)
+    const row = rows.find(r => r.work_date === date)
+    // Only undo leave of this type — a day since changed to something else is not ours to clear.
+    if (!row || row.leave_type !== leaveType || Number(row.leave_hours) === 0) continue
+
+    if (timesheet.status !== 'draft') {
+      if (periodLockReason(period, closedRanges)) {
+        if (!heldIds.has(timesheet.id)) {
+          heldIds.add(timesheet.id)
+          summary.held.push({ timesheetId: timesheet.id, periodStart: period.start, periodEnd: period.end })
+        }
+        continue
+      }
+      if (!reopenIds.has(timesheet.id)) {
+        reopenIds.add(timesheet.id)
+        summary.reopened.push({ timesheetId: timesheet.id, periodStart: period.start, periodEnd: period.end, wasApproved: timesheet.status === 'approved' })
+      }
+    }
+
+    const regular_hours = isSalaried ? SALARIED_DAILY_HOURS - Number(row.holiday_hours ?? 0) : row.regular_hours
+    const description = row.description === leaveDescription(leaveType) ? REGULAR_DESCRIPTION : row.description
+    const { error } = await admin
+      .from('timesheet_rows')
+      .update({ leave_hours: 0, leave_type: null, regular_hours, description })
+      .eq('id', row.id)
+    if (error) throw new Error(error.message)
+  }
+
+  const note = `${ctx.leaveLabel} was cancelled and removed from this pay period. Review your entries and resubmit.`
+  for (const r of summary.reopened) {
+    const { error } = await admin
+      .from('timesheets')
+      .update({ status: 'draft', approver_id: null, approved_at: null, return_reason: `Leave added or changed: ${note}`, correction_requested_at: null, correction_note: null })
+      .eq('id', r.timesheetId)
+    if (error) throw new Error(error.message)
+    await logTimesheetEvent(admin, { timesheetId: r.timesheetId, actorId: ctx.actorId, action: 'leave_reopened', reasonCode: 'leave_change', note })
+  }
+  return summary
+}

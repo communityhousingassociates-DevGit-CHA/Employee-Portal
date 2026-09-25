@@ -1,5 +1,5 @@
 export type Role = 'employee' | 'accounting_manager' | 'ceo' | 'admin'
-export type LeaveStatus = 'pending' | 'approved' | 'denied'
+export type LeaveStatus = 'pending' | 'approved' | 'denied' | 'cancelled'
 export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty'
 export type EmployeeType = 'full-time' | 'part-time' | 'consultant'
 export type StaffCategory = 'cha_employee' | 'resident_advocate'
@@ -127,6 +127,7 @@ export interface LeaveRequest {
   approved_at: string | null
   employee_signed_at: string | null
   approver_signed_at: string | null
+  balance_deducted_at?: string | null
   created_at: string
 }
 

@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
-import { distributeLeaveHours, applyLeaveToTimesheets, type LeavePostingSummary } from '@/lib/leave-timesheet'
+import { distributeLeaveHours, applyLeaveToTimesheets, removeLeaveFromTimesheets, type LeavePostingSummary } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notifications'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
@@ -410,6 +410,65 @@ export async function denyLeaveRequest(id: string, reason: string) {
   revalidatePath('/approvals')
   revalidatePath('/history')
   revalidatePath('/dashboard')
+}
+
+/**
+ * Lets employees undo their own mistake without an approver: a pending request, an auto-approved one (Sick), or approved
+ * leave that hasn't started yet (still only reserved). Leave an approver already approved and that has come off the
+ * balance stays with the approvers. Restores any deducted balance and takes the hours back off the timesheet.
+ */
+export async function cancelMyLeaveRequest(id: string) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
+  if (fetchError) throw new Error(fetchError.message)
+  if (request.employee_id !== employee.id) throw new Error('Forbidden')
+  if (request.status === 'denied' || request.status === 'cancelled') throw new Error('This request is already closed.')
+
+  const deducted = !!request.balance_deducted_at
+  const selfService = request.status === 'pending' || !request.approver_id || !deducted
+  if (!selfService) throw new Error('This leave was approved by an approver and has already been taken off your balance. Ask your Accounting Manager to change it.')
+
+  const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
+  if (closedHit) throw new Error(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)
+
+  // Claim the cancel first so a double-click can't restore the balance twice.
+  const { data: claimed, error: claimError } = await admin.from('leave_requests')
+    .update({ status: 'cancelled', deny_reason: 'Cancelled by employee' })
+    .eq('id', id).eq('status', request.status).select('id').maybeSingle()
+  if (claimError) throw new Error(claimError.message)
+  if (!claimed) throw new Error('This request was just changed — refresh and try again.')
+
+  const col = balanceColumnFor(request.leave_type)
+  let newBalance: number | null = null
+  if (deducted && col) {
+    const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+    if (balError) throw new Error(balError.message)
+    newBalance = Math.round((Number(balance?.[col] ?? 0) + Number(request.hours)) * 100) / 100
+    const { error: restoreError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', employee.id)
+    if (restoreError) throw new Error(restoreError.message)
+  }
+
+  if (request.status === 'approved') {
+    const allocations = distributeLeaveHours(request.start_date, request.end_date, Number(request.hours))
+    const leaveLabel = `${request.leave_type} leave (${rangeLabel(request.start_date, request.end_date)})`
+    await removeLeaveFromTimesheets(admin, employee.id, request.leave_type, allocations, { actorId: employee.id, leaveLabel })
+  }
+
+  await notifyEmployee(admin, employee.id, {
+    kind: 'approved',
+    title: `Your ${request.leave_type} request was cancelled`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nCancelled by you.${newBalance !== null ? ` The ${request.hours} hrs went back to your balance.` : ''}`,
+    link: '/history',
+    cta: 'View My Requests',
+  })
+
+  revalidatePath('/request')
+  revalidatePath('/history')
+  revalidatePath('/dashboard')
+  revalidatePath('/timesheet')
+  revalidatePath('/approvals')
 }
 
 /**

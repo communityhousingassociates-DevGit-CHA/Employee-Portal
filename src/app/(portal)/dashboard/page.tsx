@@ -11,6 +11,7 @@ import { getCurrentPeriod } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate } from '@/lib/format-date'
 import { getBaltimoreWeather } from '@/lib/weather'
+import { fmtHrs } from '@/lib/format-hours'
 
 const PERSONAL_CAP = 24
 
@@ -26,6 +27,7 @@ const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-emerald-100 text-emerald-700',
   denied: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-100 text-gray-500',
 }
 
 function daysAgo(iso: string) {
@@ -134,7 +136,7 @@ export default async function DashboardPage() {
           <div className="absolute top-0 left-0 right-0 h-1 bg-[#02ACC0] rounded-t-xl" />
           <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">PTO Balance</p>
           <div className="flex items-end gap-2 mb-0.5">
-            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{ptoHours}</p>
+            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{fmtHrs(ptoHours)}</p>
             <p className="text-[13px] text-gray-400 mb-1.5">hrs</p>
           </div>
           <p className="text-[12px] text-gray-400 mb-3">≈ {ptoDays} working days</p>
@@ -149,7 +151,7 @@ export default async function DashboardPage() {
                 <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${Math.min((ptoHours / PTO_CARRYOVER_CAP) * 100, 100)}%` }} />
               </div>
               <div className="flex justify-between items-center">
-                <p className="text-[10px] text-gray-400">{ptoHours} / {PTO_CARRYOVER_CAP} hr cap</p>
+                <p className="text-[10px] text-gray-400">{fmtHrs(ptoHours)} / {PTO_CARRYOVER_CAP} hr cap</p>
                 <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
               </div>
             </>
@@ -160,7 +162,7 @@ export default async function DashboardPage() {
           <div className="absolute top-0 left-0 right-0 h-1 bg-violet-500 rounded-t-xl" />
           <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">Sick Leave</p>
           <div className="flex items-end gap-2 mb-0.5">
-            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{sickHours}</p>
+            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{fmtHrs(sickHours)}</p>
             <p className="text-[13px] text-gray-400 mb-1.5">hrs</p>
           </div>
           <p className="text-[12px] text-gray-400 mb-3">≈ {sickDays} working days</p>
@@ -180,12 +182,12 @@ export default async function DashboardPage() {
             <p className="text-[38px] font-black text-[#0b2b35] leading-none">{personalDays}</p>
             <p className="text-[13px] text-gray-400 mb-1.5">days</p>
           </div>
-          <p className="text-[12px] text-gray-400 mb-3">{personalHours} hrs</p>
+          <p className="text-[12px] text-gray-400 mb-3">{fmtHrs(personalHours)} hrs</p>
           <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
             <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min((personalHours / PERSONAL_CAP) * 100, 100)}%` }} />
           </div>
           <div className="flex justify-between items-center">
-            <p className="text-[10px] text-gray-400">{personalHours} / {PERSONAL_CAP} hrs</p>
+            <p className="text-[10px] text-gray-400">{fmtHrs(personalHours)} / {PERSONAL_CAP} hrs</p>
             <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Resets Jan 1</span>
           </div>
         </div>
@@ -206,7 +208,7 @@ export default async function DashboardPage() {
                   <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-[12px] bg-[#f8fcfd] rounded-lg px-3 py-2">
                     <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Vacation' : r.leave_type} · {r.hours} hrs · starts {fmtDate(r.start_date)}</span>
                     <span className={r.covered ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>
-                      {r.covered ? '✓' : '⚠'} Projected {Number(r.projectedBefore.toFixed(2))} hrs available then{r.covered ? '' : ' — not enough'}
+                      {r.covered ? '✓' : '⚠'} Projected {fmtHrs(r.projectedBefore)} hrs available then{r.covered ? '' : ' — not enough'}
                     </span>
                   </li>
                 ))}

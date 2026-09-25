@@ -164,8 +164,9 @@ export default async function GuidePage() {
           <Section id="history" title="5. Checking Your Request History">
             <p>Go to <strong>My Request History</strong> to see every leave request you&apos;ve submitted, with summary counts for Total, Approved, Pending, and Hours Approved.</p>
             <Bullets items={[
-              'Filter by status (All / Pending / Approved / Denied) or by leave type.',
+              'Filter by status (All / Pending / Approved / Denied / Cancelled) or by leave type.',
               'Click any row with a note icon to expand it and see your note, or — if denied — the reason given.',
+              <>Made a mistake? Click <strong>Cancel</strong> on a request that is Pending, was recorded automatically (Sick), or is approved but hasn&apos;t started yet — no approval needed. Any hours already taken off your balance go back and the day is cleared from your timesheet. Leave an approver approved that has already started, or in a pay period accounting has closed, must be changed by your Accounting Manager. Balances are shown in half-hour steps.</>,
             ]} />
           </Section>
 

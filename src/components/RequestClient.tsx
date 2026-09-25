@@ -9,6 +9,7 @@ import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { todayET, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { fmtHrs, halfHour } from '@/lib/format-hours'
 
 type Conflict = { start_date: string; end_date: string; employee_name?: string }
 
@@ -182,12 +183,12 @@ export default function RequestClient({
                     {bal !== null && (
                       <div className="mt-2 pt-2 border-t border-[#e8f4f7]">
                         <p className={`text-[16px] font-black leading-none ${bal <= 0 ? 'text-red-500' : 'text-[#0b2b35]'}`}>
-                          {Number(bal.toFixed(2))} <span className="text-[10px] font-semibold text-gray-400">hrs available</span>
+                          {fmtHrs(bal)} <span className="text-[10px] font-semibold text-gray-400">hrs available</span>
                         </p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">≈ {(bal / 8).toFixed(1)} days</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">≈ {(halfHour(bal) / 8).toFixed(1)} days</p>
                         {after !== null && (
                           <p className={`text-[10px] font-semibold mt-1 ${after < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                            {Number(after.toFixed(2))} hrs after this request
+                            {fmtHrs(after)} hrs after this request
                           </p>
                         )}
                       </div>
@@ -312,18 +313,18 @@ export default function RequestClient({
               {selectedBalance !== null ? (
                 <>
                   <div className="space-y-3 text-[13px]">
-                    <div className="flex justify-between"><span className="text-gray-400">Current {leaveType}</span><span className="font-semibold text-[#0b2b35]">{selectedBalance} hrs</span></div>
+                    <div className="flex justify-between"><span className="text-gray-400">Current {leaveType}</span><span className="font-semibold text-[#0b2b35]">{fmtHrs(selectedBalance)} hrs</span></div>
                     {projection && (
                       <>
-                        <div className="flex justify-between"><span className="text-gray-400">+ Accruing by {fmtDate(start)}</span><span className="font-semibold text-emerald-600">+ {Number(projection.accrued.toFixed(2))} hrs</span></div>
-                        {projection.reservedBefore > 0 && <div className="flex justify-between"><span className="text-gray-400">− Already reserved</span><span className="font-semibold text-red-500">− {Number(projection.reservedBefore.toFixed(2))} hrs</span></div>}
-                        <div className="flex justify-between border-t border-[#f0f7f8] pt-2"><span className="text-gray-400">Projected on {fmtDate(start)}</span><span className="font-semibold text-[#0b2b35]">{Number(projection.projected.toFixed(2))} hrs</span></div>
+                        <div className="flex justify-between"><span className="text-gray-400">+ Accruing by {fmtDate(start)}</span><span className="font-semibold text-emerald-600">+ {fmtHrs(projection.accrued)} hrs</span></div>
+                        {projection.reservedBefore > 0 && <div className="flex justify-between"><span className="text-gray-400">− Already reserved</span><span className="font-semibold text-red-500">− {fmtHrs(projection.reservedBefore)} hrs</span></div>}
+                        <div className="flex justify-between border-t border-[#f0f7f8] pt-2"><span className="text-gray-400">Projected on {fmtDate(start)}</span><span className="font-semibold text-[#0b2b35]">{fmtHrs(projection.projected)} hrs</span></div>
                       </>
                     )}
                     <div className="flex justify-between"><span className="text-gray-400">This request</span><span className="font-semibold text-red-500">− {hoursNum || 0} hrs</span></div>
                     <div className="border-t border-[#f0f7f8] pt-3 flex justify-between">
                       <span className="font-semibold text-[#0b2b35]">Remaining</span>
-                      <span className={`font-bold text-[15px] ${isNegative ? 'text-red-500' : 'text-emerald-600'}`}>{balAfter !== null ? balAfter.toFixed(1) : '—'} hrs</span>
+                      <span className={`font-bold text-[15px] ${isNegative ? 'text-red-500' : 'text-emerald-600'}`}>{balAfter !== null ? fmtHrs(balAfter) : '—'} hrs</span>
                     </div>
                   </div>
                   {hoursNum > 0 && (

@@ -11,6 +11,7 @@ import type { LeaveRequest, Expense, Role, TimesheetForReview, TimesheetTag } fr
 import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
+import { fmtHrs } from '@/lib/format-hours'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -130,7 +131,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
               <p className="text-[14px] font-semibold text-[#0b2b35]">No change</p>
             ) : (
               <>
-                <p className={`text-[14px] font-semibold ${item.balance_after < 0 ? 'text-red-600' : 'text-[#0b2b35]'}`}>{item.balance_after} hrs</p>
+                <p className={`text-[14px] font-semibold ${item.balance_after < 0 ? 'text-red-600' : 'text-[#0b2b35]'}`}>{fmtHrs(item.balance_after)} hrs</p>
                 <div className="mt-1.5 bg-[#e8f4f7] rounded-full h-1 overflow-hidden">
                   <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${capPct}%` }} />
                 </div>

@@ -8,6 +8,7 @@ import MaskedAmount from '@/components/MaskedAmount'
 import { fmtDate, fmtDateRange, fmtDateShort } from '@/lib/format-date'
 import { getPayDate, type PayPeriod } from '@/lib/pay-periods'
 import { tagColor } from '@/lib/timesheet-tags'
+import { fmtHrs } from '@/lib/format-hours'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
 export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; status: string; weekly_gross: number | null; can_reveal: boolean }
@@ -433,7 +434,7 @@ export default function ReportsClient({
                           </td>
                         )}
                         <td className="px-5 py-3">{r.pto_used ? <span className="font-semibold text-[#02ACC0]">{r.pto_used} hrs</span> : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.pto_bal} hrs</td>
+                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{fmtHrs(r.pto_bal)} hrs</td>
                         <td className="px-5 py-3">
                           <div className="flex items-center gap-2 min-w-[80px]">
                             <div className="w-16 h-1.5 bg-[#f0f7f8] rounded-full overflow-hidden flex-shrink-0">
@@ -443,8 +444,8 @@ export default function ReportsClient({
                           </div>
                         </td>
                         <td className="px-5 py-3">{r.sick_used ? <span className="font-semibold text-violet-600">{r.sick_used} hrs</span> : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.sick_bal} hrs</td>
-                        <td className="px-5 py-3"><span className={`font-semibold ${r.personal_bal <= 8 ? 'text-amber-500' : 'text-[#0b2b35]'}`}>{r.personal_bal} hrs</span></td>
+                        <td className="px-5 py-3 font-semibold text-[#0b2b35]">{fmtHrs(r.sick_bal)} hrs</td>
+                        <td className="px-5 py-3"><span className={`font-semibold ${r.personal_bal <= 8 ? 'text-amber-500' : 'text-[#0b2b35]'}`}>{fmtHrs(r.personal_bal)} hrs</span></td>
                         <td className="px-5 py-3 text-gray-400 no-print">{r.accrual} hrs</td>
                       </tr>
                     )
