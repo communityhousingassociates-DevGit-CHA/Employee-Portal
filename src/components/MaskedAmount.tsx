@@ -14,11 +14,14 @@ export default function MaskedAmount({
   format,
   label,
   className = '',
+  shown,
 }: {
   reveal: () => Promise<number | null>
   format: (n: number) => string
   label: string
   className?: string
+  /** When set, the amount is displayed as-is (a page-level "show all" is on) and clicking does nothing. */
+  shown?: number | null
 }) {
   const [value, setValue] = useState<number | null | undefined>(undefined) // undefined = hidden
   const [loading, setLoading] = useState(false)
@@ -47,17 +50,21 @@ export default function MaskedAmount({
     }
   }
 
-  const shown = value !== undefined
+  if (shown !== undefined) {
+    return <span className={`font-mono tabular-nums px-2 py-0.5 text-[#0b2b35] font-semibold ${className}`}>{shown === null ? '—' : format(shown)}</span>
+  }
+
+  const isShown = value !== undefined
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={loading}
-      aria-label={shown ? `Hide ${label}` : `Reveal ${label}`}
-      title={shown ? 'Click to hide' : 'Click to reveal'}
-      className={`font-mono tabular-nums px-2 py-0.5 rounded border border-transparent hover:border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors ${shown ? 'text-[#0b2b35] font-semibold' : 'text-gray-400 tracking-widest'} ${className}`}
+      aria-label={isShown ? `Hide ${label}` : `Reveal ${label}`}
+      title={isShown ? 'Click to hide' : 'Click to reveal'}
+      className={`font-mono tabular-nums px-2 py-0.5 rounded border border-transparent hover:border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors ${isShown ? 'text-[#0b2b35] font-semibold' : 'text-gray-400 tracking-widest'} ${className}`}
     >
-      {loading ? '…' : error ? 'Unavailable' : shown ? (value === null ? '—' : format(value)) : '••••••••'}
+      {loading ? '…' : error ? 'Unavailable' : isShown ? (value === null ? '—' : format(value)) : '••••••••'}
     </button>
   )
 }
