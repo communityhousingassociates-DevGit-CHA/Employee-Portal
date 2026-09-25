@@ -300,3 +300,51 @@ export async function removeLeaveFromTimesheets(
   }
   return summary
 }
+
+/**
+ * Guardrail: a person can't take more than a full (8 hr) day of leave on any workday, counting every leave request that
+ * is pending or approved (any type). Returns a plain-language reason when the request would break that, else null.
+ * `excludeId` skips the request being approved so it isn't compared with itself.
+ */
+export async function dailyLeaveOverage(
+  admin: AdminClient,
+  employeeId: string,
+  startDate: string,
+  endDate: string,
+  hours: number,
+  excludeId?: string,
+): Promise<string | null> {
+  const days = workdaysBetween(startDate, endDate)
+  if (days.length === 0) return 'That date range has no workdays (weekends and holidays don’t take leave).'
+  const max = days.length * SALARIED_DAILY_HOURS
+  if (hours > max) {
+    return `${hours} hrs is more than ${days.length} workday${days.length === 1 ? '' : 's'} can hold — a day can’t exceed ${SALARIED_DAILY_HOURS} hrs (max ${max} hrs for these dates).`
+  }
+
+  const { data, error } = await admin
+    .from('leave_requests')
+    .select('id, leave_type, status, start_date, end_date, hours')
+    .eq('employee_id', employeeId)
+    .in('status', ['pending', 'approved'])
+    .lte('start_date', endDate)
+    .gte('end_date', startDate)
+  if (error) throw new Error(error.message)
+
+  const existing = new Map<string, { hours: number; labels: string[] }>()
+  for (const r of data ?? []) {
+    if (r.id === excludeId) continue
+    for (const a of distributeLeaveHours(r.start_date, r.end_date, Number(r.hours))) {
+      const cur = existing.get(a.date) ?? { hours: 0, labels: [] }
+      cur.hours += a.hours
+      cur.labels.push(`${r.leave_type === 'Personal' ? 'Vacation' : r.leave_type}, ${r.status}`)
+      existing.set(a.date, cur)
+    }
+  }
+  for (const a of distributeLeaveHours(startDate, endDate, hours)) {
+    const cur = existing.get(a.date)
+    if (cur && cur.hours + a.hours > SALARIED_DAILY_HOURS + 1e-9) {
+      return `You already have ${cur.hours} hrs of leave on ${a.date.slice(5, 7)}-${a.date.slice(8)}-${a.date.slice(0, 4)} (${cur.labels.join('; ')}). A day can’t exceed ${SALARIED_DAILY_HOURS} hrs, so this request would go over. Cancel or shorten the other request first.`
+    }
+  }
+  return null
+}

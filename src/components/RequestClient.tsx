@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { createLeaveRequest, getTeamConflicts, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
+import { createLeaveRequest, getTeamConflicts, checkMyDailyLeave, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
@@ -61,6 +61,7 @@ export default function RequestClient({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<Conflict[]>([])
+  const [dayOverage, setDayOverage] = useState<string | null>(null)
 
   const selectedType = LEAVE_TYPES.find(t => t.key === leaveType)!
   const selectedBalance = selectedType.balanceKey ? Number(balance?.[selectedType.balanceKey] ?? 0) : null
@@ -72,6 +73,14 @@ export default function RequestClient({
     getTeamConflicts(start, end).then(c => { if (!cancelled) setConflicts(c) }).catch(() => {})
     return () => { cancelled = true }
   }, [start, end])
+
+  useEffect(() => {
+    const h = Number(hours)
+    if (!start || !end || !(h > 0)) { setDayOverage(null); return }
+    let cancelled = false
+    checkMyDailyLeave(start, end, h).then(m => { if (!cancelled) setDayOverage(m) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [start, end, hours])
 
   function suggestHours() {
     if (!start || !end) return
@@ -103,7 +112,7 @@ export default function RequestClient({
   // Planned leave can be booked well ahead; sick leave can't (no one can schedule being sick).
   const latest = leaveType === 'Sick' ? latestSickLeaveDate() : latestLeaveDate()
   const beyondLatest = !!end && end > latest
-  const canSubmit = !closedHit && !beyondLatest && signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
+  const canSubmit = !closedHit && !dayOverage && !beyondLatest && signed && !!start && !!end && hoursNum > 0 && start <= end && !submitting && (!attachmentRequired || !!attachment)
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -222,6 +231,9 @@ export default function RequestClient({
                   ? 'Sick leave can’t be requested for future dates. Use PTO or Vacation for planned time off.'
                   : `Leave can be requested through ${fmtDate(latestLeaveDate())}.`}
               </div>
+            )}
+            {dayOverage && (
+              <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">{dayOverage}</div>
             )}
             {closedHit && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">

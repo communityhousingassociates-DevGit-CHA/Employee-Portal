@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
-import { distributeLeaveHours, applyLeaveToTimesheets, removeLeaveFromTimesheets, type LeavePostingSummary } from '@/lib/leave-timesheet'
+import { distributeLeaveHours, applyLeaveToTimesheets, removeLeaveFromTimesheets, dailyLeaveOverage, type LeavePostingSummary } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notifications'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
@@ -101,6 +101,9 @@ export async function createLeaveRequest(data: {
     throw new Error(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so no new leave can be entered for those dates. Contact your Accounting Manager.`)
   }
 
+  const overage = await dailyLeaveOverage(admin, employee.id, data.start_date, data.end_date, Number(data.hours))
+  if (overage) throw new Error(overage)
+
   // Auto-approved types (Sick) skip the approver when the balance covers the request.
   const col = balanceColumnFor(data.leave_type)
   let autoApprove = false
@@ -160,6 +163,14 @@ export async function createLeaveRequest(data: {
   revalidatePath('/dashboard')
   revalidatePath('/timesheet')
   return { autoApproved: autoApprove }
+}
+
+/** Live check for the request form: null when the dates/hours fit, otherwise why they don't. */
+export async function checkMyDailyLeave(startDate: string, endDate: string, hours: number) {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  if (!startDate || !endDate || endDate < startDate || !(hours > 0)) return null
+  return dailyLeaveOverage(createAdminClient(), employee.id, startDate, endDate, hours)
 }
 
 export async function getLeaveAttachmentUploadUrl(fileName: string) {
@@ -324,6 +335,9 @@ export async function approveLeaveRequest(id: string) {
   if (closedHit) {
     throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
   }
+
+  const overage = await dailyLeaveOverage(admin, request.employee_id, request.start_date, request.end_date, Number(request.hours), id)
+  if (overage) throw new Error(`${overage} Deny this request instead.`)
 
   // Leave that has already begun comes off the balance now (and must be covered by it). Leave that starts in the
   // future is RESERVED instead: it's judged against the balance projected for its start date (today's balance plus
