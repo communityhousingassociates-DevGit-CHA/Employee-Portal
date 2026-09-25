@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { calcTier, SICK_RATE_PER_PERIOD, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
+import { calcTier, SICK_RATE_PER_PERIOD, PTO_CARRYOVER_CAP, ACCRUAL_FIRST_PERIOD_START } from '@/lib/constants/accrual'
 import { getCurrentPeriod, isPeriodBoundary } from '@/lib/pay-periods'
 
 export async function GET(request: NextRequest) {
@@ -9,12 +9,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  if (!ACCRUAL_FIRST_PERIOD_START) {
+    return NextResponse.json({ ran: false, reason: 'accruals are not enabled yet (ACCRUAL_FIRST_PERIOD_START is unset)' })
+  }
+
   const today = new Date().toISOString().slice(0, 10)
   if (!isPeriodBoundary(today)) {
     return NextResponse.json({ ran: false, reason: 'not a pay period boundary', today })
   }
 
   const { start: periodStart } = getCurrentPeriod()
+  if (periodStart < ACCRUAL_FIRST_PERIOD_START) {
+    return NextResponse.json({ ran: false, reason: 'before the first accrual period', periodStart, first: ACCRUAL_FIRST_PERIOD_START })
+  }
   const admin = createAdminClient()
 
   const { data: employees, error: empError } = await admin

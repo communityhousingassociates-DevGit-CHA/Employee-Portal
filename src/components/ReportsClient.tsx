@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { getReportSummary } from '@/app/actions/reports'
 import { revealSalary, revealWeeklyPayroll } from '@/app/actions/salary'
 import MaskedAmount from '@/components/MaskedAmount'
-import { fmtDate, fmtDateRange } from '@/lib/format-date'
-import type { PayPeriod } from '@/lib/pay-periods'
+import { fmtDate, fmtDateRange, fmtDateShort } from '@/lib/format-date'
+import { getPayDate, getPayrollDueDate, type PayPeriod } from '@/lib/pay-periods'
 import { tagColor } from '@/lib/timesheet-tags'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
@@ -28,6 +28,15 @@ function toInitials(name: string) {
 
 function formatPeriodLabel(p: PayPeriod): string {
   return fmtDateRange(p.start, p.end)
+}
+
+/** Dropdown text: the period plus when it pays, so the list reads straight off CHA's payroll calendar. */
+function periodOptionLabel(p: PayPeriod, i: number): string {
+  return `${formatPeriodLabel(p)} · pay date ${fmtDate(getPayDate(p))}${i === 0 ? ' (current)' : ''}`
+}
+
+function PeriodDates({ p }: { p: PayPeriod }) {
+  return <span className="ml-2 text-[11px] font-normal text-gray-400">Payroll due {fmtDate(getPayrollDueDate(p))} · Pay date {fmtDate(getPayDate(p))}</span>
 }
 
 export default function ReportsClient({
@@ -164,7 +173,7 @@ export default function ReportsClient({
         <div className="flex flex-wrap gap-3 mb-6 no-print">
           <select value={periodIdx} onChange={e => switchPeriod(Number(e.target.value))} disabled={loading}
             className="border border-[#d4eef2] rounded-lg px-3 py-2 text-[13px] text-[#0b2b35] focus:outline-none focus:border-[#02ACC0] bg-white cursor-pointer">
-            {periods.map((p, i) => <option key={p.start} value={i}>{formatPeriodLabel(p)}</option>)}
+            {periods.map((p, i) => <option key={p.start} value={i}>{periodOptionLabel(p, i)}</option>)}
           </select>
           {tab === 'leave' && (
             <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1">
@@ -198,7 +207,7 @@ export default function ReportsClient({
 
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-5 py-4 border-b border-[#d4eef2]">
-              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}<PeriodDates p={selectedPeriod} /></h2>
               <p className="text-[11px] text-gray-400 mt-0.5">Regular, leave, and holiday hours logged per employee this pay period</p>
             </div>
             <div className="overflow-x-auto">
@@ -290,7 +299,7 @@ export default function ReportsClient({
               { label: 'Total Reimbursed', value: `$${expTotal.toFixed(2)}`, color: '#0b2b35' },
               { label: 'Expenses Submitted', value: expCount, color: '#02ACC0' },
               { label: 'Employees w/ Expenses', value: expenseRows.filter(r => r.count > 0).length, color: '#7c3aed' },
-              { label: 'Pay Period', value: selectedPeriod.start, color: '#0b2b35' },
+              { label: 'Pay Period', value: `${fmtDateShort(selectedPeriod.start)} – ${fmtDateShort(selectedPeriod.end)}`, color: '#0b2b35' },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
                 <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
@@ -301,7 +310,7 @@ export default function ReportsClient({
 
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-5 py-4 border-b border-[#d4eef2]">
-              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+              <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}<PeriodDates p={selectedPeriod} /></h2>
               <p className="text-[11px] text-gray-400 mt-0.5">Mileage and travel reimbursement submitted per employee this pay period</p>
             </div>
             <div className="overflow-x-auto">
@@ -341,7 +350,7 @@ export default function ReportsClient({
               { label: 'PTO Hours Used', value: `${totalPto} hrs`, color: '#02ACC0' },
               { label: 'Sick Hours Used', value: `${totalSick} hrs`, color: '#7c3aed' },
               { label: 'Vacation Hours Used', value: `${totalPersonal} hrs`, color: '#f59e0b' },
-              { label: isManager ? 'Employees Reported' : 'Pay Period', value: isManager ? filteredRows.length : selectedPeriod.start, color: '#0b2b35' },
+              { label: isManager ? 'Employees Reported' : 'Pay Period', value: isManager ? filteredRows.length : `${fmtDateShort(selectedPeriod.start)} – ${fmtDateShort(selectedPeriod.end)}`, color: '#0b2b35' },
             ].map(s => (
               <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
                 <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{s.label}</p>
@@ -389,7 +398,7 @@ export default function ReportsClient({
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-5 py-4 border-b border-[#d4eef2] flex items-center justify-between">
               <div>
-                <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}</h2>
+                <h2 className="text-[14px] font-bold text-[#0b2b35]">Pay Period: {formatPeriodLabel(selectedPeriod)}<PeriodDates p={selectedPeriod} /></h2>
                 <p className="text-[11px] text-gray-400 mt-0.5">All balances in hours · PTO carryover cap: 400 hrs</p>
               </div>
               {typeFilter !== 'All' && <span className="text-[11px] bg-[#e0f5f8] text-[#028a9e] font-semibold px-2.5 py-1 rounded-full no-print">{typeFilter} only</span>}
