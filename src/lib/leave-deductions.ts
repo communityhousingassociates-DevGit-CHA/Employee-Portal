@@ -16,7 +16,7 @@ export async function loadProjectionContext(admin: SupabaseClient, employeeId: s
   const [{ data: emp, error: empError }, { data: settings }, { data: reserved, error: resError }] = await Promise.all([
     admin.from('employees').select('hire_date, pto_uncapped').eq('id', employeeId).single(),
     admin.from('accrual_settings').select('enabled').maybeSingle(),
-    admin.from('leave_requests').select('id, leave_type, start_date, hours').eq('employee_id', employeeId).eq('status', 'approved').is('balance_deducted_at', null),
+    admin.from('leave_requests').select('id, leave_type, start_date, end_date, hours').eq('employee_id', employeeId).eq('status', 'approved').is('balance_deducted_at', null),
   ])
   if (empError) throw new Error(empError.message)
   if (resError) throw new Error(resError.message)
@@ -26,7 +26,7 @@ export async function loadProjectionContext(admin: SupabaseClient, employeeId: s
     accrualsOn: !!settings?.enabled,
     reserved: (reserved ?? [])
       .filter(r => balanceTypeFor(r.leave_type as LeaveType) !== null)
-      .map(r => ({ id: r.id as string, leave_type: r.leave_type as LeaveType, start_date: r.start_date as string, hours: Number(r.hours) })) as ReservedLeave[],
+      .map(r => ({ id: r.id as string, leave_type: r.leave_type as LeaveType, start_date: r.start_date as string, end_date: r.end_date as string, hours: Number(r.hours) })) as ReservedLeave[],
   }
 }
 

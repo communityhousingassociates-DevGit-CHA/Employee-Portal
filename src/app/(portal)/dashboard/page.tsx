@@ -9,7 +9,7 @@ import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetRemind
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
-import { fmtDateShort as fmtDate } from '@/lib/format-date'
+import { fmtDateShort as fmtDate, fmtDaySet } from '@/lib/format-date'
 import { getBaltimoreWeather } from '@/lib/weather'
 import { fmtHrs } from '@/lib/format-hours'
 
@@ -206,7 +206,7 @@ export default async function DashboardPage() {
               <ul className="mt-3 space-y-2">
                 {outlook.reservedDetail.map(r => (
                   <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-[12px] bg-[#f8fcfd] rounded-lg px-3 py-2">
-                    <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Vacation' : r.leave_type} · {r.hours} hrs · starts {fmtDate(r.start_date)}</span>
+                    <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Vacation' : r.leave_type} · {r.hours} hrs · {r.days && r.days.length > 0 ? fmtDaySet(r.days.map((d: { date: string }) => d.date), true) : `starts ${fmtDate(r.start_date)}`}</span>
                     <span className={r.covered ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>
                       {r.covered ? '✓' : '⚠'} Projected {fmtHrs(r.projectedBefore)} hrs available then{r.covered ? '' : ' — not enough'}
                     </span>
@@ -228,7 +228,7 @@ export default async function DashboardPage() {
             {recent.length === 0 && <p className="px-5 py-6 text-[13px] text-gray-400">No requests yet.</p>}
             {recent.map(r => {
               const tc = TYPE_COLOR[r.leave_type] || TYPE_COLOR.PTO
-              const dateRange = r.start_date === r.end_date ? fmtDate(r.start_date) : `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}`
+              const dateRange = r.days && r.days.length > 0 ? fmtDaySet(r.days.map((d: { date: string }) => d.date), true) : (r.start_date === r.end_date ? fmtDate(r.start_date) : `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)}`)
               return (
                 <div key={r.id} className="flex items-center gap-4 px-5 py-3.5">
                   <div className={`w-1 h-10 rounded-full flex-shrink-0 ${tc.bar}`} />
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
               <p className="text-[10px] uppercase tracking-widest text-[#02ACC0] mb-2">Upcoming Leave</p>
               <p className="text-white font-semibold text-[14px]">{nextLeave.leave_type}</p>
               <p className="text-gray-400 text-[12px] mt-0.5">
-                {fmtDate(nextLeave.start_date)}{nextLeave.start_date !== nextLeave.end_date ? ` – ${fmtDate(nextLeave.end_date)}` : ''} · {nextLeave.hours} hrs
+                {nextLeave.days && nextLeave.days.length > 0 ? fmtDaySet(nextLeave.days.map((d: { date: string }) => d.date), true) : `${fmtDate(nextLeave.start_date)}${nextLeave.start_date !== nextLeave.end_date ? ` – ${fmtDate(nextLeave.end_date)}` : ''}`} · {nextLeave.hours} hrs
               </p>
               <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />

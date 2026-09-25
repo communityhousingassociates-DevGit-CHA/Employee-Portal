@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { getLeaveEventsInRange } from '@/app/actions/calendar'
 import { buildCalendarGrid, calendarGridRange } from '@/lib/calendar-grid'
 import { holidayOn } from '@/lib/holidays'
-import { fmtDateShort } from '@/lib/format-date'
+import { fmtDaySet } from '@/lib/format-date'
 
 type LeaveEvent = {
   id: string
@@ -13,6 +13,8 @@ type LeaveEvent = {
   leave_type: string
   start_date: string
   end_date: string
+  /** The days actually taken off (a request can skip days inside its span). */
+  dates: string[]
   status: string
   employee_name: string
   mine: boolean
@@ -45,12 +47,12 @@ function short(name: string, mine: boolean) {
   return parts.length > 1 ? `${parts[0][0]}. ${parts[parts.length - 1]}` : name
 }
 
-function fmtRange(start: string, end: string) {
-  return start === end ? fmtDateShort(start) : `${fmtDateShort(start)}–${fmtDateShort(end)}`
+function fmtRange(dates: string[]) {
+  return fmtDaySet(dates, true)
 }
 
 function eventsForDay(events: LeaveEvent[], iso: string) {
-  return events.filter(e => e.start_date <= iso && e.end_date >= iso)
+  return events.filter(e => e.dates.includes(iso))
 }
 
 export default function CalendarClient({
@@ -184,7 +186,7 @@ export default function CalendarClient({
                       </div>
                       <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full capitalize ${STATUS_STYLE[item.status]}`}>{item.status}</span>
                     </div>
-                    <p className="text-[11px] text-gray-400 ml-3.5">{item.leave_type} · {fmtRange(item.start_date, item.end_date)}</p>
+                    <p className="text-[11px] text-gray-400 ml-3.5">{item.leave_type} · {fmtRange(item.dates)}</p>
                   </div>
                 )
               })}
@@ -199,7 +201,7 @@ export default function CalendarClient({
               <div className="space-y-2">
                 {myUpcoming.map(item => (
                   <div key={item.id} className="flex items-center justify-between">
-                    <span className="text-[12px] text-white">{item.leave_type} ({fmtRange(item.start_date, item.end_date)})</span>
+                    <span className="text-[12px] text-white">{item.leave_type} ({fmtRange(item.dates)})</span>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${item.status === 'approved' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>{item.status}</span>
                   </div>
                 ))}

@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
+import { loadRequestDays } from '@/lib/leave-timesheet'
 import { canViewSalaries, canViewTimesheetReports } from '@/lib/constants/salary-access'
 import type { Role } from '@/types'
 
@@ -42,6 +43,9 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   // employee set as everything else here — never fetched beyond that.
   const salaryByEmployee = new Map((salaries ?? []).map(s => [s.employee_id, Number(s.annual_salary)]))
 
+  // "Used" counts only the hours on days inside this period — a request can span pay periods.
+  const daysByRequest = await loadRequestDays(admin, leaveRequests ?? [])
+  const hoursInPeriod = (r: { id: string }) => (daysByRequest.get(r.id) ?? []).filter(d => d.date >= periodStart && d.date <= periodEnd).reduce((sum, d) => sum + d.hours, 0)
   const balanceByEmployee = new Map((balances ?? []).map(b => [b.employee_id, b]))
   const leaveByEmployee = new Map<string, typeof leaveRequests>()
   for (const r of leaveRequests ?? []) {
@@ -60,7 +64,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   const leaveRows = targetEmployees.map(emp => {
     const bal = balanceByEmployee.get(emp.id)
     const requests = leaveByEmployee.get(emp.id) ?? []
-    const sumFor = (type: string) => requests.filter(r => r.leave_type === type).reduce((s, r) => s + Number(r.hours), 0)
+    const sumFor = (type: string) => requests.filter(r => r.leave_type === type).reduce((s, r) => s + hoursInPeriod(r), 0)
     return {
       id: emp.id,
       name: emp.name,

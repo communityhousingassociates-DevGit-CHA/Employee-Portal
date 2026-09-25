@@ -247,26 +247,31 @@ export async function getLeaveHistory(employeeId?: string) {
   })
 }
 
-export async function getTeamConflicts(startDate: string, endDate: string) {
+/** Teammates with pending/approved leave on any of the given days (only the days that actually overlap). */
+export async function getTeamConflicts(dates: string[]) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
+  if (dates.length === 0) return []
+  const wanted = new Set(dates)
+  const sorted = [...wanted].sort()
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
-    .select('start_date, end_date, employee:employees!leave_requests_employee_id_fkey(name)')
+    .select('id, start_date, end_date, hours, employee:employees!leave_requests_employee_id_fkey(name)')
     .in('status', ['pending', 'approved'])
-    .lte('start_date', endDate)
-    .gte('end_date', startDate)
+    .lte('start_date', sorted[sorted.length - 1])
+    .gte('end_date', sorted[0])
     .neq('employee_id', employee.id)
   if (error) throw new Error(error.message)
-  return (data ?? []).map(r => {
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
+  const out: { start_date: string; end_date: string; employee_name?: string; dates: string[] }[] = []
+  for (const r of data ?? []) {
+    const overlap = (daysByRequest.get(r.id) ?? []).map(d => d.date).filter(d => wanted.has(d))
+    if (overlap.length === 0) continue
     const emp = r.employee as unknown as { name: string } | { name: string }[]
-    return {
-      start_date: r.start_date,
-      end_date: r.end_date,
-      employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name,
-    }
-  })
+    out.push({ start_date: r.start_date, end_date: r.end_date, employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name, dates: overlap })
+  }
+  return out
 }
 
 export async function getMyBalance() {
@@ -289,7 +294,8 @@ export async function getMyRecentRequests(limit = 5) {
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(error.message)
-  return data ?? []
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
+  return (data ?? []).map(r => ({ ...r, days: daysByRequest.get(r.id) ?? [] }))
 }
 
 export async function getNextApprovedLeave() {
@@ -307,7 +313,8 @@ export async function getNextApprovedLeave() {
     .limit(1)
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return data
+  if (!data) return data
+  return { ...data, days: (await loadRequestDays(admin, [data])).get(data.id) ?? [] }
 }
 
 export async function getPendingLeaveApprovals() {
@@ -548,12 +555,13 @@ export async function getMyLeaveOutlook() {
   const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
   const current = { pto: Number(balance?.pto_hours ?? 0), sick: Number(balance?.sick_hours ?? 0), vacation: Number(balance?.personal_hours ?? 0) }
 
+  const reservedDays = await loadRequestDays(admin, ctx.reserved.map(r => ({ id: r.id, start_date: r.start_date, end_date: r.end_date ?? r.start_date, hours: r.hours })))
   const reservedDetail = [...ctx.reserved]
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
     .map(r => {
       const type = balanceTypeFor(r.leave_type)!
       const proj = projectedAvailable({ type, onDate: r.start_date, current: current[type], reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
-      return { ...r, projectedBefore: proj.projected, covered: proj.projected >= r.hours }
+      return { ...r, projectedBefore: proj.projected, covered: proj.projected >= r.hours, days: reservedDays.get(r.id) ?? [] as LeaveDay[] }
     })
   return { hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, reserved: ctx.reserved, reservedDetail }
 }

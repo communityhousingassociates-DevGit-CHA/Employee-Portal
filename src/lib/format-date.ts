@@ -42,3 +42,25 @@ export function fmtDateTime(value: string | Date): string {
 export function fmtDateRange(start: string | Date, end: string | Date): string {
   return `${fmtDate(start)} – ${fmtDate(end)}`
 }
+
+/**
+ * A set of leave days as compact text: business days that follow each other (Friday → Monday counts) collapse into a
+ * range, gaps stay separate — "11-16 – 11-20", or "11-16, 11-18 – 11-19". Pass `short` to drop the year.
+ */
+export function fmtDaySet(dates: string[], short = false): string {
+  const f = short ? fmtDateShort : fmtDate
+  const sorted = [...new Set(dates)].sort()
+  if (sorted.length === 0) return ''
+  const nextBusinessDay = (iso: string) => {
+    const d = toLocalDate(iso)
+    do { d.setDate(d.getDate() + 1) } while (d.getDay() === 0 || d.getDay() === 6)
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  const runs: string[][] = []
+  for (const date of sorted) {
+    const run = runs[runs.length - 1]
+    if (run && nextBusinessDay(run[run.length - 1]) === date) run.push(date)
+    else runs.push([date])
+  }
+  return runs.map(r => (r.length === 1 ? f(r[0]) : `${f(r[0])} – ${f(r[r.length - 1])}`)).join(', ')
+}

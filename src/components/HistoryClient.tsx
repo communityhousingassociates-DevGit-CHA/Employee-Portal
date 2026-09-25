@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
-import { fmtDate, fmtDateRange } from '@/lib/format-date'
+import { fmtDate, fmtDateRange, fmtDaySet } from '@/lib/format-date'
 import LeaveDaysList from '@/components/LeaveDaysList'
 import { todayET } from '@/lib/pay-periods'
 import type { LeaveRequest } from '@/types'
@@ -26,7 +26,8 @@ const STATUS_STYLE: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-500',
 }
 
-function fmtRange(start: string, end: string) {
+function fmtRange(start: string, end: string, days?: { date: string }[]) {
+  if (days && days.length > 0) return fmtDaySet(days.map(d => d.date))
   return start === end ? fmtDate(start) : fmtDateRange(start, end)
 }
 
@@ -53,7 +54,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
   async function cancel(e: React.MouseEvent) {
     e.stopPropagation()
     const taken = r.status === 'approved' && !!r.balance_deducted_at
-    if (!window.confirm(`Cancel this ${r.leave_type} request for ${fmtRange(r.start_date, r.end_date)}?${taken ? ` The ${r.hours} hrs will go back to your balance and come off your timesheet.` : ''}`)) return
+    if (!window.confirm(`Cancel this ${r.leave_type} request for ${fmtRange(r.start_date, r.end_date, r.days)}?${taken ? ` The ${r.hours} hrs will go back to your balance and come off your timesheet.` : ''}`)) return
     setCancelling(true)
     setCancelError('')
     try {
@@ -86,7 +87,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{r.leave_type}</span>
-            <span className="text-[13px] font-semibold text-[#0b2b35]">{fmtRange(r.start_date, r.end_date)}</span>
+            <span className="text-[13px] font-semibold text-[#0b2b35]">{fmtRange(r.start_date, r.end_date, r.days)}</span>
           </div>
           <p className="text-[11px] text-gray-400">
             {r.hours} hrs{multiDay ? ` · ${r.days!.length} days` : ''} · Submitted {daysAgo(r.created_at)}

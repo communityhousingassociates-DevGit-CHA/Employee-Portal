@@ -16,7 +16,7 @@ export function balanceTypeFor(leaveType: LeaveType): BalanceType | null {
   return null // Bereavement, Jury Duty draw from no balance
 }
 
-export type ReservedLeave = { id: string; leave_type: LeaveType; start_date: string; hours: number }
+export type ReservedLeave = { id: string; leave_type: LeaveType; start_date: string; end_date?: string; hours: number }
 
 export type ProjectionInput = {
   type: BalanceType

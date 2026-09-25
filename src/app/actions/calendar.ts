@@ -2,6 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
+import { loadRequestDays } from '@/lib/leave-timesheet'
 
 export async function getLeaveEventsInRange(startIso: string, endIso: string) {
   const employee = await getCurrentEmployee()
@@ -9,15 +10,18 @@ export async function getLeaveEventsInRange(startIso: string, endIso: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
-    .select('id, employee_id, leave_type, start_date, end_date, status, employee:employees!leave_requests_employee_id_fkey(name)')
+    .select('id, employee_id, leave_type, start_date, end_date, hours, status, employee:employees!leave_requests_employee_id_fkey(name)')
     .in('status', ['approved', 'pending'])
     .lte('start_date', endIso)
     .gte('end_date', startIso)
   if (error) throw new Error(error.message)
+  // The calendar shows only the days actually requested off, not the whole span of the request.
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
   return (data ?? []).map(r => {
     const emp = r.employee as unknown as { name: string } | { name: string }[]
     const name = Array.isArray(emp) ? emp[0]?.name : emp?.name
     return {
+      dates: (daysByRequest.get(r.id) ?? []).map(d => d.date),
       id: r.id,
       employee_id: r.employee_id,
       leave_type: r.leave_type,
@@ -37,16 +41,18 @@ export async function getUpcomingLeave(limit = 10) {
   const today = new Date().toISOString().slice(0, 10)
   const { data, error } = await admin
     .from('leave_requests')
-    .select('id, employee_id, leave_type, start_date, end_date, status, employee:employees!leave_requests_employee_id_fkey(name)')
+    .select('id, employee_id, leave_type, start_date, end_date, hours, status, employee:employees!leave_requests_employee_id_fkey(name)')
     .in('status', ['approved', 'pending'])
     .gte('end_date', today)
     .order('start_date')
     .limit(limit)
   if (error) throw new Error(error.message)
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
   return (data ?? []).map(r => {
     const emp = r.employee as unknown as { name: string } | { name: string }[]
     const name = Array.isArray(emp) ? emp[0]?.name : emp?.name
     return {
+      dates: (daysByRequest.get(r.id) ?? []).map(d => d.date),
       id: r.id,
       leave_type: r.leave_type,
       start_date: r.start_date,

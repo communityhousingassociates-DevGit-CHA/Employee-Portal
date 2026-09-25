@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
-import { fmtDate } from '@/lib/format-date'
+import { fmtDate, fmtDaySet } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
 import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
@@ -12,7 +12,7 @@ import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, t
 import { fmtHrs, halfHour } from '@/lib/format-hours'
 
 type DayRow = { id: string; date: string; hours: string }
-type Conflict = { start_date: string; end_date: string; employee_name?: string }
+type Conflict = { start_date: string; end_date: string; employee_name?: string; dates: string[] }
 
 const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
   { key: 'PTO', label: 'PTO', icon: '🌴', desc: 'Personal time off', balanceKey: 'pto_hours' },
@@ -67,11 +67,12 @@ export default function RequestClient({
   const dayKey = days.map(d => `${d.date}:${d.hours}`).join('|')
 
   useEffect(() => {
-    if (!start || !end) { setConflicts([]); return }
+    if (dates.length === 0) { setConflicts([]); return }
     let cancelled = false
-    getTeamConflicts(start, end).then(c => { if (!cancelled) setConflicts(c) }).catch(() => {})
+    getTeamConflicts(dates).then(c => { if (!cancelled) setConflicts(c) }).catch(() => {})
     return () => { cancelled = true }
-  }, [start, end])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dates.join('|')])
 
   useEffect(() => {
     const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
@@ -458,12 +459,13 @@ export default function RequestClient({
               </div>
               <div className="p-4">
                 {conflicts.length === 0 ? (
-                  <p className="text-[12px] text-gray-400">No one else has approved or pending leave during this period.</p>
+                  <p className="text-[12px] text-gray-400">No one else has approved or pending leave on the days you picked.</p>
                 ) : (
                   <div className="space-y-2">
                     {conflicts.map((c, i) => (
                       <div key={i} className="flex items-center gap-2 text-[12px]">
                         <span className="text-[#0b2b35] font-medium">{c.employee_name}</span>
+                        <span className="text-gray-400">{fmtDaySet(c.dates, true)}</span>
                       </div>
                     ))}
                   </div>
