@@ -8,11 +8,6 @@ export const ACCRUAL_TIERS = [
   { maxMonths: Infinity, label: '36+ mo', ptoRate: 6.00 },
 ] as const
 
-// Accruals are OFF until this is set. Set it to the start date of the first pay period that should accrue in the portal
-// — i.e. the first period AFTER the "as of" date of the balances loaded from CHA — so the daily job never adds hours on
-// top of numbers that already include them. (The job also needs CRON_SECRET in Vercel.) Idempotent per period via accrual_log.
-export const ACCRUAL_FIRST_PERIOD_START: string | null = null
-
 export const SICK_RATE_PER_PERIOD = 3.69 // fixed, no tiers
 export const PTO_CARRYOVER_CAP = 400 // hours; sick is uncapped
 
