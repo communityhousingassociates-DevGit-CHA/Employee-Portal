@@ -14,7 +14,7 @@ import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
 
-type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null }
+type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null; reserve_only?: boolean; projected_after?: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
 
 // Categories with underscores (rental_car, cash_advance, conference_fees) render wrong
@@ -127,8 +127,13 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
             <p className="text-[12px] text-gray-400 mt-0.5">{item.hours} hours requested</p>
           </div>
           <div className="bg-[#f8fcfd] rounded-xl p-4">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Balance After</p>
-            {item.balance_after === null ? (
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{item.reserve_only ? 'On Approval' : 'Balance After'}</p>
+            {item.reserve_only ? (
+              <>
+                <p className="text-[14px] font-semibold text-[#028a9e]">Reserved</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Balance stays {item.balance_current !== null ? fmtHrs(item.balance_current) : '—'} hrs for now. Projected after this leave: {item.projected_after != null ? fmtHrs(item.projected_after) : '—'} hrs. It comes off automatically once it is within two pay periods of the start date.</p>
+              </>
+            ) : item.balance_after === null ? (
               <p className="text-[14px] font-semibold text-[#0b2b35]">No change</p>
             ) : (
               <>

@@ -298,11 +298,23 @@ export async function getPendingLeaveApprovals() {
     const col = balanceColumnFor(r.leave_type as LeaveType)
     const current = col && balance ? Number(balance[col]) : null
     const emp = r.employee as unknown as { name: string } | { name: string }[]
+    // Leave beyond the two-pay-period window is only reserved on approval, so "balance after" would be misleading:
+    // show what the employee is projected to have on the start date instead.
+    const balanceType = balanceTypeFor(r.leave_type as LeaveType)
+    const reserveOnly = !!balanceType && current !== null && r.start_date > deductThroughDate()
+    let projectedAfter: number | null = null
+    if (reserveOnly && balanceType && current !== null) {
+      const ctx = await loadProjectionContext(admin, r.employee_id)
+      const proj = projectedAvailable({ type: balanceType, onDate: r.start_date, current, reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      projectedAfter = proj.projected - Number(r.hours)
+    }
     results.push({
       ...r,
       employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name,
       balance_current: current,
       balance_after: current !== null ? current - Number(r.hours) : null,
+      reserve_only: reserveOnly,
+      projected_after: projectedAfter,
     })
   }
   return results
