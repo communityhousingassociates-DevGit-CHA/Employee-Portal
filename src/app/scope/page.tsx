@@ -545,7 +545,7 @@ export default function ScopePage() {
 
         {/* Footer */}
         <div className="text-center text-[12px] text-gray-400 pb-4 space-y-1">
-          <p>Questions? Contact <span className="text-[#02ACC0]">advisor@globalist.pro</span></p>
+          <p>Questions? Contact <span className="text-[#02ACC0]">support@globalist.pro</span></p>
           <p>portal.communityhousingassociates.org · Powered by Globalist Pro</p>
           <div className="pt-2">
             <Link href="/login" className="text-[#02ACC0] hover:text-[#028a9e] font-medium underline underline-offset-2 transition-colors">

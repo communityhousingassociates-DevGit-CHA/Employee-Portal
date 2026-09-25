@@ -18,7 +18,7 @@ const CATEGORY_LABELS: Record<IssueCategory, string> = {
 }
 
 const REPORT_TO = 'communityhousingassociates@gmail.com'
-const REPORT_CC = 'advisor@globalist.pro'
+const REPORT_CC = 'support@globalist.pro'
 
 export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string }) {
   const employee = await getCurrentEmployee()

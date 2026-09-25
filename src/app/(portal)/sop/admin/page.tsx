@@ -224,7 +224,7 @@ export default async function AdminSopPage() {
           </Section>
 
           <Section id="issues" title="8. Error, Discrepancy & Issue Reporting">
-            <p>The portal has an in-app Report an Issue form (sidebar → Report an Issue) that emails communityhousingassociates@gmail.com, cc advisor@globalist.pro, with reply-to set to the reporting employee. A screenshot or file can be attached to the report. Employees should use it as the default reporting channel. The category-specific contacts below still apply for anything that needs a named person directly, or if the form itself is unavailable:</p>
+            <p>The portal has an in-app Report an Issue form (sidebar → Report an Issue) that emails communityhousingassociates@gmail.com, cc support@globalist.pro, with reply-to set to the reporting employee. A screenshot or file can be attached to the report. Employees should use it as the default reporting channel. The category-specific contacts below still apply for anything that needs a named person directly, or if the form itself is unavailable:</p>
             <Table
               head={['Issue type', 'Report to', 'Examples']}
               rows={[
