@@ -223,22 +223,35 @@ export default function RequestClient({
             <p className="text-[11px] text-gray-500 mb-3">
               <strong>Each day is its own request</strong>, so every day has its own hours: 8 is a full day, 4 a half day. Need a full week, or a half day one day and a half day the next? Add a row for each day. Approvers approve or deny — and you can cancel — one day at a time.
             </p>
-            <div className="space-y-2 mb-3">
-              <div className="grid grid-cols-[9.5rem_5rem_1fr] gap-3 text-[10px] uppercase tracking-wide font-semibold text-gray-400 px-0.5">
+            <div className="space-y-3 mb-4">
+              <div className="grid grid-cols-[11rem_7rem_1fr] gap-x-8 text-[10px] uppercase tracking-wide font-semibold text-gray-400 px-0.5">
                 <span>Date</span><span>Hours</span><span />
               </div>
               {days.map(d => {
                 const notWorkday = !!d.date && !isWorkday(d.date)
+                const chip = (label: string, hrs: string) => (
+                  <button type="button" onClick={() => updateDay(d.id, { hours: hrs })}
+                    className={`text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-colors ${d.hours === hrs ? 'bg-[#e0f5f8] border-[#02ACC0] text-[#028a9e]' : 'border-[#d4eef2] text-gray-500 hover:bg-[#f0f7f8]'}`}>
+                    {label}
+                  </button>
+                )
                 return (
                   <div key={d.id}>
-                    <div className="grid grid-cols-[9.5rem_5rem_1fr] gap-3 items-center">
+                    <div className="grid grid-cols-[11rem_7rem_1fr] gap-x-8 items-center">
                       <input type="date" value={d.date} min={earliest} max={latest} onChange={e => updateDay(d.id, { date: e.target.value })}
-                        className="w-[9.5rem] px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
-                      <input type="number" min="0.5" max="8" step="0.5" value={d.hours} onChange={e => updateDay(d.id, { hours: e.target.value })}
-                        className="w-[5rem] px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
-                      {days.length > 1 && (
-                        <button type="button" onClick={() => removeDay(d.id)} className="justify-self-start text-[11px] text-gray-400 hover:text-red-500">Remove</button>
-                      )}
+                        className="w-full px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
+                      <div className="relative">
+                        <input type="number" min="0.5" max="8" step="0.5" value={d.hours} onChange={e => updateDay(d.id, { hours: e.target.value })}
+                          className="w-full pl-3 pr-10 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0]" />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none">hrs</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {chip('Full day · 8', '8')}
+                        {chip('Half day · 4', '4')}
+                        {days.length > 1 && (
+                          <button type="button" onClick={() => removeDay(d.id)} className="ml-auto text-[11px] text-gray-400 hover:text-red-500">Remove</button>
+                        )}
+                      </div>
                     </div>
                     {notWorkday && <p className="text-[11px] text-red-500 mt-1">That date is a weekend or holiday — leave can only be taken on workdays.</p>}
                     {Number(d.hours) > 8 && <p className="text-[11px] text-red-500 mt-1">A day can’t exceed 8 hours.</p>}
