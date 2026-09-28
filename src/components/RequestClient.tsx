@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDaySet } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
+import type { PolicySettings } from '@/lib/policy'
 import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
@@ -68,7 +69,7 @@ export default function RequestClient({
   balance: LeaveBalance | null
   yearEnd?: YearEndChoice | null
   closedRanges: ClosedRange[]
-  outlook: { hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
+  outlook: { policy?: PolicySettings; hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
   const [leaveType, setLeaveType] = useState<LeaveType>('PTO')
   // Days are picked on a timesheet-style grid: date -> hours. One request covers all of them; each day keeps its own hours.
@@ -150,7 +151,7 @@ export default function RequestClient({
   const startsLater = !!start && start > deductThroughDate()
   const balType = balanceTypeFor(leaveType)
   const projection = startsLater && balType && selectedBalance !== null
-    ? projectedAvailable({ type: balType, onDate: start, current: selectedBalance, reserved: outlook.reserved, hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn })
+    ? projectedAvailable({ type: balType, onDate: start, current: selectedBalance, reserved: outlook.reserved, hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn, policy: outlook.policy })
     : null
   const availableForRequest = projection ? projection.projected : selectedBalance
   const balAfter = availableForRequest !== null ? availableForRequest - hoursNum : null
@@ -260,7 +261,12 @@ export default function RequestClient({
                 const after = isSel && bal !== null && hoursNum > 0 ? bal - hoursNum : null
                 const accent = TYPE_ACCENT[t.key]
                 return (
-                  <button key={t.key} onClick={() => { setLeaveType(t.key) }}
+                  <button key={t.key} onClick={() => {
+                    setLeaveType(t.key)
+                    // Voting is 4 hrs (6 max): a selection made under another type (8 hrs) shouldn't silently carry over.
+                    if (t.key === 'Voting') setPicked(p => Object.fromEntries(Object.entries(p).map(([d, h]) => [d, Number(h) > VOTING_MAX_HOURS || t.key === 'Voting' && Number(h) === 8 ? String(VOTING_STANDARD_HOURS) : h])))
+                    setSigned(false)
+                  }}
                     className={`relative text-left p-3 pt-4 rounded-xl border-2 overflow-hidden transition-all ${isSel ? `${accent.border} ${accent.bg}` : 'border-[#e8f4f7] hover:border-[#d4eef2]'}`}>
                     <div className={`absolute top-0 left-0 right-0 h-1 ${accent.bar}`} />
                     <div className="text-[18px] mb-1">{t.icon}</div>

@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { calcTier } from '@/lib/constants/accrual'
+import { loadPolicy } from '@/lib/policy-server'
 import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
 import type { Role } from '@/types'
 
@@ -216,6 +217,7 @@ async function getSignInMap(): Promise<Map<string, boolean>> {
 export async function getEmployees() {
   const actor = await requireRole(['admin'])
   const admin = createAdminClient()
+  const policy = await loadPolicy(admin)
   let query = admin
     .from('employees')
     .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, is_exempt, is_director, year_end_holiday, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
@@ -226,7 +228,7 @@ export async function getEmployees() {
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()
   return (data ?? []).map(e => {
-    const { tier, ptoRate } = calcTier(e.hire_date)
+    const { tier, ptoRate } = calcTier(e.hire_date, Date.now(), policy)
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
     // Active = set a password through the portal (flag), or has signed in with one before (login_count covers accounts created earlier).
     const invite_status: InviteStatus = !e.user_id ? 'not_invited' : (signedIn.get(e.user_id) || (e.login_count ?? 0) > 0) ? 'active' : 'invited'
@@ -362,13 +364,14 @@ export async function bulkEditEmployees(ids: string[], field: BulkEditableField,
 export async function getEmployeeSummary(id: string) {
   await requireRole(MANAGER_ROLES)
   const admin = createAdminClient()
+  const policy = await loadPolicy(admin)
   const { data: e, error } = await admin
     .from('employees')
     .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, pto_uncapped, is_exempt, is_director, year_end_holiday, leave_balances(pto_hours, sick_hours, personal_hours, flex_hours)')
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
-  const { tier, ptoRate } = calcTier(e.hire_date)
+  const { tier, ptoRate } = calcTier(e.hire_date, Date.now(), policy)
   const bal = Array.isArray(e.leave_balances) ? e.leave_balances[0] : e.leave_balances
   return {
     ...e,
@@ -385,6 +388,7 @@ export async function getEmployeeSummary(id: string) {
 export async function getEmployeeDirectory() {
   await requireRole(['ceo', 'admin'])
   const admin = createAdminClient()
+  const policy = await loadPolicy(admin)
   const { data, error } = await admin
     .from('employees')
     .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
@@ -392,7 +396,7 @@ export async function getEmployeeDirectory() {
     .order('name')
   if (error) throw new Error(error.message)
   return (data ?? []).map(e => {
-    const { tier, ptoRate } = calcTier(e.hire_date)
+    const { tier, ptoRate } = calcTier(e.hire_date, Date.now(), policy)
     const bal = Array.isArray(e.leave_balances) ? e.leave_balances[0] : e.leave_balances
     return {
       ...e,

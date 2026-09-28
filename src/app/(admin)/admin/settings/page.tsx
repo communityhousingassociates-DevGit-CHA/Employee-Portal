@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { getMileageRates } from '@/app/actions/mileage-rates'
+import { getPolicySettings } from '@/app/actions/portal-settings'
 import PortalSettingsClient from '@/components/PortalSettingsClient'
 
 export const dynamic = 'force-dynamic'
@@ -11,8 +12,8 @@ export default async function AdminSettingsPage() {
   const employee = await getCurrentEmployee()
   if (!employee || !ALLOWED.includes(employee.role)) redirect('/dashboard')
 
-  const mileageRates = await getMileageRates()
+  const [mileageRates, policy] = await Promise.all([getMileageRates(), getPolicySettings()])
   const canEditMileage = employee.role === 'admin' || employee.role === 'accounting_manager'
 
-  return <PortalSettingsClient mileageRates={mileageRates} canEditMileage={canEditMileage} />
+  return <PortalSettingsClient mileageRates={mileageRates} canEditMileage={canEditMileage} initialPolicy={policy} />
 }

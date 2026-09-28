@@ -7,6 +7,7 @@ import { balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import { fmtDate } from '@/lib/format-date'
+import { loadPolicy } from '@/lib/policy-server'
 import type { LeaveType } from '@/types'
 
 const COLUMN = { pto: 'pto_hours', sick: 'sick_hours', vacation: 'personal_hours', flex: 'flex_hours' } as const
@@ -21,6 +22,7 @@ export async function loadProjectionContext(admin: SupabaseClient, employeeId: s
   if (empError) throw new Error(empError.message)
   if (resError) throw new Error(resError.message)
   return {
+    policy: await loadPolicy(admin),
     hireDate: emp.hire_date as string,
     ptoUncapped: !!emp.pto_uncapped,
     accrualsOn: !!settings?.enabled,

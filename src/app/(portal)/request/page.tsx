@@ -20,7 +20,7 @@ export default async function RequestPage() {
       balance={balance}
       yearEnd={employee.year_end_holiday}
       closedRanges={closedRanges}
-      outlook={{ hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn, reserved: outlook.reserved }}
+      outlook={{ policy: outlook.policy, hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn, reserved: outlook.reserved }}
     />
   )
 }

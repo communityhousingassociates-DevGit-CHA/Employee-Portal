@@ -9,6 +9,7 @@ import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { firstEligibleDate } from '@/lib/constants/accrual'
+import { loadPolicy } from '@/lib/policy-server'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
@@ -80,7 +81,7 @@ async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, emplo
   const closedRanges = await loadClosedRanges(admin)
   const earliest = earliestLeaveDate()
   const { data: emp } = await admin.from('employees').select('hire_date').eq('id', employeeId).single()
-  const eligibleFrom = emp?.hire_date ? firstEligibleDate(emp.hire_date, leaveType) : null
+  const eligibleFrom = emp?.hire_date ? firstEligibleDate(emp.hire_date, leaveType, await loadPolicy(admin)) : null
   for (const day of days) {
     const label = fmtDate(day.date)
     if (eligibleFrom && day.date < eligibleFrom) {
@@ -372,7 +373,7 @@ export async function getPendingLeaveApprovals() {
     let projectedAfter: number | null = null
     if (reserveOnly && balanceType && current !== null) {
       const ctx = await loadProjectionContext(admin, r.employee_id)
-      const proj = projectedAvailable({ type: balanceType, onDate: r.start_date, current, reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      const proj = projectedAvailable({ type: balanceType, onDate: r.start_date, current, reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
       projectedAfter = proj.projected - Number(r.hours)
     }
     results.push({
@@ -439,7 +440,7 @@ export async function approveLeaveRequest(id: string) {
       }
     } else {
       const ctx = await loadProjectionContext(admin, request.employee_id)
-      const proj = projectedAvailable({ type: balanceType, onDate: request.start_date, current, reserved: ctx.reserved.filter(r => r.id !== id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      const proj = projectedAvailable({ type: balanceType, onDate: request.start_date, current, reserved: ctx.reserved.filter(r => r.id !== id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
       if (proj.projected < Number(request.hours)) {
         throw new Error(
           `Projected balance on ${fmtDate(request.start_date)} is ${proj.projected} hrs (${current} now + ${proj.accrued} accruing − ${proj.reservedBefore} already reserved)` +
@@ -589,8 +590,8 @@ export async function getMyLeaveOutlook() {
     .sort((a, b) => a.start_date.localeCompare(b.start_date))
     .map(r => {
       const type = balanceTypeFor(r.leave_type)!
-      const proj = projectedAvailable({ type, onDate: r.start_date, current: current[type], reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn })
+      const proj = projectedAvailable({ type, onDate: r.start_date, current: current[type], reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
       return { ...r, projectedBefore: proj.projected, covered: proj.projected >= r.hours, days: reservedDays.get(r.id) ?? [] as LeaveDay[] }
     })
-  return { hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, reserved: ctx.reserved, reservedDetail }
+  return { policy: ctx.policy, hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, reserved: ctx.reserved, reservedDetail }
 }

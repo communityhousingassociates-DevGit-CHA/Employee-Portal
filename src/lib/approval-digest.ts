@@ -3,7 +3,8 @@
 // 'use server' file — it runs from the cron only.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { APPROVER_ROLES, REMINDER_AFTER_DAYS, canSelfApprove } from '@/lib/constants/approvals'
+import { loadPolicy } from '@/lib/policy-server'
+import { APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getApprovers, notify } from '@/lib/notifications'
 import { todayET } from '@/lib/pay-periods'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -20,6 +21,7 @@ export async function sendApprovalDigest(admin: SupabaseClient): Promise<{ sent:
   const dow = new Date(`${todayET()}T12:00:00Z`).getUTCDay()
   if (dow === 0 || dow === 6) return { sent: 0, skipped: 'weekend' }
 
+  const REMINDER_AFTER_DAYS = (await loadPolicy(admin)).approval_reminder_days
   const now = Date.now()
   const cutoff = new Date(now - REMINDER_AFTER_DAYS * 86400000).toISOString()
 

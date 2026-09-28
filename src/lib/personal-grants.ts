@@ -4,8 +4,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { todayET } from '@/lib/pay-periods'
-
-export const PERSONAL_DAYS_ANNUAL_HOURS = 24
+import { loadPolicy } from '@/lib/policy-server'
 
 // Same guard as carryover: the first grant is January 1, 2027 — 2026 balances were loaded from CHA, already including this year's days.
 const FIRST_GRANT_YEAR = 2027
@@ -29,13 +28,14 @@ export async function runPersonalDaysGrant(admin: SupabaseClient, now: Date = ne
   const { data: employees, error: empError } = await admin.from('employees').select('id').eq('is_active', true).eq('employee_type', 'full-time')
   if (empError) return { ran: false, reason: empError.message }
 
+  const policy = await loadPolicy(admin)
   const errors: string[] = []
   let granted = 0
   for (const emp of employees ?? []) {
     const { data: bal, error: balError } = await admin.from('leave_balances').select('personal_hours').eq('employee_id', emp.id).maybeSingle()
     if (balError || !bal) { errors.push(`${emp.id}: ${balError?.message ?? 'no leave_balances row'}`); continue }
     const before = Number(bal.personal_hours)
-    const after = Math.round((before + PERSONAL_DAYS_ANNUAL_HOURS) * 100) / 100
+    const after = Math.round((before + policy.personal_hours_per_year) * 100) / 100
     const { error: updateError } = await admin.from('leave_balances').update({ personal_hours: after }).eq('employee_id', emp.id)
     if (updateError) { errors.push(`${emp.id}: ${updateError.message}`); continue }
     granted++

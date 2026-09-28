@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
+import { loadPolicy } from '@/lib/policy-server'
 import { holidayOn } from '@/lib/holidays'
 import { HOLIDAY_WORK_MULTIPLIER, holidayWorkedHours } from '@/lib/constants/holiday-work'
 import { loadRequestDays } from '@/lib/leave-timesheet'
@@ -20,6 +21,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   // The team Timesheets report is limited to the named payroll viewers; everyone else uses their own Timesheets page.
   const canViewTimesheets = canViewTimesheetReports(me)
   const admin = createAdminClient()
+  const policy = await loadPolicy(admin)
 
   const { data: employees, error: empError } = await admin
     .from('employees')
@@ -76,7 +78,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
       pto_bal: bal ? Number(bal.pto_hours) : 0,
       sick_bal: bal ? Number(bal.sick_hours) : 0,
       personal_bal: bal ? Number(bal.personal_hours) : 0,
-      accrual: calcTier(emp.hire_date).ptoRate,
+      accrual: calcTier(emp.hire_date, Date.now(), policy).ptoRate,
     }
   })
 

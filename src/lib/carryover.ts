@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { carryoverCap } from '@/lib/constants/accrual'
 import { todayET } from '@/lib/pay-periods'
+import { loadPolicy } from '@/lib/policy-server'
 
 // Never trims for a year before this — the policy takes effect at the first year-end after it was adopted, so deploying
 // mid-2026 can't touch balances loaded from CHA.
@@ -45,6 +46,7 @@ export async function runYearEndCarryover(admin: SupabaseClient, now: Date = new
   const { data: employees, error: empError } = await admin.from('employees').select('id, hire_date, pto_uncapped').eq('is_active', true)
   if (empError) return { ran: false, reason: empError.message }
 
+  const policy = await loadPolicy(admin)
   const asOf = `${year - 1}-12-31`
   const asOfMs = Date.parse(`${asOf}T12:00:00Z`)
   const batchId = crypto.randomUUID()
@@ -58,7 +60,7 @@ export async function runYearEndCarryover(admin: SupabaseClient, now: Date = new
     if (balError || !bal) { errors.push(`${emp.id}: ${balError?.message ?? 'no leave_balances row'}`); continue }
 
     const before = { pto: Number(bal.pto_hours), sick: Number(bal.sick_hours), personal: Number(bal.personal_hours) }
-    const cap = carryoverCap(emp.hire_date, asOfMs)
+    const cap = carryoverCap(emp.hire_date, asOfMs, policy)
     const after = trimToCap(before, cap)
     const lost = round2(before.pto + before.sick + before.personal - (after.pto + after.sick + after.personal))
     if (lost <= 0) continue

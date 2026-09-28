@@ -2,7 +2,8 @@
 // balances for many employees and must only run behind an authorised caller (cron secret or payroll-access user).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { calcTier, SICK_RATE_PER_PERIOD } from '@/lib/constants/accrual'
+import { calcTier } from '@/lib/constants/accrual'
+import { loadPolicy } from '@/lib/policy-server'
 import { getCurrentPeriod, getPayPeriods } from '@/lib/pay-periods'
 
 export type AccrualRunSummary = { periods: string[]; processed: number; skipped: number; errors: string[] }
@@ -13,6 +14,7 @@ export type AccrualRunSummary = { periods: string[]; processed: number; skipped:
  * double-credits or skips a period. Employees are only credited for periods that started on/after their hire date.
  */
 export async function runAccruals(admin: SupabaseClient, firstPeriodStart: string, now: Date = new Date()): Promise<AccrualRunSummary> {
+  const policy = await loadPolicy(admin)
   const current = getCurrentPeriod(undefined, now)
   const summary: AccrualRunSummary = { periods: [], processed: 0, skipped: 0, errors: [] }
   if (firstPeriodStart > current.start) return summary
@@ -34,17 +36,17 @@ export async function runAccruals(admin: SupabaseClient, firstPeriodStart: strin
       if (emp.hire_date > period.end) continue // not employed yet
       if (done.has(`${emp.id}:pto`) && done.has(`${emp.id}:sick`)) { summary.skipped++; continue }
 
-      const { ptoRate } = calcTier(emp.hire_date)
+      const { ptoRate } = calcTier(emp.hire_date, Date.now(), policy)
       const { data: balance, error: balError } = await admin.from('leave_balances').select('pto_hours, sick_hours').eq('employee_id', emp.id).maybeSingle()
       if (balError || !balance) { summary.errors.push(`${emp.id}: no leave_balances row (${balError?.message ?? 'not found'})`); continue }
 
       const round2 = (n: number) => Math.round(n * 100) / 100 // keep balances to cents — no floating-point tails
       const newPto = round2(Number(balance.pto_hours) + ptoRate) // no mid-year cap: carryover is limited once, at year-end (lib/carryover.ts)
-      const newSick = round2(Number(balance.sick_hours) + SICK_RATE_PER_PERIOD)
+      const newSick = round2(Number(balance.sick_hours) + policy.sick_rate_per_pp)
 
       const logRows = []
       if (!done.has(`${emp.id}:pto`)) logRows.push({ employee_id: emp.id, accrual_type: 'pto', hours: ptoRate, period_start: period.start })
-      if (!done.has(`${emp.id}:sick`)) logRows.push({ employee_id: emp.id, accrual_type: 'sick', hours: SICK_RATE_PER_PERIOD, period_start: period.start })
+      if (!done.has(`${emp.id}:sick`)) logRows.push({ employee_id: emp.id, accrual_type: 'sick', hours: policy.sick_rate_per_pp, period_start: period.start })
       const { error: insertError } = await admin.from('accrual_log').insert(logRows)
       if (insertError) { summary.errors.push(`${emp.id}: ${insertError.message}`); continue }
 

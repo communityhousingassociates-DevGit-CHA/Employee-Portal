@@ -3,7 +3,8 @@
 //   projected = current balance + accruals between now and then − other leave already reserved up to then.
 // Pure and client-safe (used by the request form, the dashboard, and the approval check).
 
-import { calcTier, SICK_RATE_PER_PERIOD } from '@/lib/constants/accrual'
+import { calcTier } from '@/lib/constants/accrual'
+import { DEFAULT_POLICY, type PolicySettings } from '@/lib/policy'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import type { LeaveType } from '@/types'
 
@@ -27,6 +28,7 @@ export type ProjectionInput = {
   hireDate: string
   ptoUncapped: boolean
   accrualsOn: boolean
+  policy?: PolicySettings
   now?: Date
 }
 
@@ -46,8 +48,8 @@ export function projectedAvailable(input: ProjectionInput): Projection {
 
   let accrued = 0
   if (periods > 0) {
-    if (input.type === 'pto') accrued = periods * calcTier(input.hireDate, Date.parse(`${input.onDate}T12:00:00Z`)).ptoRate
-    else if (input.type === 'sick') accrued = periods * SICK_RATE_PER_PERIOD
+    if (input.type === 'pto') accrued = periods * calcTier(input.hireDate, Date.parse(`${input.onDate}T12:00:00Z`), input.policy ?? DEFAULT_POLICY).ptoRate
+    else if (input.type === 'sick') accrued = periods * (input.policy ?? DEFAULT_POLICY).sick_rate_per_pp
     // Personal Days ("personal") doesn't accrue.
   }
 
