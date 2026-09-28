@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
-import { TRACKING_DIGEST_TO } from '@/lib/constants/approvals'
+import { TRACKING_DIGEST_TO, TRACKING_DIGEST_INCLUDE_ACTIVITY } from '@/lib/constants/approvals'
 import { logEmails } from '@/lib/notifications'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import { todayET } from '@/lib/pay-periods'
@@ -55,7 +55,8 @@ export async function sendTrackingDigest(admin: SupabaseClient, issues: string[]
   ]
   const nSubmitted = submitted.reduce((s, g) => s + g.rows.length, 0)
   const nWaiting = waiting.reduce((s, g) => s + g.rows.length, 0)
-  if (nSubmitted === 0 && nWaiting === 0 && problems.length === 0) return { sent: false, reason: 'nothing to report' }
+  const showActivity = TRACKING_DIGEST_INCLUDE_ACTIVITY && (nSubmitted > 0 || nWaiting > 0)
+  if (!showActivity && problems.length === 0) return { sent: false, reason: TRACKING_DIGEST_INCLUDE_ACTIVITY ? 'nothing to report' : 'no problems to report' }
 
   const section = (title: string, groups: { label: string; rows: Row[] }[], empty: string) => {
     const body = groups.filter(g => g.rows.length).map(g => `
@@ -66,7 +67,9 @@ export async function sendTrackingDigest(admin: SupabaseClient, issues: string[]
     return `<h3 style="font-size:14px;margin:22px 0 4px;color:#0b2b35">${title}</h3>${body || `<p style="font-size:12px;color:#9ca3af;margin:6px 0">${empty}</p>`}`
   }
   const today = fmtDate(todayET(now))
-  const subject = `${problems.length ? `⚠ ${problems.length} issue${problems.length === 1 ? '' : 's'} · ` : ''}[CHA Portal] Daily activity — ${today}: ${nSubmitted} submitted, ${nWaiting} waiting`
+  const subject = showActivity
+    ? `${problems.length ? `⚠ ${problems.length} issue${problems.length === 1 ? '' : 's'} · ` : ''}[CHA Portal] Daily activity — ${today}: ${nSubmitted} submitted, ${nWaiting} waiting`
+    : `⚠ [CHA Portal] ${problems.length} issue${problems.length === 1 ? '' : 's'} need attention — ${today}`
   const issuesHtml = problems.length
     ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;margin:14px 0 0;font-size:12px;color:#991b1b"><strong>Needs attention (${problems.length})</strong><ul style="margin:6px 0 0;padding-left:18px">${problems.slice(0, 20).map(p => `<li>${esc(p)}</li>`).join('')}</ul>${problems.length > 20 ? `<p style="margin:6px 0 0">…and ${problems.length - 20} more.</p>` : ''}</div>`
     : ''
@@ -74,10 +77,9 @@ export async function sendTrackingDigest(admin: SupabaseClient, issues: string[]
     <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:640px;margin:0 auto">
       <div style="background:#0b2b35;padding:16px 20px;border-radius:12px 12px 0 0"><span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal — daily activity</span></div>
       <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px;color:#0b2b35">
-        <p style="font-size:12px;color:#6b7280;margin:0">For your records. Submitted in the last 24 hours, and everything still waiting on approval as of ${esc(today)}. Approvals are done in the portal.</p>
+        <p style="font-size:12px;color:#6b7280;margin:0">${showActivity ? `For your records. Submitted in the last 24 hours, and everything still waiting on approval as of ${esc(today)}. Approvals are done in the portal.` : 'The portal hit a problem that may need someone to look at it.'}</p>
         ${issuesHtml}
-        ${section('Submitted in the last 24 hours', submitted, 'Nothing was submitted.')}
-        ${section('Still waiting on approval', waiting, 'Nothing is waiting.')}
+        ${showActivity ? section('Submitted in the last 24 hours', submitted, 'Nothing was submitted.') + section('Still waiting on approval', waiting, 'Nothing is waiting.') : ''}
       </div>
     </div>`
 

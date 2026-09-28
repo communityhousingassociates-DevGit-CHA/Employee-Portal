@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NotificationKind, Role } from '@/types'
-import { NOTIFICATION_TEST_MODE } from '@/lib/constants/approvals'
+import { NOTIFICATION_TEST_MODE, APPROVER_ALERT_COPY_TO } from '@/lib/constants/approvals'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
 
@@ -22,7 +22,7 @@ const ACCENT: Record<NotificationKind, string> = {
   returned: '#d97706',
 }
 
-function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string; testNote?: string }) {
+function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string; testNote?: string; copyNote?: string }) {
   const firstName = escapeHtml(recipient.name.split(' ')[0] || 'there')
   return `
     <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
@@ -30,6 +30,7 @@ function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: Notification
         <span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal</span>
       </div>
       <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px;color:#0b2b35">
+        ${n.copyNote ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#1e40af;margin:0 0 14px"><strong>COPY</strong> — ${escapeHtml(n.copyNote)}</div>` : ''}
         ${n.testNote ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin:0 0 14px"><strong>TEST MODE</strong> — ${escapeHtml(n.testNote)}</div>` : ''}
         <p style="font-size:14px;margin:0 0 12px">Hi ${firstName},</p>
         <p style="font-size:16px;font-weight:700;margin:0 0 8px;color:${ACCENT[n.kind]}">${escapeHtml(n.title)}</p>
@@ -65,6 +66,8 @@ export async function notify(
   n: { kind: NotificationKind; title: string; body: string; link: string; cta?: string },
   // Where emails actually go, when that differs from who gets the in-portal notice (test mode).
   email?: { to: Pick<Recipient, 'email' | 'name'>[]; testNote?: string },
+  // Extra addresses that get a record-keeping copy of this email (live approver alerts only — see APPROVER_ALERT_COPY_TO).
+  opts?: { copyTo?: string[] },
 ) {
   if (recipients.length === 0) return
   const cta = n.cta ?? 'Open in Portal'
@@ -97,7 +100,20 @@ export async function notify(
       }),
     ),
   )
+  // Record-keeping copy of live approver alerts (see APPROVER_ALERT_COPY_TO). A failure here never affects the real alerts.
+  const copyTo = (opts?.copyTo ?? []).filter(addr => !emailTo.some(r => r.email.toLowerCase() === addr.toLowerCase()))
+  const copyNote = `A copy of the alert sent to ${emailTo.map(r => r.name).join(' and ') || 'the approvers'}.`
+  const copyResults = await Promise.allSettled(
+    copyTo.map(addr => resend.emails.send({ from: FROM, to: addr, subject, html: renderEmail({ name: 'CHA team' }, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, copyNote }) })),
+  )
+
   const log: EmailLogEntry[] = []
+  copyResults.forEach((res, i) => {
+    const base = { source: 'notification' as const, kind: n.kind, recipient_email: copyTo[i], subject: `${subject} (copy)` }
+    if (res.status === 'rejected') log.push({ ...base, status: 'failed', error: String(res.reason instanceof Error ? res.reason.message : res.reason) })
+    else if (res.value.error) log.push({ ...base, status: 'failed', error: res.value.error.message })
+    else log.push({ ...base, status: 'sent', resend_id: res.value.data?.id ?? null })
+  })
   results.forEach((res, i) => {
     const base = { source: 'notification' as const, kind: n.kind, recipient_email: emailTo[i].email, subject }
     if (res.status === 'rejected') {
@@ -150,7 +166,7 @@ export async function notifyApprovers(admin: SupabaseClient, submitterId: string
     }
 
     const approvers = await getApprovers(admin, submitterId, roles)
-    if (!NOTIFICATION_TEST_MODE.enabled) return await notify(admin, approvers, n)
+    if (!NOTIFICATION_TEST_MODE.enabled) return await notify(admin, approvers, n, undefined, { copyTo: APPROVER_ALERT_COPY_TO })
 
     // Test mode: approvers still get the in-portal notice, but the email alert goes to the test recipients
     // (never the submitter) with a note about who it would normally have reached.

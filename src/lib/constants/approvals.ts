@@ -44,6 +44,14 @@ export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string
   neverEmailRoles: ['ceo'],
 }
 
+// Every LIVE "approval needed" alert (leave, expense and timesheet submissions) is also emailed, as its own message, to these
+// addresses so CHA keeps a record of what Carrileen and Nico were told. Not sent in test mode, and never for test-account submissions.
+export const APPROVER_ALERT_COPY_TO: string[] = ['communityhousingassociates@gmail.com']
+
+// The daily email to TRACKING_DIGEST_TO. Per-alert copies (above) already record every request, so by default the daily email is only
+// sent when something went wrong ("Needs attention"). Set to true to also include the daily list of submissions and waiting items.
+export const TRACKING_DIGEST_INCLUDE_ACTIVITY = false
+
 // A daily digest of everything submitted (leave requests, expenses, timesheets) and everything still waiting on approval is emailed
 // here, for CHA's own tracking. Real staff only — test accounts are left out. Sent by the daily cron; nothing is sent on a day with
 // nothing to report.
