@@ -69,12 +69,13 @@ const TOC = [
   { id: 'roles', label: '2. Roles & Responsibilities' },
   { id: 'time-entry', label: '3. Time Entry' },
   { id: 'leave', label: '4. Leave Requests' },
-  { id: 'expenses', label: '5. Expense & Mileage Reimbursement' },
-  { id: 'approvals', label: '6. Approvals' },
-  { id: 'payroll', label: '7. Pay Periods & Pay Dates' },
-  { id: 'issues', label: '8. Error, Discrepancy & Issue Reporting' },
-  { id: 'security', label: '9. Account Security' },
-  { id: 'effective', label: '10. Effective Date & Review' },
+  { id: 'benefits', label: '5. Benefits Summary' },
+  { id: 'expenses', label: '6. Expense & Mileage Reimbursement' },
+  { id: 'approvals', label: '7. Approvals' },
+  { id: 'payroll', label: '8. Pay Periods & Pay Dates' },
+  { id: 'issues', label: '9. Error, Discrepancy & Issue Reporting' },
+  { id: 'security', label: '10. Account Security' },
+  { id: 'effective', label: '11. Effective Date & Review' },
 ]
 
 export default async function AdminSopPage() {
@@ -137,43 +138,77 @@ export default async function AdminSopPage() {
           </Section>
 
           <Section id="leave" title="4. Procedure — Leave Requests">
-            <p><strong className="text-[#0b2b35]">Leave types.</strong> PTO, Sick Leave, and Vacation draw from the employee&apos;s leave balance. Bereavement and Jury Duty do not draw from any balance.</p>
+            <p><strong className="text-[#0b2b35]">Leave types.</strong> Full-time employees receive paid <strong>annual leave</strong> (tracked in the portal as PTO), <strong>personal leave</strong> (tracked as <strong>Personal Days</strong>), and paid <strong>sick and safe leave</strong> (&ldquo;sick leave&rdquo;), each drawn from the employee&apos;s leave balance. <strong>Administrative leave</strong> (jury duty/witness service, election voting, workers&apos; compensation, bereavement, and military service) and <strong>holiday leave</strong> are paid but do not accrue and do not draw from any balance. Part-time employees and independent contractors accrue neither annual, personal, nor sick leave.</p>
             <p className="font-semibold text-[#0b2b35]">Submission</p>
             <Numbered items={[
-              <>Leave should be requested through the portal <strong>as it happens</strong> — planned leave (PTO, Vacation, Bereavement, Jury Duty) can be requested as far ahead as needed, through 12-31-2027, and should be requested as soon as it is known; <strong>Sick leave</strong> cannot be requested in advance and is entered for the day it occurs or after — so timesheets stay current. Dates up to <strong>14 days in the past</strong> can be entered to catch up (through 10-08-2026, entries back to 09-13-2026 are accepted so the current pay period can be brought up to date); earlier dates are not accepted in the portal and must go through the Accounting Manager. Once accounting closes out a pay period, no further changes or requests are made for it.</>,
+              <>Leave should be requested through the portal <strong>as it happens</strong> — planned leave (PTO, Personal Days, Bereavement, Jury Duty) can be requested as far ahead as needed, through 12-31-2027, and should be requested as soon as it is known; <strong>Sick leave</strong> cannot be requested in advance and is entered for the day it occurs or after — so timesheets stay current. Dates up to <strong>14 days in the past</strong> can be entered to catch up (through 10-08-2026, entries back to 09-13-2026 are accepted so the current pay period can be brought up to date); earlier dates are not accepted in the portal and must go through the Accounting Manager. Once accounting closes out a pay period, no further changes or requests are made for it.</>,
               'Leave is recorded in hourly increments; 8 hours = 1 full workday.',
               'Employees should check the Team Leave Calendar for overlapping team absences before submitting.',
               <>The request must be electronically signed by the employee before submission. An attachment is optional for every leave type except Jury Duty, where the summons is required — the portal blocks submission without it.</>,
               <>Submitted requests are status <strong>Pending</strong> until an approver acts in the portal; no leave should be taken on the assumption of approval until status changes to <strong>Approved</strong>. The employee receives an email and a portal notification when the request is approved or denied. <strong>Sick leave</strong> needs no approval as long as the employee has enough sick balance: it is approved automatically at submission (balance deducted, days posted to the timesheet, employee notified) and never enters the Approvals queue. A sick request that exceeds the available balance is treated as a negative balance and routed to an approver. <strong>Leave starting within the next two pay periods comes off the balance as soon as it is approved</strong> (and must be covered by the current balance). <strong>Leave planned further out is reserved, not deducted:</strong> it is checked against the employee&apos;s projected balance for the start date (today&apos;s balance plus the accruals expected by then, minus other reserved leave) and is deducted automatically once it comes within two pay periods of the start date. A denial requires a real reason, which the employee sees. The projected hours must actually be available on that day for the leave to be valid; if they are not, the employee and approvers are notified.</>,
             ]} />
-            <p className="font-semibold text-[#0b2b35]">Accrual policy</p>
+            <p className="font-semibold text-[#0b2b35]">Accrual policy (full-time employees)</p>
             <Table
-              head={['Tenure', 'PTO accrual / pay period']}
+              head={['Leave', 'Tenure', 'Accrual', 'Approx. annual']}
               rows={[
-                ['0–12 months', '4.62 hrs'],
-                ['13–24 months', '5.08 hrs'],
-                ['25–36 months', '5.54 hrs'],
-                ['36+ months', '6.00 hrs'],
+                ['Annual leave (PTO)', '0–12 months', '4.62 hrs per pay period', '120 hrs'],
+                ['', '13–24 months', '5.08 hrs per pay period', '132 hrs'],
+                ['', '25–36 months', '5.54 hrs per pay period', '144 hrs'],
+                ['', 'Over 36 months', '6.00 hrs per pay period', '156 hrs'],
+                ['Personal Days', 'Any tenure', 'Three times per year', '24 hrs'],
+                ['Sick leave', 'Any tenure', '3.69 hrs per pay period', '96 hrs'],
               ]}
             />
-            <p>Sick leave accrues at a flat <strong>3.69 hrs per pay period</strong> for all tenures.</p>
-            <p className="font-semibold text-[#0b2b35]">Caps &amp; resets</p>
+            <p>For purposes of annual and sick leave accrual, full-time employees are assumed to work 80 hours per pay period.</p>
+            <p className="font-semibold text-[#0b2b35]">Carryover</p>
             <Bullets items={[
-              <>PTO carries over up to a <strong>400-hour cap</strong>; hours accrued beyond the cap are forfeited.</>,
-              <>Sick leave has <strong>no cap</strong>.</>,
-              <>Vacation day balances <strong>reset every January 1</strong>.</>,
-              <>A request that would take a balance negative is allowed but flagged for manager approval. An individual exception to the 400-hour cap can be granted at CEO discretion — flagged per employee via the &ldquo;PTO Uncapped&rdquo; toggle in the Admin Console (Users → Edit Employee). Currently applied to Nico Sanders (CEO) only. This exception is intentionally left out of the Staff SOP.</>,
+              <>Unused accrued annual, personal, and sick leave may be carried over from one year to the next, up to a <strong>combined</strong> limit: <strong>240 hours</strong> if the employee has fewer than 60 months of tenure, or <strong>400 hours</strong> if the employee has 60 or more months of tenure. The limit applies to the <em>sum</em> of annual, personal, and sick hours — not to each type separately. For example, an employee with 40 months of tenure who ends the year with 200 hours of annual leave, 16 hours of personal leave, and 100 hours of sick leave (316 hours in all) may carry over no more than 240 hours in total.</>,
+              <>The President and CEO may carry over all accrued annual, personal, and sick leave with no cap — flagged per employee via the &ldquo;PTO Uncapped&rdquo; toggle in the Admin Console (Users → Edit Employee). Currently applied to Nico Sanders (CEO) only. This exception is intentionally left out of the Staff SOP.</>,
+              'A request that would take a balance negative is allowed but flagged for approval.',
+            ]} />
+            <p className="font-semibold text-[#0b2b35]">Eligibility &amp; timing</p>
+            <Bullets items={[
+              <>Annual leave and sick leave may not be taken until the employee has been employed by CHA for at least <strong>90 days</strong>. Personal Days may not be taken until the employee has been employed for at least <strong>6 months</strong>. Exceptions may be granted in the sole and absolute discretion of CHA&apos;s President and CEO.</>,
+              <>Request the employee&apos;s supervisor&apos;s approval of planned annual leave <strong>at least one week in advance</strong>. CHA will try to accommodate the request, but approval is conditioned on adequate staffing during the absence.</>,
+              <>If the employee can foresee a need for sick leave at least 7 days ahead, the employee must give the employee&apos;s supervisor <strong>at least 7 days&apos; notice</strong>. Otherwise, inform the employee&apos;s supervisor as soon as practicable about the use or planned use of sick leave.</>,
+            ]} />
+            <p className="font-semibold text-[#0b2b35]">Payout on separation</p>
+            <Bullets items={[
+              <>If the employee voluntarily resigns from CHA, CHA pays for up to <strong>120 hours</strong> of accrued annual leave when a <strong>Director</strong> gives at least <strong>4 weeks&apos;</strong> notice of the effective date of resignation, or a <strong>non-Director</strong> gives at least <strong>2 weeks&apos;</strong> notice.</>,
+              'Otherwise, CHA does not pay for any accrued annual leave when employment ends, whether voluntarily or involuntarily.',
+              <>CHA <strong>never</strong> pays out accrued sick leave when employment ends.</>,
+            ]} />
+            <p className="font-semibold text-[#0b2b35]">Administrative leave</p>
+            <p>Paid administrative leave is not subject to accrual:</p>
+            <Bullets items={[
+              <><strong>Jury duty / witness service.</strong> Paid at the regular wage rate for jury duty served, or witness service provided in a matter that is not the employee&apos;s own litigation, during regular hours of employment. The summons must be attached to the leave request.</>,
+              <><strong>Election voting.</strong> Up to 4 hours of paid leave to vote during normal working hours. If the distance between home and work prevents voting outside working hours, the supervisor may extend this leave at their discretion.</>,
+              <><strong>Workers&apos; compensation.</strong> For an on-the-job injury covered by Maryland&apos;s workers&apos; compensation law, where that law does not pay temporary total disability benefits for the first 3 days of disability, those 3 days are paid leave.</>,
+              <><strong>Bereavement.</strong> At the supervisor&apos;s discretion, up to 3 days of paid bereavement leave for the death of a significant other or a family member (grandparent, parent, sibling, child, or grandchild) of the employee or the employee&apos;s significant other.</>,
+              <><strong>Military service.</strong> CHA provides any paid leave required by applicable law for military service.</>,
+            ]} />
+            <p className="font-semibold text-[#0b2b35]">Holiday leave</p>
+            <p>CHA observes the following paid holidays: New Year&apos;s Day, Martin Luther King&apos;s Birthday, Presidents Day, Memorial Day, Juneteenth, Independence Day, Labor Day, Indigenous Day, Thanksgiving Day, Thanksgiving Friday (the day after Thanksgiving), Christmas Day, and either Christmas Eve or New Year&apos;s Eve (each employee&apos;s choice). An exempt employee who works on a paid holiday at CHA&apos;s request is granted flex-time equal to 1.5 times the hours worked that day; a non-exempt employee who does so is paid time-and-a-half for the hours worked.</p>
+          </Section>
+
+          <Section id="benefits" title="5. Benefits Summary">
+            <p>CHA employees generally become eligible after <strong>90 days</strong> of employment for the following benefits, subject to the applicable plan documents for each benefit:</p>
+            <Bullets items={[
+              'Health insurance (medical, vision, and dental coverage options)',
+              'Life insurance',
+              'Long-term disability insurance',
+              'Individual retirement account (with employer match)',
             ]} />
           </Section>
 
-          <Section id="expenses" title="5. Procedure — Expense & Mileage Reimbursement">
+          <Section id="expenses" title="6. Procedure — Expense & Mileage Reimbursement">
             <p><strong className="text-[#0b2b35]">Eligible categories:</strong> Mileage, Hotel, Airline, Meals, Entertainment, Cash Advance, Tolls, Conference Fees, Rental Car, Gratuities, Parking, Other.</p>
             <p><strong className="text-[#0b2b35]">Mileage</strong> is reimbursed at the current rate per mile, set annually by the Accounting Manager or Admin in Portal Settings. If a rate hasn&apos;t been set for the current year, mileage expenses cannot be calculated until one is added — employees should flag this to the Accounting Manager rather than estimate.</p>
             <p><strong className="text-[#0b2b35]">Receipts</strong> are optional in the system but should be attached (image or PDF) whenever available, consistent with CHA&apos;s standard expense documentation practice.</p>
             <p><strong className="text-[#0b2b35]">Approval.</strong> Submitted expenses route to the Accounting Manager/CEO Approvals queue, the same as leave requests, and show status Pending → Approved/Denied. The employee receives an email and a portal notification when an expense is decided, and a denied expense includes a reason where one was provided.</p>
           </Section>
 
-          <Section id="approvals" title="6. Procedure — Approvals">
+          <Section id="approvals" title="7. Procedure — Approvals">
             <p><strong>Approvers:</strong> the Accounting Manager (Carrileen Edwards) and the President/CEO (Nico Sanders) approve or deny leave requests, expenses, and timesheets. <strong>Self-approval:</strong> the Accounting Manager may not approve her own items — they route to the President/CEO. The President/CEO may approve his own items until leadership states otherwise. <strong>During beta testing</strong>, both may approve their own items so the full workflow can be tested; this beta allowance ends when leadership says so. This policy is set by CHA and changes only when leadership changes it.</p>
             <Numbered items={[
               <><strong>Notification and action.</strong> Every submitted leave request, expense, and timesheet sends an email alert to the approvers (the Accounting Manager, CEO, and Admin — never the person who submitted it) and appears in their portal bell, Dashboard banner, and <strong>Approvals</strong> queue. The email is an alert only: the approval or denial must be recorded in the portal, and replying to the email does not count as a decision.</>,
@@ -185,7 +220,7 @@ export default async function AdminSopPage() {
             ]} />
           </Section>
 
-          <Section id="payroll" title="7. Pay Periods & Pay Dates">
+          <Section id="payroll" title="8. Pay Periods & Pay Dates">
             <p>Pay periods run bi-weekly, Sunday through Saturday, and pay is deposited directly on the Tuesday 17 days after a period ends. The portal follows CHA&apos;s payroll schedule (received 2026-09-25).</p>
             <Table
               head={['Item', 'Value']}
@@ -223,7 +258,7 @@ export default async function AdminSopPage() {
             <p><strong>Late leave:</strong> if leave is approved (or sick leave auto-approved) for dates on a timesheet that is already submitted or approved, and the period is still open, that timesheet is reopened automatically (reason: leave added) and must be re-approved. If accounting has already closed the period, the leave cannot be entered or approved for those dates at all; corrections go through the CEO override or a balance adjustment.</p>
           </Section>
 
-          <Section id="issues" title="8. Error, Discrepancy & Issue Reporting">
+          <Section id="issues" title="9. Error, Discrepancy & Issue Reporting">
             <p>The portal has an in-app Report an Issue form (sidebar → Report an Issue) that emails communityhousingassociates@gmail.com, cc support@globalist.pro, with reply-to set to the reporting employee. A screenshot or file can be attached to the report. Employees should use it as the default reporting channel. The category-specific contacts below still apply for anything that needs a named person directly, or if the form itself is unavailable:</p>
             <Table
               head={['Issue type', 'Report to', 'Examples']}
@@ -237,7 +272,7 @@ export default async function AdminSopPage() {
             <p><strong className="text-[#0b2b35]">Ownership:</strong> confirmed 2026-09-22 — weekly discrepancy triage is handled jointly by Globalist Pro and Carrileen Edwards (Accounting Manager).</p>
           </Section>
 
-          <Section id="security" title="9. Account Security">
+          <Section id="security" title="10. Account Security">
             <Bullets items={[
               <>Invite links are valid for <strong>24 hours</strong> from the time the invite is sent.</>,
               <>Password reset links are valid for <strong>24 hours</strong>.</>,
@@ -246,7 +281,7 @@ export default async function AdminSopPage() {
             ]} />
           </Section>
 
-          <Section id="effective" title="10. Effective Date & Review">
+          <Section id="effective" title="11. Effective Date & Review">
             <Table
               head={['', '']}
               rows={[
@@ -256,7 +291,7 @@ export default async function AdminSopPage() {
                 ['Document owner', 'Accounting Manager (Carrileen Edwards), with Globalist Pro maintaining the portal itself'],
               ]}
             />
-            <p>This SOP should be revisited once Section 7 (Pay Periods &amp; Pay Dates) is finalized, once the parallel-run discrepancy-triage owner (Section 8) is confirmed, and again at cutover, when parallel-run language throughout this document should be removed.</p>
+            <p>This SOP should be revisited once Section 8 (Pay Periods &amp; Pay Dates) is finalized, once the parallel-run discrepancy-triage owner (Section 9) is confirmed, and again at cutover, when parallel-run language throughout this document should be removed.</p>
           </Section>
         </div>
       </div>
