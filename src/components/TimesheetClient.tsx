@@ -538,6 +538,9 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
       <div>
         <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}</p>
         <p className="text-[10px] text-gray-400">{dayShort}</p>
+        {!locked && !isHoliday && (
+          <Link href={`/request?date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column" className="text-[10px] font-semibold text-[#028a9e] hover:underline">+ Leave</Link>
+        )}
       </div>
       <div className="flex flex-col gap-1">
         <input

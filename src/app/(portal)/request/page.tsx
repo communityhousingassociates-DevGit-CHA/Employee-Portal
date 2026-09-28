@@ -7,7 +7,8 @@ import { formatEmployeeId } from '@/lib/constants/employee-id'
 
 export const dynamic = 'force-dynamic'
 
-export default async function RequestPage() {
+export default async function RequestPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  const { date } = await searchParams
   const employee = await getCurrentEmployee()
   if (!employee) redirect('/login')
 
@@ -18,6 +19,7 @@ export default async function RequestPage() {
       employeeName={employee.name}
       employeeIdLabel={formatEmployeeId(employee.employee_number)}
       balance={balance}
+      initialDate={date}
       yearEnd={employee.year_end_holiday}
       closedRanges={closedRanges}
       outlook={{ policy: outlook.policy, hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn, reserved: outlook.reserved }}

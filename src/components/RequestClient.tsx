@@ -63,18 +63,22 @@ export default function RequestClient({
   yearEnd,
   closedRanges,
   outlook,
+  initialDate,
 }: {
   employeeName: string
   employeeIdLabel: string
   balance: LeaveBalance | null
   yearEnd?: YearEndChoice | null
+  initialDate?: string
   closedRanges: ClosedRange[]
   outlook: { policy?: PolicySettings; hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
   const [leaveType, setLeaveType] = useState<LeaveType>('PTO')
   // Days are picked on a timesheet-style grid: date -> hours. One request covers all of them; each day keeps its own hours.
-  const [picked, setPicked] = useState<Record<string, string>>({})
-  const [viewStart, setViewStart] = useState(() => getCurrentPeriod(undefined, new Date(`${todayET()}T00:00:00Z`)).start)
+  // Arriving from a timesheet day ("+ Leave") pre-selects that date and opens its pay period.
+  const startDate = initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) && isWorkday(initialDate, yearEnd) ? initialDate : null
+  const [picked, setPicked] = useState<Record<string, string>>(() => (startDate ? { [startDate]: '8' } : {}))
+  const [viewStart, setViewStart] = useState(() => getCurrentPeriod(undefined, new Date(`${startDate ?? todayET()}T00:00:00Z`)).start)
   const days: DayRow[] = Object.keys(picked).sort().map(date => ({ id: date, date, hours: picked[date] }))
   const [note, setNote] = useState('')
   const [attachment, setAttachment] = useState<File | null>(null)
