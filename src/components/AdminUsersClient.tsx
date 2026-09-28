@@ -291,16 +291,48 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   const inputCls = 'px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]'
 
+  // Selected rows if any are checked, otherwise every row in the current tab (Active/Inactive/Test).
+  const exportRows = selectedEmployees.length > 0 ? selectedEmployees : visible
+
+  function exportCsv() {
+    const headers = ['Employee ID', 'First Name', 'Last Name', 'Email', 'Role', 'Type', 'Category', 'Department', 'Job Title', 'Grant', 'Hire Date', 'End Date', 'Accrual Tier', 'Invite Status', 'Status']
+    const rows = exportRows.map(e => [
+      formatEmployeeId(e.employee_number), e.first_name, e.last_name, e.email, e.role.replace('_', ' '), e.employee_type,
+      e.staff_category === 'resident_advocate' ? 'Resident Advocate' : 'CHA Employee', e.department ?? '', e.job_title ?? '',
+      e.grant_name ?? '', fmtDate(e.hire_date), e.end_date ? fmtDate(e.end_date) : '', e.tier,
+      inviteBadge[e.invite_status].label, e.status === 'archived' ? 'Inactive' : e.status,
+    ])
+    const escape = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+    const csv = [headers, ...rows].map(r => r.map(v => escape(String(v))).join(',')).join('\r\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `cha-employees-${filter}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6 print:hidden">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">User Management</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Add, edit, deactivate, or remove portal users</p>
         </div>
-        <button onClick={openNew} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
-          + Add Employee
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={exportCsv} title={selectedEmployees.length > 0 ? `Export ${selectedEmployees.length} selected` : `Export all ${visible.length} in this tab`}
+            className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8] transition-colors">
+            ⬇ CSV
+          </button>
+          <button onClick={() => window.print()} title={selectedEmployees.length > 0 ? `Export ${selectedEmployees.length} selected` : `Export all ${visible.length} in this tab`}
+            className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8] transition-colors">
+            ⬇ PDF
+          </button>
+          <button onClick={openNew} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
+            + Add Employee
+          </button>
+        </div>
       </div>
 
       {toast && (
@@ -310,7 +342,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       )}
 
       {/* Filter tabs — Test is only ever shown to the super admin; it never appears for other admins (e.g. the Accounting Manager). */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 print:hidden">
         {(['active', 'archived', ...(isSuperAdmin ? ['test'] as const : [])] as const).map(f => (
           <button key={f} onClick={() => switchFilter(f)}
             className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors capitalize
@@ -322,7 +354,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="bg-[#0b2b35] text-white rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center gap-2">
+        <div className="bg-[#0b2b35] text-white rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center gap-2 print:hidden">
           <span className="text-[13px] font-semibold mr-2">{selected.size} selected</span>
           {isSuperAdmin && (
             <button onClick={() => setConfirmBulk('invite')} disabled={busy || invitable.length === 0}
@@ -345,7 +377,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       )}
 
       {/* Table — columns size to their content; the wrapper scrolls horizontally if the window is narrower */}
-      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
+      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 print:hidden">
         <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
@@ -432,6 +464,39 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
           </tbody>
         </table>
         </div>
+      </div>
+
+      {/* Print-only table — simplified columns, no actions/checkboxes. Hidden on screen, shown only via window.print(). */}
+      <div className="hidden print:block">
+        <h1 className="text-[16px] font-bold text-[#0b2b35] mb-1">CHA Employee Portal — User Management</h1>
+        <p className="text-[11px] text-gray-500 mb-4">
+          {filter === 'archived' ? 'Inactive' : filter === 'test' ? 'Test' : 'Active'} employees · {exportRows.length} of {employees.filter(e => e.status === filter).length} · Exported {fmtDate(new Date())}
+        </p>
+        <table className="w-full text-[10px] border-collapse">
+          <thead>
+            <tr className="border-b-2 border-[#0b2b35]">
+              {['ID', 'Name', 'Email', 'Role', 'Type', 'Department', 'Hire Date', 'End Date', 'Tier', 'Status'].map(h => (
+                <th key={h} className="text-left py-1.5 pr-3 font-semibold">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {exportRows.map(e => (
+              <tr key={e.id} className="border-b border-gray-200">
+                <td className="py-1 pr-3 font-mono">{formatEmployeeId(e.employee_number)}</td>
+                <td className="py-1 pr-3">{e.name}</td>
+                <td className="py-1 pr-3">{e.email}</td>
+                <td className="py-1 pr-3 capitalize">{e.role.replace('_', ' ')}</td>
+                <td className="py-1 pr-3">{e.employee_type}</td>
+                <td className="py-1 pr-3">{e.department ?? '—'}</td>
+                <td className="py-1 pr-3">{fmtDate(e.hire_date)}</td>
+                <td className="py-1 pr-3">{e.end_date ? fmtDate(e.end_date) : '—'}</td>
+                <td className="py-1 pr-3">{e.tier}</td>
+                <td className="py-1 pr-3 capitalize">{e.status === 'archived' ? 'inactive' : e.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Add/Edit modal */}
