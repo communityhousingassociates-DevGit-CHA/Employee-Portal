@@ -299,7 +299,7 @@ export default function RequestClient({
                         <div key={date} onClick={() => { if (!reason) toggleDay(date) }}
                           className={`flex items-center gap-4 px-4 py-2 border-b border-[#f0f7f8] last:border-0 ${reason ? 'opacity-50' : 'cursor-pointer hover:bg-[#fafefe]'} ${on ? 'bg-[#f0fbfc]' : ''}`}>
                           <input type="checkbox" checked={on} disabled={!!reason} onChange={() => toggleDay(date)} onClick={e => e.stopPropagation()} className="accent-[#02ACC0] w-4 h-4" />
-                          <div className="w-28 text-[13px] text-[#0b2b35]"><span className="inline-block w-9 text-gray-400">{label}</span>{fmtDate(date)}</div>
+                          <div className="w-[124px] flex-shrink-0 whitespace-nowrap text-[13px] text-[#0b2b35]"><span className="inline-block w-9 text-gray-400">{label}</span>{fmtDate(date)}</div>
                           {reason ? (
                             <span className="text-[11px] text-gray-400">{reason}</span>
                           ) : on ? (
