@@ -13,7 +13,7 @@ import type { LeaveType, TimesheetTag } from '@/types'
 export type TagKey =
   // day-level
   | 'holiday' | 'holiday_worked' | 'leave' | 'leave_pto' | 'leave_sick' | 'leave_vacation' | 'leave_bereavement' | 'leave_jury'
-  | 'leave_voting' | 'leave_workers_comp' | 'leave_military' | 'leave_flex'
+  | 'leave_voting' | 'leave_workers_comp' | 'leave_military' | 'leave_unpaid' | 'leave_flex'
   | 'incomplete' | 'long_day' | 'short_day' | 'overtime'
   // timesheet-level
   | 'correction_requested' | 'reopened' | 'late_leave' | 'closed'
@@ -32,6 +32,7 @@ export const TAGS: Record<TagKey, TagDef> = {
   leave_voting: { label: 'Voting', cls: 'bg-sky-100 text-sky-700' },
   leave_workers_comp: { label: 'Workers’ Comp', cls: 'bg-rose-100 text-rose-700' },
   leave_military: { label: 'Military', cls: 'bg-emerald-100 text-emerald-700' },
+  leave_unpaid: { label: 'Unpaid', cls: 'bg-gray-200 text-gray-700' },
   leave_flex: { label: 'Flex Time', cls: 'bg-teal-100 text-teal-700' },
   incomplete: { label: 'Incomplete', cls: 'bg-amber-100 text-amber-700' },
   long_day: { label: 'Over 8 hrs', cls: 'bg-orange-100 text-orange-700' },
@@ -58,6 +59,7 @@ const LEAVE_TAG: Record<LeaveType, TagKey> = {
   Voting: 'leave_voting',
   'Workers Comp': 'leave_workers_comp',
   Military: 'leave_military',
+  Unpaid: 'leave_unpaid',
   'Flex Time': 'leave_flex',
 }
 

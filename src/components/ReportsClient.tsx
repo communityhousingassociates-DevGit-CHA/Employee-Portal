@@ -11,7 +11,7 @@ import { tagColor } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
 
 export type ReportRow = { id: string; name: string; pto_used: number; sick_used: number; personal_used: number; pto_bal: number; sick_bal: number; personal_bal: number; accrual: number }
-export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; holiday_worked: number; holiday_work_credit: number; is_exempt: boolean; status: string; weekly_gross: number | null; can_reveal: boolean }
+export type TimesheetSummaryRow = { id: string; name: string; reg_hours: number; leave_hours: number; holiday_hours: number; holiday_worked: number; holiday_work_credit: number; unpaid_hours: number; is_exempt: boolean; status: string; weekly_gross: number | null; can_reveal: boolean }
 export type ExpenseSummaryRow = { id: string; name: string; total: number; count: number; byCategory: Record<string, number> }
 type Summary = { leaveRows: ReportRow[]; timesheetRows: TimesheetSummaryRow[]; expenseRows: ExpenseSummaryRow[]; tagSummary: { id: string; name: string; color: string; code: string | null; hours: number; days: number }[]; isManager: boolean; canViewSalary: boolean; canViewTimesheets: boolean }
 
@@ -100,8 +100,8 @@ export default function ReportsClient({
   }
 
   function exportTimesheetsCsv() {
-    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Holiday Hours Worked', 'Flex Earned (exempt)', 'Time-and-a-Half Hours (non-exempt)', 'Total Hours', 'Status']
-    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.holiday_hours, r.holiday_worked, r.is_exempt ? r.holiday_work_credit : 0, r.is_exempt ? 0 : r.holiday_work_credit, r.reg_hours + r.leave_hours + r.holiday_hours, r.status])
+    const headers = ['Employee', 'Employee ID', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Unpaid Leave Hours', 'Holiday Hours Worked', 'Flex Earned (exempt)', 'Time-and-a-Half Hours (non-exempt)', 'Total Hours', 'Status']
+    const csvRows = timesheetRows.map(r => [r.name, r.id, r.reg_hours, r.leave_hours, r.holiday_hours, r.unpaid_hours, r.holiday_worked, r.is_exempt ? r.holiday_work_credit : 0, r.is_exempt ? 0 : r.holiday_work_credit, r.reg_hours + r.leave_hours + r.holiday_hours, r.status])
     downloadCsv(headers, csvRows, `CHA-Team-Timesheets-${selectedPeriod.start}.csv`)
   }
 
@@ -215,7 +215,7 @@ export default function ReportsClient({
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-                    {['Employee', 'Regular Hours', 'Leave Hours', 'Holiday Hours', 'Holiday Work', 'Total Hours', 'Status', ...(showPay ? ['Weekly Gross Wages'] : [])].map(h => (
+                    {['Employee', 'Regular Hours', 'Leave Hours', 'Unpaid (incl. in Leave)', 'Holiday Hours', 'Holiday Work', 'Total Hours', 'Status', ...(showPay ? ['Weekly Gross Wages'] : [])].map(h => (
                       <th key={h} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -231,6 +231,7 @@ export default function ReportsClient({
                       </td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours} hrs</td>
                       <td className="px-5 py-3">{r.leave_hours ? <span className="font-semibold text-violet-600">{r.leave_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-5 py-3">{r.unpaid_hours ? <span className="font-semibold text-gray-600">{r.unpaid_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-5 py-3">{r.holiday_hours ? <span className="font-semibold text-rose-500">{r.holiday_hours} hrs</span> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-5 py-3 text-[12px]">{r.holiday_worked ? <span className="font-semibold text-rose-500">{r.holiday_worked} hrs worked<span className="block font-normal text-gray-500">{r.is_exempt ? `+${r.holiday_work_credit} hrs flex` : `${r.holiday_work_credit} hrs at 1.5×`}</span></span> : <span className="text-gray-300">—</span>}</td>
                       <td className="px-5 py-3 font-semibold text-[#0b2b35]">{r.reg_hours + r.leave_hours + r.holiday_hours} hrs</td>
@@ -252,6 +253,7 @@ export default function ReportsClient({
                     <td className="px-5 py-3 text-[11px] font-bold uppercase tracking-wide text-gray-400">Totals</td>
                     <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg} hrs</td>
                     <td className="px-5 py-3 font-bold text-violet-600">{tsTotalLeave} hrs</td>
+                    <td className="px-5 py-3 font-bold text-gray-600">{timesheetRows.reduce((s, r) => s + r.unpaid_hours, 0)} hrs</td>
                     <td className="px-5 py-3 font-bold text-rose-500">{tsTotalHoliday} hrs</td>
                     <td className="px-5 py-3 font-bold text-rose-500">{timesheetRows.reduce((s, r) => s + r.holiday_worked, 0)} hrs</td>
                     <td className="px-5 py-3 font-bold text-[#0b2b35]">{tsTotalReg + tsTotalLeave + tsTotalHoliday} hrs</td>

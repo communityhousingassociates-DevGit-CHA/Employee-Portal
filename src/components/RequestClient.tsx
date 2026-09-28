@@ -25,6 +25,7 @@ const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; 
   { key: 'Voting', label: 'Election Voting', icon: '🗳', desc: '4 hrs standard, up to 6 with approval', balanceKey: null },
   { key: 'Workers Comp', label: 'Workers’ Comp', icon: '🩹', desc: 'First 3 days of a covered injury', balanceKey: null },
   { key: 'Military', label: 'Military Service', icon: '🎖', desc: 'Paid leave required by law', balanceKey: null },
+  { key: 'Unpaid', label: 'Unpaid Leave', icon: '⏸', desc: 'Time off without pay', balanceKey: null },
   { key: 'Flex Time', label: 'Flex Time', icon: '⏱', desc: 'Earned by working a paid holiday', balanceKey: 'flex_hours' },
 ]
 
@@ -39,6 +40,7 @@ const TYPE_ACCENT: Record<LeaveType, { bar: string; border: string; bg: string; 
   Voting: { bar: 'bg-sky-500', border: 'border-sky-500', bg: 'bg-sky-50', text: 'text-sky-700' },
   'Workers Comp': { bar: 'bg-rose-500', border: 'border-rose-500', bg: 'bg-rose-50', text: 'text-rose-700' },
   Military: { bar: 'bg-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  Unpaid: { bar: 'bg-gray-500', border: 'border-gray-500', bg: 'bg-gray-50', text: 'text-gray-700' },
   'Flex Time': { bar: 'bg-teal-500', border: 'border-teal-500', bg: 'bg-teal-50', text: 'text-teal-700' },
 }
 
@@ -387,6 +389,7 @@ export default function RequestClient({
 
           {leaveType === 'Voting' && <div className="text-[12px] bg-sky-50 border border-sky-200 text-sky-800 rounded-xl px-4 py-3">Election voting leave is <strong>4 hours</strong> during normal working hours. If the distance from your home to your work location prevents you from voting outside working hours, up to <strong>2 additional hours</strong> (6 total) may be approved by your manager — choose &ldquo;Extra +2&rdquo; and your approver will review the request against the policy.</div>}
           {leaveType === 'Workers Comp' && <div className="text-[12px] bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-4 py-3">For an on-the-job injury covered by Maryland&apos;s workers&apos; compensation law that doesn&apos;t pay disability benefits for the first 3 days, those 3 days are paid leave (up to 24 hours).</div>}
+          {leaveType === 'Unpaid' && <div className="text-[12px] bg-gray-50 border border-gray-200 text-gray-700 rounded-xl px-4 py-3">Unpaid leave doesn&apos;t use any leave balance and isn&apos;t paid. It needs your approver&apos;s approval, and payroll sees these hours flagged as unpaid. Use your PTO or Personal Days first if you would rather be paid.</div>}
           {leaveType === 'Military' && <div className="text-[12px] bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3">CHA provides any paid leave required by applicable law for military service. Your approver will review the request.</div>}
           {leaveType === 'Flex Time' && <div className="text-[12px] bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3">Flex time is earned by exempt employees who work a paid holiday at CHA&apos;s request (1.5 × the hours worked). It comes off your flex balance when approved.</div>}
           {limitProblem && <div className="text-[12px] bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{limitProblem}</div>}

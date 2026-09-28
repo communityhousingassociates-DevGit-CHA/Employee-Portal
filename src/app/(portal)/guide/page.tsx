@@ -169,6 +169,7 @@ export default async function GuidePage() {
                   <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🗳 Election Voting</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
                   <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🩹 Workers&apos; Comp</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
                   <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">🎖 Military Service</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
+                  <tr className="border-b border-[#f0f7f8]"><td className="py-1.5">⏸ Unpaid Leave</td><td className="py-1.5">No</td><td className="py-1.5">Yes</td></tr>
                   <tr><td className="py-1.5">⏱ Flex Time</td><td className="py-1.5">Yes — your flex balance (only shown once you&apos;ve earned some)</td><td className="py-1.5">Yes</td></tr>
                 </tbody>
               </table>
@@ -179,6 +180,7 @@ export default async function GuidePage() {
               <><strong>Workers&apos; Comp.</strong> For an on-the-job injury covered by Maryland&apos;s workers&apos; compensation law that doesn&apos;t pay disability benefits for the first 3 days — those 3 days are paid leave, up to 24 hours in one request.</>,
               <><strong>Military Service.</strong> Paid leave CHA provides where the law requires it. Your approver reviews each request.</>,
               <><strong>Flex Time.</strong> Exempt employees who work a paid holiday at CHA&apos;s request earn flex time equal to 1.5 × the hours worked (see “Working a holiday” in section 3). Request it here like other leave; the card only appears once you have a flex balance. Non-exempt employees are paid time-and-a-half for holiday hours instead.</>,
+              <><strong>Unpaid Leave.</strong> Time off without pay. It uses no leave balance and needs approval like other leave; once approved the hours appear in the Leave column tagged <strong>Unpaid</strong>, and payroll sees them broken out. If you would rather be paid, use PTO or Personal Days instead.</>,
               <><strong>Personal Days</strong> are 24 hours (3 days), added each January 1. <strong>PTO</strong> means annual leave. Unused PTO, Personal Days and sick leave carry over into the new year up to a combined limit — 240 hours, or 400 hours once you have 60 months of service.</>,
               <><strong>Waiting periods.</strong> PTO and sick leave can&apos;t be taken until you&apos;ve been employed 90 days, and Personal Days not until 6 months (exceptions only by the President and CEO). CHA asks for PTO to be requested at least a week ahead; the form warns you when a request is shorter notice.</>,
             ]} />

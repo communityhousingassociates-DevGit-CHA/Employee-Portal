@@ -20,6 +20,7 @@ const TYPE_STYLE: Record<string, { bar: string; badge: string }> = {
   Voting: { bar: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700' },
   'Workers Comp': { bar: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700' },
   Military: { bar: 'bg-emerald-600', badge: 'bg-emerald-50 text-emerald-700' },
+  Unpaid: { bar: 'bg-gray-400', badge: 'bg-gray-100 text-gray-600' },
   'Flex Time': { bar: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700' },
 }
 

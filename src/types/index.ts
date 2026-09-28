@@ -1,6 +1,6 @@
 export type Role = 'employee' | 'accounting_manager' | 'ceo' | 'admin'
 export type LeaveStatus = 'pending' | 'approved' | 'denied' | 'cancelled'
-export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty' | 'Voting' | 'Workers Comp' | 'Military' | 'Flex Time'
+export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty' | 'Voting' | 'Workers Comp' | 'Military' | 'Unpaid' | 'Flex Time'
 export type YearEndHoliday = 'christmas_eve' | 'new_years_eve'
 export type EmployeeType = 'full-time' | 'part-time' | 'consultant'
 export type StaffCategory = 'cha_employee' | 'resident_advocate'

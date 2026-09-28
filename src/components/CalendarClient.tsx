@@ -31,6 +31,7 @@ const TYPE_STYLE: Record<string, { cell: string; dot: string; label: string }> =
   voting: { cell: 'bg-sky-100 text-sky-700', dot: 'bg-sky-400', label: 'Voting' },
   'workers comp': { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Workers’ Comp' },
   military: { cell: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', label: 'Military' },
+  unpaid: { cell: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400', label: 'Unpaid' },
   'flex time': { cell: 'bg-teal-100 text-teal-700', dot: 'bg-teal-400', label: 'Flex Time' },
   holiday: { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Holiday' },
   mine: { cell: 'bg-[#0b2b35] text-white', dot: 'bg-[#0b2b35]', label: 'My Leave' },
