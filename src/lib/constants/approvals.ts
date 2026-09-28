@@ -44,6 +44,11 @@ export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string
   neverEmailRoles: ['ceo'],
 }
 
+// A copy of every LIVE "approval needed" alert (leave, expense and timesheet submissions) also goes
+// to these addresses, so CHA keeps a record of what Carrileen and Nico were told. Not sent in test mode, and never for test-account
+// submissions (those only ever reach the test recipients above).
+export const APPROVER_ALERT_COPY_TO: string[] = ['communityhousingassociates@gmail.com']
+
 // Closing a date range for accounting (see closed_periods). Lifting a closure is restricted to the CEO override role.
 export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES
 
