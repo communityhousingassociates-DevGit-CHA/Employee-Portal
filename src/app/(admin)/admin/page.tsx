@@ -1,17 +1,26 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
+import { getTestAccountIds } from '@/lib/test-accounts'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AdminPage() {
   const employee = await getCurrentEmployee()
   const admin = createAdminClient()
+  const testIds = employee?.is_test_account ? new Set<string>() : await getTestAccountIds(admin)
+  const testIdList = testIds.size ? `(${[...testIds].join(',')})` : null
+  let pendingLeaveQuery = admin.from('leave_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+  let pendingExpensesQuery = admin.from('expenses').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+  if (testIdList) {
+    pendingLeaveQuery = pendingLeaveQuery.not('employee_id', 'in', testIdList)
+    pendingExpensesQuery = pendingExpensesQuery.not('employee_id', 'in', testIdList)
+  }
   const [{ count: active }, { count: archived }, { count: pendingLeave }, { count: pendingExpenses }, { count: pendingImports }] = await Promise.all([
-    admin.from('employees').select('id', { count: 'exact', head: true }).eq('is_active', true),
-    admin.from('employees').select('id', { count: 'exact', head: true }).eq('is_active', false),
-    admin.from('leave_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-    admin.from('expenses').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+    admin.from('employees').select('id', { count: 'exact', head: true }).eq('is_active', true).eq('is_test_account', false),
+    admin.from('employees').select('id', { count: 'exact', head: true }).eq('is_active', false).eq('is_test_account', false),
+    pendingLeaveQuery,
+    pendingExpensesQuery,
     employee?.is_super_admin
       ? admin.from('import_batches').select('id', { count: 'exact', head: true }).eq('status', 'pending')
       : Promise.resolve({ count: 0 }),

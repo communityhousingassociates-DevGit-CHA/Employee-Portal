@@ -206,12 +206,15 @@ async function getSignInMap(): Promise<Map<string, boolean>> {
 }
 
 export async function getEmployees() {
-  await requireRole(['admin'])
+  const actor = await requireRole(['admin'])
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
     .order('name')
+  // Test accounts (workflow testing) are only visible to the super admin who uses them — invisible to every other admin, including other 'admin'-role staff.
+  if (!actor.is_super_admin) query = query.eq('is_test_account', false)
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   const signedIn = await getSignInMap()
   return (data ?? []).map(e => {
@@ -219,8 +222,18 @@ export async function getEmployees() {
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
     // Active = set a password through the portal (flag), or has signed in with one before (login_count covers accounts created earlier).
     const invite_status: InviteStatus = !e.user_id ? 'not_invited' : (signedIn.get(e.user_id) || (e.login_count ?? 0) > 0) ? 'active' : 'invited'
-    return { ...e, tier, accrual: ptoRate, status: e.is_active ? 'active' : 'archived', grant_name: grant?.name ?? null, invite_status }
+    const status = e.is_test_account ? 'test' : e.is_active ? 'active' : 'archived'
+    return { ...e, tier, accrual: ptoRate, status, grant_name: grant?.name ?? null, invite_status }
   })
+}
+
+/** Super admin only — flips an employee's test-account flag. Test accounts are hidden from every other admin, the shared calendar, the directory, and real approvers' queues; used for workflow testing without touching real staff data. */
+export async function setEmployeeTestAccount(id: string, isTest: boolean) {
+  await requireSuperAdmin()
+  const admin = createAdminClient()
+  const { error } = await admin.from('employees').update({ is_test_account: isTest }).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
 }
 
 /**
@@ -359,13 +372,14 @@ export async function getEmployeeSummary(id: string) {
   }
 }
 
-/** Read-only staff directory for the (portal) Employees page — visible to ceo/admin. */
+/** Read-only staff directory for the (portal) Employees page — visible to ceo/admin. Test accounts never appear here, regardless of who's viewing. */
 export async function getEmployeeDirectory() {
   await requireRole(['ceo', 'admin'])
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employees')
     .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
+    .eq('is_test_account', false)
     .order('name')
   if (error) throw new Error(error.message)
   return (data ?? []).map(e => {

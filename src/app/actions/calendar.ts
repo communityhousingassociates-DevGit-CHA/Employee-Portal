@@ -3,17 +3,24 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { loadRequestDays } from '@/lib/leave-timesheet'
+import { getTestAccountIds } from '@/lib/test-accounts'
 
 export async function getLeaveEventsInRange(startIso: string, endIso: string) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('leave_requests')
     .select('id, employee_id, leave_type, start_date, end_date, hours, status, employee:employees!leave_requests_employee_id_fkey(name)')
     .in('status', ['approved', 'pending'])
     .lte('start_date', endIso)
     .gte('end_date', startIso)
+  // Test accounts (workflow testing) never show up on the shared team calendar for real staff.
+  if (!employee.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   // The calendar shows only the days actually requested off, not the whole span of the request.
   const daysByRequest = await loadRequestDays(admin, data ?? [])
@@ -39,13 +46,18 @@ export async function getUpcomingLeave(limit = 10) {
   if (!employee) throw new Error('Forbidden')
   const admin = createAdminClient()
   const today = new Date().toISOString().slice(0, 10)
-  const { data, error } = await admin
+  let query = admin
     .from('leave_requests')
     .select('id, employee_id, leave_type, start_date, end_date, hours, status, employee:employees!leave_requests_employee_id_fkey(name)')
     .in('status', ['approved', 'pending'])
     .gte('end_date', today)
     .order('start_date')
     .limit(limit)
+  if (!employee.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   const daysByRequest = await loadRequestDays(admin, data ?? [])
   return (data ?? []).map(r => {

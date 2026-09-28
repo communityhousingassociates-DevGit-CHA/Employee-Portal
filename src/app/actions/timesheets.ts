@@ -12,6 +12,7 @@ import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { getTestAccountIds } from '@/lib/test-accounts'
 import type { Role, Timesheet, TimesheetEventAction, TimesheetForReview } from '@/types'
 
 
@@ -228,6 +229,11 @@ export async function getPendingTimesheetApprovals() {
   const admin = createAdminClient()
   let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'submitted')
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
+  if (!actor.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
   const { data, error } = await query.order('employee_signed_at')
   if (error) throw new Error(error.message)
   const ranges = await loadClosedRanges(admin)

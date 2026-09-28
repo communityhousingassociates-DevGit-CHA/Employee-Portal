@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { APPROVER_ROLES, REMINDER_AFTER_DAYS, canSelfApprove } from '@/lib/constants/approvals'
 import { getApprovers, notify } from '@/lib/notifications'
 import { todayET } from '@/lib/pay-periods'
+import { getTestAccountIds } from '@/lib/test-accounts'
 
 const NOBODY = '00000000-0000-0000-0000-000000000000'
 
@@ -30,8 +31,7 @@ export async function sendApprovalDigest(admin: SupabaseClient): Promise<{ sent:
   for (const r of [leave, expenses, sheets]) if (r.error) throw new Error(r.error.message)
 
   // Test accounts (workflow testing) never trigger reminders to the real approvers.
-  const { data: testAccounts } = await admin.from('employees').select('id').eq('is_test_account', true)
-  const testIds = new Set((testAccounts ?? []).map(t => t.id as string))
+  const testIds = await getTestAccountIds(admin)
 
   const toItems = (rows: { employee_id: string; employee: unknown; [k: string]: unknown }[] | null, key: string): Item[] =>
     (rows ?? []).filter(r => !testIds.has(r.employee_id)).map(r => ({ employeeId: r.employee_id, name: nameOf(r.employee), ageDays: ageDays(r[key] as string, now) }))

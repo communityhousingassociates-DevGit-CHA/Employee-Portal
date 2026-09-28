@@ -8,6 +8,7 @@ import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
 import { fmtDate } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { getTestAccountIds } from '@/lib/test-accounts'
 import type { ExpenseCategory, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
@@ -130,6 +131,11 @@ export async function getPendingExpenseApprovals() {
     .eq('status', 'pending')
   // Your own expense only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
+  if (!actor.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
   const { data, error } = await query.order('expense_date')
   if (error) throw new Error(error.message)
   return data ?? []

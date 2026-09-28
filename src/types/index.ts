@@ -36,6 +36,7 @@ export interface Employee {
   avatar_url: string | null
   grant_id: string | null
   is_active: boolean
+  is_test_account: boolean
   login_count: number
   force_password_change: boolean
   issues_seen_at: string | null

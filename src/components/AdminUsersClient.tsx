@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, type BulkEditableField } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate } from '@/lib/format-date'
 
@@ -24,6 +24,8 @@ type Employee = {
   tier: string
   accrual: number
   status: string
+  is_active: boolean
+  is_test_account: boolean
   grant_id: string | null
   grant_name: string | null
   user_id: string | null
@@ -73,7 +75,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
-  const [filter, setFilter] = useState<'active' | 'archived'>('active')
+  const [filter, setFilter] = useState<'active' | 'archived' | 'test'>('active')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<typeof emptyForm>(emptyForm)
@@ -90,16 +92,27 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   const [bulkField, setBulkField] = useState<BulkEditableField>('department')
   const [bulkValue, setBulkValue] = useState('')
 
-  const visible = employees.filter(e => filter === 'active' ? e.status === 'active' : e.status === 'archived')
+  const visible = employees.filter(e => e.status === filter)
   const selectedEmployees = useMemo(() => employees.filter(e => selected.has(e.id)), [employees, selected])
   // Anyone active who has never signed in can be (re)invited; people who have are left alone.
   const invitable = selectedEmployees.filter(e => e.status === 'active' && e.invite_status !== 'active')
   const deletable = selectedEmployees.filter(e => e.id !== currentEmployeeId && !e.is_super_admin)
   const allVisibleSelected = visible.length > 0 && visible.every(e => selected.has(e.id))
 
-  function switchFilter(f: 'active' | 'archived') {
+  function switchFilter(f: 'active' | 'archived' | 'test') {
     setFilter(f)
     setSelected(new Set())
+  }
+
+  async function handleToggleTest(e: Employee) {
+    try {
+      await setEmployeeTestAccount(e.id, !e.is_test_account)
+      const makingTest = !e.is_test_account
+      setEmployees(es => es.map(x => x.id === e.id ? { ...x, is_test_account: makingTest, status: makingTest ? 'test' : (x.is_active ? 'active' : 'archived') } : x))
+      showToast(makingTest ? `${e.name} marked as a test account` : `${e.name} restored to ${e.is_active ? 'active' : 'inactive'}`)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update test-account flag')
+    }
   }
 
   function toggleOne(id: string) {
@@ -294,13 +307,13 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Filter tabs — Test is only ever shown to the super admin; it never appears for other admins (e.g. the Accounting Manager). */}
       <div className="flex gap-2 mb-4">
-        {(['active', 'archived'] as const).map(f => (
+        {(['active', 'archived', ...(isSuperAdmin ? ['test'] as const : [])] as const).map(f => (
           <button key={f} onClick={() => switchFilter(f)}
             className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors capitalize
               ${filter === f ? 'bg-[#0b2b35] text-white' : 'bg-white border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8]'}`}>
-            {f === 'archived' ? 'inactive' : f} ({employees.filter(e => f === 'active' ? e.status === 'active' : e.status === 'archived').length})
+            {f === 'archived' ? 'inactive' : f} ({employees.filter(e => e.status === f).length})
           </button>
         ))}
       </div>
@@ -377,7 +390,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${inviteBadge[e.invite_status].cls}`}>{inviteBadge[e.invite_status].label}</span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : e.status === 'test' ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-500'}`}>
                     {e.status === 'archived' ? 'inactive' : e.status}
                   </span>
                 </td>
@@ -395,10 +408,18 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                     {e.user_id && (
                       <button onClick={() => handleSetTempPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-amber-600 hover:bg-amber-50">Set Temp Password</button>
                     )}
-                    {e.status === 'active'
-                      ? <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Deactivate</button>
-                      : <button onClick={() => handleRestore(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50">Restore</button>
-                    }
+                    {e.status === 'active' && (
+                      <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Deactivate</button>
+                    )}
+                    {e.status === 'archived' && (
+                      <button onClick={() => handleRestore(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50">Restore</button>
+                    )}
+                    {isSuperAdmin && e.id !== currentEmployeeId && (
+                      <button onClick={() => handleToggleTest(e)} title="Test accounts are hidden from other admins, the calendar, the directory, and real approvers' queues"
+                        className="text-[12px] font-semibold px-2.5 py-1 rounded border border-violet-200 text-violet-600 hover:bg-violet-50">
+                        {e.is_test_account ? 'Unmark Test' : 'Mark as Test'}
+                      </button>
+                    )}
                     <button onClick={() => setConfirmDelete(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">Delete</button>
                   </div>
                 </td>

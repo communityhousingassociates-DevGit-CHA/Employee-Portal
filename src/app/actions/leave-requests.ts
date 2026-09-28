@@ -13,6 +13,7 @@ import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
 import { denyReasonProblem } from '@/lib/deny-reason'
 import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
+import { getTestAccountIds } from '@/lib/test-accounts'
 import { balanceTypeFor, projectedAvailable } from '@/lib/leave-projection'
 import type { LeaveType, Role } from '@/types'
 
@@ -326,6 +327,11 @@ export async function getPendingLeaveApprovals() {
     .eq('status', 'pending')
   // Your own request only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  // Test-account submissions stay out of real approvers' queues (same reasoning as the approver digest) — unless the approver is themselves testing.
+  if (!actor.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
   const { data, error } = await query.order('created_at')
   if (error) throw new Error(error.message)
 
