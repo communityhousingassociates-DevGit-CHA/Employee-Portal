@@ -10,7 +10,7 @@ export const TIMESHEET_APPROVER_ROLES: Role[] = APPROVER_ROLES
 // Leave types that need no approver, as long as the employee's balance covers the request (CHA policy,
 // 2026-09-24). They are approved automatically at submission — balance deducted, days posted to the
 // timesheet. A request that exceeds the balance falls back to normal approval. Everything else
-// (PTO, Vacation, Jury Duty, Bereavement) waits for an approver.
+// (PTO, Personal Days, Jury Duty, Bereavement) waits for an approver.
 export const AUTO_APPROVED_LEAVE_TYPES: LeaveType[] = ['Sick']
 
 // Self-approval: after beta only the CEO may approve his own items; anyone else's own items route to

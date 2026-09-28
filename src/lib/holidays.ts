@@ -1,6 +1,5 @@
-// Hardcoded US federal holiday list (observed dates) — a real `holidays` table is explicitly deferred
-// (see project plan). PROVISIONAL: this is the federal schedule, not yet confirmed against CHA's own
-// holiday calendar; update here (yearly) once CHA confirms which days it observes.
+// CHA's paid holidays (SOP §4 "Holiday leave"), observed dates — a real `holidays` table is explicitly deferred.
+// Not listed: the Christmas Eve / New Year's Eve day each employee chooses (needs a per-employee setting, not built yet).
 export const HOLIDAYS: Record<string, string> = {
   // 2026
   '2026-01-01': "New Year's Day",
@@ -10,9 +9,9 @@ export const HOLIDAYS: Record<string, string> = {
   '2026-06-19': 'Juneteenth',
   '2026-07-04': 'Independence Day',
   '2026-09-07': 'Labor Day',
-  '2026-10-12': 'Columbus Day',
-  '2026-11-11': 'Veterans Day',
+  '2026-10-12': "Indigenous Peoples' Day",
   '2026-11-26': 'Thanksgiving Day',
+  '2026-11-27': 'Thanksgiving Friday',
   '2026-12-25': 'Christmas Day',
   // 2027 (weekend holidays shown on their observed weekday)
   '2027-01-01': "New Year's Day",
@@ -22,9 +21,9 @@ export const HOLIDAYS: Record<string, string> = {
   '2027-06-18': 'Juneteenth (observed)',
   '2027-07-05': 'Independence Day (observed)',
   '2027-09-06': 'Labor Day',
-  '2027-10-11': 'Columbus Day',
-  '2027-11-11': 'Veterans Day',
+  '2027-10-11': "Indigenous Peoples' Day",
   '2027-11-25': 'Thanksgiving Day',
+  '2027-11-26': 'Thanksgiving Friday',
   '2027-12-24': 'Christmas Day (observed)',
   '2027-12-31': "New Year's Day (observed)",
 }

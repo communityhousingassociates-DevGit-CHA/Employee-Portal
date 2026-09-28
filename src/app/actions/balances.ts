@@ -5,7 +5,6 @@ import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { hasPayrollAccess } from '@/lib/constants/salary-access'
-import { PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { runAccruals, type AccrualRunSummary } from '@/lib/accruals'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
 import { storeBalanceFile, signedBalanceFileUrl } from '@/lib/balance-files'
@@ -182,11 +181,10 @@ export async function previewBalanceUpdate(fileRows: BalanceFileRow[], asOf: str
 
     const flags: string[] = []
     if (r.pto === null || r.sick === null || r.vacation === null) flags.push('Blank balance kept as current')
-    for (const [label, v] of [['PTO', file.pto], ['Sick', file.sick], ['Vacation', file.vacation]] as const) {
+    for (const [label, v] of [['PTO', file.pto], ['Sick', file.sick], ['Personal Days', file.vacation]] as const) {
       if (v < 0) flags.push(`${label} is negative in the file`)
     }
-    if (file.pto > PTO_CARRYOVER_CAP) flags.push(`PTO over the ${PTO_CARRYOVER_CAP}-hr cap`)
-    for (const [label, a, b] of [['PTO', current.pto, file.pto], ['Sick', current.sick, file.sick], ['Vacation', current.vacation, file.vacation]] as const) {
+    for (const [label, a, b] of [['PTO', current.pto, file.pto], ['Sick', current.sick, file.sick], ['Personal Days', current.vacation, file.vacation]] as const) {
       if (Math.abs(a - b) >= 40) flags.push(`${label} changes by ${Math.round((b - a) * 100) / 100} hrs`)
     }
     if (deducted.pto + deducted.sick + deducted.vacation > 0) flags.push('Leave already taken since the as-of date will be re-deducted')

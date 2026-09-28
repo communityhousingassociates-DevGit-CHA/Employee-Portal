@@ -22,7 +22,7 @@ export const REGULAR_DESCRIPTION = 'Regular Hours'
 export const HOLIDAY_DESCRIPTION = 'Holiday Hours'
 
 function leaveDescription(leaveType: LeaveType): string {
-  return leaveType === 'Personal' ? 'Vacation' : leaveType === 'Sick' ? 'Sick Leave' : leaveType
+  return leaveType === 'Personal' ? 'Personal Days' : leaveType === 'Sick' ? 'Sick Leave' : leaveType
 }
 
 export function weekdaysBetween(start: string, end: string): string[] {
@@ -241,7 +241,7 @@ export async function applyLeaveToTimesheets(
 
 /**
  * Reverses applyLeaveToTimesheets for a cancelled leave request: each affected day loses the leave hours that came from
- * this leave type (salaried days go back to full Regular hours; a "Sick Leave"/"Vacation" description goes back to
+ * this leave type (salaried days go back to full Regular hours; a "Sick Leave"/"Personal Days" description goes back to
  * "Regular Hours"). Same locking rules as posting: drafts are edited, submitted/approved timesheets in an open period are
  * reopened for re-review, and periods accounting has closed are left untouched (callers refuse the cancel up front).
  */
@@ -281,7 +281,7 @@ export async function removeLeaveFromTimesheets(
     }
 
     const regular_hours = isSalaried ? SALARIED_DAILY_HOURS - Number(row.holiday_hours ?? 0) : row.regular_hours
-    const description = row.description === leaveDescription(leaveType) ? REGULAR_DESCRIPTION : row.description
+    const description = (row.description === leaveDescription(leaveType) || (leaveType === 'Personal' && row.description === 'Vacation')) ? REGULAR_DESCRIPTION : row.description
     const { error } = await admin
       .from('timesheet_rows')
       .update({ leave_hours: 0, leave_type: null, regular_hours, description })
@@ -367,7 +367,7 @@ export async function dailyLeaveOverage(
     for (const a of daysByRequest.get(r.id) ?? []) {
       const cur = existing.get(a.date) ?? { hours: 0, labels: [] }
       cur.hours += a.hours
-      cur.labels.push(`${r.leave_type === 'Personal' ? 'Vacation' : r.leave_type}, ${r.status}`)
+      cur.labels.push(`${r.leave_type === 'Personal' ? 'Personal Days' : r.leave_type}, ${r.status}`)
       existing.set(a.date, cur)
     }
   }

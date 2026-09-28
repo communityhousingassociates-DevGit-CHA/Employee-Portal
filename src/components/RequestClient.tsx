@@ -9,6 +9,7 @@ import { holidayOn } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { ADVANCE_NOTICE_DAYS } from '@/lib/constants/accrual'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
 
 type DayRow = { id: string; date: string; hours: string }
@@ -17,7 +18,7 @@ type Conflict = { start_date: string; end_date: string; employee_name?: string; 
 const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
   { key: 'PTO', label: 'PTO', icon: '🌴', desc: 'Personal time off', balanceKey: 'pto_hours' },
   { key: 'Sick', label: 'Sick Leave', icon: '🤒', desc: 'Illness or medical', balanceKey: 'sick_hours' },
-  { key: 'Personal', label: 'Vacation', icon: '🗓', desc: 'Vacation time off', balanceKey: 'personal_hours' },
+  { key: 'Personal', label: 'Personal Days', icon: '🗓', desc: 'Personal Days time off', balanceKey: 'personal_hours' },
   { key: 'Bereavement', label: 'Bereavement', icon: '🕊', desc: 'Loss of a family member', balanceKey: null },
   { key: 'Jury Duty', label: 'Jury Duty', icon: '⚖️', desc: 'Court summons required', balanceKey: null },
 ]
@@ -30,6 +31,10 @@ const TYPE_ACCENT: Record<LeaveType, { bar: string; border: string; bg: string; 
   Personal: { bar: 'bg-amber-500', border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
   Bereavement: { bar: 'bg-slate-500', border: 'border-slate-500', bg: 'bg-slate-50', text: 'text-slate-700' },
   'Jury Duty': { bar: 'bg-indigo-500', border: 'border-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-700' },
+}
+
+function daysBetweenISO(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 
 function isWorkday(iso: string): boolean {
@@ -332,7 +337,7 @@ export default function RequestClient({
             {beyondLatest && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">
                 {leaveType === 'Sick'
-                  ? 'Sick leave can’t be requested for future dates. Use PTO or Vacation for planned time off.'
+                  ? 'Sick leave can’t be requested for future dates. Use PTO or Personal Days for planned time off.'
                   : `Leave can be requested through ${fmtDate(latestLeaveDate())}.`}
               </div>
             )}
@@ -440,6 +445,7 @@ export default function RequestClient({
                   )}
                   {isNegative && <div className="mt-3 text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2">{projection ? `Your projected balance on ${fmtDate(start)} doesn’t cover this request, so it can’t be approved as is.` : 'Negative balance will require manager approval.'}</div>}
                   {startsLater && !isNegative && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">Leave starting more than two pay periods out is <strong>reserved</strong> when approved. It comes off your balance once it is within two pay periods of the start date, and the projected balance above must actually be available then for the leave to be valid.{!outlook.accrualsOn && ' (Accruals aren’t switched on yet, so none are projected.)'}</div>}
+                  {leaveType === 'PTO' && !!start && start > todayET() && daysBetweenISO(todayET(), start) < ADVANCE_NOTICE_DAYS && <div className="mt-3 text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2">CHA asks for annual leave to be requested at least one week in advance. This starts in {daysBetweenISO(todayET(), start)} day{daysBetweenISO(todayET(), start) === 1 ? '' : 's'}, so approval is at your supervisor&apos;s discretion and depends on staffing.</div>}
                   {!startsLater && !!start && start > todayET() && !isNegative && hoursNum > 0 && balType && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">This leave starts within the next two pay periods, so the hours come off your balance as soon as it is approved.</div>}
                   {leaveType === 'Sick' && hoursNum > 0 && !isNegative && <div className="mt-3 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2">Sick leave is approved automatically when your balance covers it.</div>}
                 </>
@@ -488,7 +494,7 @@ export default function RequestClient({
 
           <div className="bg-[#f8fcfd] rounded-xl border border-[#e8f4f7] p-4 space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Policy Reminders</p>
-            {['PTO, Vacation, Jury Duty, and Bereavement need approval before they are taken. Sick leave is approved automatically when your balance covers it.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Vacation days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
+            {['PTO, Personal Days, Jury Duty, and Bereavement need approval before they are taken. Sick leave is approved automatically when your balance covers it.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Personal Days days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
               <div key={tip} className="flex gap-2 text-[11px] text-gray-500"><span className="text-[#02ACC0] flex-shrink-0 mt-0.5">·</span>{tip}</div>
             ))}
           </div>

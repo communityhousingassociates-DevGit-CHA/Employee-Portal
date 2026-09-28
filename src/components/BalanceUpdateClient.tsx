@@ -134,7 +134,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
 
       <h1 className="text-[22px] font-bold text-[#0b2b35]">Leave Balances</h1>
       <p className="text-[13px] text-gray-500 mt-0.5 mb-6">
-        Override PTO, Sick, and Vacation totals from a file of CHA&apos;s current balances, then switch on the portal&apos;s accruals. Every change is previewed first and recorded.
+        Override PTO, Sick, and Personal Days totals from a file of CHA&apos;s current balances, then switch on the portal&apos;s accruals. Every change is previewed first and recorded.
       </p>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>}
@@ -179,7 +179,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
             <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="text-[13px]" onChange={() => { setPreview(null); setConfirmed(false) }} />
             <button onClick={handleFile} disabled={busy} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{busy && !preview ? 'Reading…' : 'Read & preview'}</button>
           </div>
-          <span className="text-[11px] text-gray-400">Accepts CHA&apos;s Leave Balance Validation workbook, or any sheet with a Name or Email column plus PTO, Sick, and Vacation columns. A blank balance is left unchanged.</span>
+          <span className="text-[11px] text-gray-400">Accepts CHA&apos;s Leave Balance Validation workbook, or any sheet with a Name or Email column plus PTO, Sick, and Personal Days columns. A blank balance is left unchanged.</span>
         </div>
 
         {preview && (
@@ -198,7 +198,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
                     <th className="px-4 py-2 font-semibold">Employee</th>
                     <th className="px-4 py-2 font-semibold">PTO (hrs)</th>
                     <th className="px-4 py-2 font-semibold">Sick (hrs)</th>
-                    <th className="px-4 py-2 font-semibold">Vacation (hrs)</th>
+                    <th className="px-4 py-2 font-semibold">Personal Days (hrs)</th>
                     <th className="px-4 py-2 font-semibold">Notes</th>
                   </tr>
                 </thead>

@@ -1,4 +1,4 @@
-import { calcTier, SICK_RATE_PER_PERIOD, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
+import { calcTier, SICK_RATE_PER_PERIOD, carryoverCap } from '@/lib/constants/accrual'
 import { EXAMPLE_ROW_MARKER } from './employee-parser'
 import { SALARY_EXAMPLE_ROW_MARKER } from './salary-parser'
 import { buildFullName } from '@/lib/format-name'
@@ -123,7 +123,7 @@ export function validateBalanceRows(
     for (const [field, label, value] of [
       ['ptoBalance', 'PTO', row.ptoBalance],
       ['sickBalance', 'Sick', row.sickBalance],
-      ['personalBalance', 'Vacation', row.personalBalance],
+      ['personalBalance', 'Personal Days', row.personalBalance],
     ] as const) {
       if (value === null) {
         issues.push({ severity: 'warning', field, message: `${label} balance not filled in — will be seeded as 0`, rowIndex: row.rowIndex })
@@ -131,8 +131,9 @@ export function validateBalanceRows(
         issues.push({ severity: 'error', field, message: `${label} balance cannot be negative (${value})`, rowIndex: row.rowIndex })
       }
     }
-    if (row.ptoBalance !== null && row.ptoBalance > PTO_CARRYOVER_CAP) {
-      issues.push({ severity: 'warning', field: 'ptoBalance', message: `PTO balance (${row.ptoBalance}) exceeds the ${PTO_CARRYOVER_CAP}hr carryover cap — confirm with CHA before seeding as-is`, rowIndex: row.rowIndex })
+    const combined = (row.ptoBalance ?? 0) + (row.sickBalance ?? 0) + (row.personalBalance ?? 0)
+    if (row.hireDate && combined > carryoverCap(row.hireDate)) {
+      issues.push({ severity: 'warning', field: 'ptoBalance', message: `PTO + sick + Personal Days (${combined} hrs) is above the ${carryoverCap(row.hireDate)}-hr year-end carryover limit — fine mid-year, but the excess is trimmed at year-end`, rowIndex: row.rowIndex })
     }
 
     return { data: { ...row, matchedEmail }, issues, status: worstStatus(issues) }

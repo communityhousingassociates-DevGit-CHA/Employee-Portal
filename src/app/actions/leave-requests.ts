@@ -8,6 +8,7 @@ import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notificatio
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
+import { firstEligibleDate } from '@/lib/constants/accrual'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
@@ -77,10 +78,16 @@ function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'p
 async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, employeeId: string, leaveType: LeaveType, days: LeaveDay[]) {
   const closedRanges = await loadClosedRanges(admin)
   const earliest = earliestLeaveDate()
+  const { data: emp } = await admin.from('employees').select('hire_date').eq('id', employeeId).single()
+  const eligibleFrom = emp?.hire_date ? firstEligibleDate(emp.hire_date, leaveType) : null
   for (const day of days) {
     const label = fmtDate(day.date)
+    if (eligibleFrom && day.date < eligibleFrom) {
+      const what = leaveType === 'Personal' ? 'Personal Days' : leaveType === 'Sick' ? 'sick leave' : 'annual leave (PTO)'
+      throw new Error(`${label}: ${what} can’t be taken until ${fmtDate(eligibleFrom)}, when your ${leaveType === 'Personal' ? '6-month' : '90-day'} waiting period ends. An exception can only be granted by the President and CEO.`)
+    }
     if (leaveType === 'Sick' && day.date > latestSickLeaveDate()) {
-      throw new Error(`${label}: sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Vacation for planned time off.`)
+      throw new Error(`${label}: sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Personal Days for planned time off.`)
     }
     if (day.date > latestLeaveDate()) {
       throw new Error(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)

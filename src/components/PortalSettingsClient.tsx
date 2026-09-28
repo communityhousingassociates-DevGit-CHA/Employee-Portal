@@ -15,12 +15,12 @@ const defaultSettings = {
   pto_tier_25_36: 144,
   pto_tier_36_plus: 156,
   sick_rate_per_pp: 3.69,
-  personal_days_per_year: 3,
-  pto_carryover_cap: 400,
-  sick_carryover_cap: 0, // 0 = no cap
-  personal_carryover: false,
+  personal_hours_per_year: 24,
+  carryover_cap_under_60_months: 240, // combined annual + personal + sick, applied at year-end
+  carryover_cap_60_months_plus: 400,
   allow_negative_balance: true,
   new_hire_waiting_days: 90,
+  personal_waiting_months: 6,
   leave_increment: 'hourly',
   blackout_dates_enabled: false,
 
@@ -154,14 +154,20 @@ export default function PortalSettingsClient({
         <Field label="Sick Accrual (hrs/pay period)" hint="Fixed rate — same for all employees">
           <input type="number" step="0.01" value={settings.sick_rate_per_pp} onChange={e => set('sick_rate_per_pp', Number(e.target.value))} className={inputCls} />
         </Field>
-        <Field label="Vacation Days (per calendar year)">
-          <input type="number" value={settings.personal_days_per_year} onChange={e => set('personal_days_per_year', Number(e.target.value))} className={inputCls} />
+        <Field label="Personal Days (hours per year)">
+          <input type="number" value={settings.personal_hours_per_year} onChange={e => set('personal_hours_per_year', Number(e.target.value))} className={inputCls} />
         </Field>
-        <Field label="PTO Carryover Cap (hours)" hint="Set 0 to allow unlimited carryover">
-          <input type="number" value={settings.pto_carryover_cap} onChange={e => set('pto_carryover_cap', Number(e.target.value))} className={inputCls} />
+        <Field label="Carryover Cap — under 60 months (hours)" hint="Combined annual + personal + sick, applied at year-end">
+          <input type="number" value={settings.carryover_cap_under_60_months} onChange={e => set('carryover_cap_under_60_months', Number(e.target.value))} className={inputCls} />
         </Field>
-        <Field label="New Hire Waiting Period (days)" hint="Employees cannot use leave until this period ends">
+        <Field label="Carryover Cap — 60+ months (hours)" hint="Combined annual + personal + sick, applied at year-end">
+          <input type="number" value={settings.carryover_cap_60_months_plus} onChange={e => set('carryover_cap_60_months_plus', Number(e.target.value))} className={inputCls} />
+        </Field>
+        <Field label="New Hire Waiting Period (days)" hint="Annual (PTO) and sick leave cannot be taken until this period ends">
           <input type="number" value={settings.new_hire_waiting_days} onChange={e => set('new_hire_waiting_days', Number(e.target.value))} className={inputCls} />
+        </Field>
+        <Field label="Personal Days Waiting Period (months)" hint="Personal Days cannot be taken until this period ends">
+          <input type="number" value={settings.personal_waiting_months} onChange={e => set('personal_waiting_months', Number(e.target.value))} className={inputCls} />
         </Field>
         <Field label="Leave Increment">
           <select value={settings.leave_increment} onChange={e => set('leave_increment', e.target.value)} className={inputCls}>
@@ -178,7 +184,6 @@ export default function PortalSettingsClient({
           </select>
         </Field>
         <ToggleRow k="allow_negative_balance" label="Allow negative leave balances (with approval)" />
-        <ToggleRow k="personal_carryover" label="Allow vacation days to carry over year to year" />
         <ToggleRow k="blackout_dates_enabled" label="Enable blackout date restrictions" />
       </Section>
 

@@ -3,7 +3,7 @@
 //   projected = current balance + accruals between now and then − other leave already reserved up to then.
 // Pure and client-safe (used by the request form, the dashboard, and the approval check).
 
-import { calcTier, SICK_RATE_PER_PERIOD, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
+import { calcTier, SICK_RATE_PER_PERIOD } from '@/lib/constants/accrual'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import type { LeaveType } from '@/types'
 
@@ -47,11 +47,10 @@ export function projectedAvailable(input: ProjectionInput): Projection {
   if (periods > 0) {
     if (input.type === 'pto') accrued = periods * calcTier(input.hireDate, Date.parse(`${input.onDate}T12:00:00Z`)).ptoRate
     else if (input.type === 'sick') accrued = periods * SICK_RATE_PER_PERIOD
-    // Vacation ("personal") doesn't accrue.
+    // Personal Days ("personal") doesn't accrue.
   }
 
-  let base = input.current + accrued
-  if (input.type === 'pto' && !input.ptoUncapped) base = Math.min(base, PTO_CARRYOVER_CAP)
+  const base = input.current + accrued // the combined carryover limit is applied at year-end, not mid-year
 
   const reservedBefore = input.reserved
     .filter(r => balanceTypeFor(r.leave_type) === input.type && r.start_date <= input.onDate)

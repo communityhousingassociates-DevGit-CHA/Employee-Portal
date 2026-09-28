@@ -536,7 +536,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                   className="mt-0.5 w-4 h-4 accent-[#02ACC0] cursor-pointer flex-shrink-0" />
                 <label htmlFor="pto_uncapped" className="cursor-pointer">
                   <span className="text-[13px] font-semibold text-[#0b2b35]">PTO Uncapped</span>
-                  <span className="block text-[11px] text-gray-400">Exempts this employee from the standard 400-hour PTO carryover cap (e.g. an executive exception). Sick and Vacation caps are unaffected.</span>
+                  <span className="block text-[11px] text-gray-400">Exempts this employee from the year-end combined carryover limit (240 hrs under 60 months of tenure, 400 hrs after) — e.g. the President/CEO.</span>
                 </label>
               </div>
             </div>

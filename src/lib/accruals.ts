@@ -2,7 +2,7 @@
 // balances for many employees and must only run behind an authorised caller (cron secret or payroll-access user).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { calcTier, SICK_RATE_PER_PERIOD, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
+import { calcTier, SICK_RATE_PER_PERIOD } from '@/lib/constants/accrual'
 import { getCurrentPeriod, getPayPeriods } from '@/lib/pay-periods'
 
 export type AccrualRunSummary = { periods: string[]; processed: number; skipped: number; errors: string[] }
@@ -21,7 +21,7 @@ export async function runAccruals(admin: SupabaseClient, firstPeriodStart: strin
   const count = Math.round((Date.parse(`${current.start}T00:00:00Z`) - Date.parse(`${firstPeriodStart}T00:00:00Z`)) / (14 * 86400000)) + 1
   const periods = getPayPeriods(firstPeriodStart, Math.max(count, 1))
 
-  const { data: employees, error: empError } = await admin.from('employees').select('id, hire_date, pto_uncapped').eq('is_active', true)
+  const { data: employees, error: empError } = await admin.from('employees').select('id, hire_date').eq('is_active', true)
   if (empError) { summary.errors.push(empError.message); return summary }
 
   for (const period of periods) {
@@ -39,7 +39,7 @@ export async function runAccruals(admin: SupabaseClient, firstPeriodStart: strin
       if (balError || !balance) { summary.errors.push(`${emp.id}: no leave_balances row (${balError?.message ?? 'not found'})`); continue }
 
       const round2 = (n: number) => Math.round(n * 100) / 100 // keep balances to cents — no floating-point tails
-      const newPto = round2(emp.pto_uncapped ? Number(balance.pto_hours) + ptoRate : Math.min(Number(balance.pto_hours) + ptoRate, PTO_CARRYOVER_CAP))
+      const newPto = round2(Number(balance.pto_hours) + ptoRate) // no mid-year cap: carryover is limited once, at year-end (lib/carryover.ts)
       const newSick = round2(Number(balance.sick_hours) + SICK_RATE_PER_PERIOD)
 
       const logRows = []

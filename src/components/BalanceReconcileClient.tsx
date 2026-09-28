@@ -102,7 +102,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
                 <thead>
                   <tr className="bg-[#f9fefe] border-b border-[#d4eef2] text-left text-[10px] uppercase tracking-wide text-gray-400">
                     <th className="px-4 py-2 font-semibold">Employee</th>
-                    {['PTO', 'Sick', 'Vacation'].map(h => <th key={h} className="px-4 py-2 font-semibold">{h}: at close → today</th>)}
+                    {['PTO', 'Sick', 'Personal Days'].map(h => <th key={h} className="px-4 py-2 font-semibold">{h}: at close → today</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -161,7 +161,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
                     <tr className="bg-[#f9fefe] border-b border-[#d4eef2] text-left text-[10px] uppercase tracking-wide text-gray-400">
                       <th className="px-3 py-2 w-8" />
                       <th className="px-3 py-2 font-semibold">Employee</th>
-                      {['PTO', 'Sick', 'Vacation'].map(h => <th key={h} className="px-3 py-2 font-semibold">{h}: portal → Sage (diff)</th>)}
+                      {['PTO', 'Sick', 'Personal Days'].map(h => <th key={h} className="px-3 py-2 font-semibold">{h}: portal → Sage (diff)</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -206,7 +206,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
               {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </div>
-          {([['pto', 'PTO ±hrs'], ['sick', 'Sick ±hrs'], ['vacation', 'Vacation ±hrs']] as const).map(([k, label]) => (
+          {([['pto', 'PTO ±hrs'], ['sick', 'Sick ±hrs'], ['vacation', 'Personal Days ±hrs']] as const).map(([k, label]) => (
             <div key={k} className="flex flex-col gap-1.5">
               <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">{label}</label>
               <input type="number" step="0.01" value={adj[k]} onChange={e => setAdj(a => ({ ...a, [k]: e.target.value }))} placeholder="0" className={inputCls} />

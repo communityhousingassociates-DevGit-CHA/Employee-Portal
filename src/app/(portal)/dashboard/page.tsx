@@ -147,7 +147,7 @@ export default async function DashboardPage() {
           {[
             { label: 'PTO', v: `${fmtHrs(ptoHours)}h` },
             { label: 'Sick', v: `${fmtHrs(sickHours)}h` },
-            { label: 'Vacation', v: `${Math.floor(personalHours / 8)}d` },
+            { label: 'Personal Days', v: `${Math.floor(personalHours / 8)}d` },
           ].map(s => (
             <div key={s.label} className="bg-white/10 rounded-lg px-3.5 py-2 text-center min-w-[72px]">
               <p className="text-white text-[16px] font-bold leading-none">{s.v}</p>
@@ -170,7 +170,7 @@ export default async function DashboardPage() {
               <ul className="mt-3 space-y-2">
                 {outlook.reservedDetail.map(r => (
                   <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-[12px] bg-[#f8fcfd] rounded-lg px-3 py-2">
-                    <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Vacation' : r.leave_type} · {r.hours} hrs · {r.days && r.days.length > 0 ? fmtDaySet(r.days.map((d: { date: string }) => d.date), true) : `starts ${fmtDate(r.start_date)}`}</span>
+                    <span className="text-[#0b2b35] font-semibold">{r.leave_type === 'Personal' ? 'Personal Days' : r.leave_type} · {r.hours} hrs · {r.days && r.days.length > 0 ? fmtDaySet(r.days.map((d: { date: string }) => d.date), true) : `starts ${fmtDate(r.start_date)}`}</span>
                     <span className={r.covered ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>
                       {r.covered ? '✓' : '⚠'} Projected {fmtHrs(r.projectedBefore)} hrs available then{r.covered ? '' : ' — not enough'}
                     </span>

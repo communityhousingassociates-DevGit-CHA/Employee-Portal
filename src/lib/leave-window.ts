@@ -22,7 +22,7 @@ export function earliestLeaveDate(now: Date = new Date()): string {
 }
 
 /**
- * Furthest-ahead date leave can be requested for. Planned leave (PTO, Vacation, Bereavement, Jury Duty) has no
+ * Furthest-ahead date leave can be requested for. Planned leave (PTO, Personal Days, Bereavement, Jury Duty) has no
  * short "advance" limit — a trip can be booked months out — but hours are auto-filled from the holiday calendar,
  * so requests stop at the end of the last year that calendar covers (extend HOLIDAYS to extend this).
  */

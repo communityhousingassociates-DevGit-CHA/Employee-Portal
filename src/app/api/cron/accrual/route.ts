@@ -1,10 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runAccruals } from '@/lib/accruals'
+import { runYearEndCarryover } from '@/lib/carryover'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
 import { sendApprovalDigest } from '@/lib/approval-digest'
 
 // Daily job (vercel.json), in two steps:
+//  0. Year-end carryover — in January only (from the 2027 year-end on), trims each employee's combined annual + personal +
+//     sick balance to their tenure limit. Runs first so the new year's accruals aren't counted against last year's limit.
 //  1. Accruals — does nothing until switched on under Admin Console → Leave Balances, which records the first pay
 //     period the portal should accrue. Each run credits any period from then through today that hasn't been
 //     credited yet (accrual_log makes it idempotent), so a missed day never skips a period.
@@ -18,6 +21,8 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient()
+  const carryover = await runYearEndCarryover(admin).catch(e => ({ ran: false, reason: e instanceof Error ? e.message : String(e) }))
+
   const { data: settings, error } = await admin.from('accrual_settings').select('enabled, first_period_start').maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -27,5 +32,5 @@ export async function GET(request: NextRequest) {
 
   const deductions = await applyDueLeaveDeductions(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
   const digest = await sendApprovalDigest(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
-  return NextResponse.json({ accruals, deductions, digest })
+  return NextResponse.json({ carryover, accruals, deductions, digest })
 }

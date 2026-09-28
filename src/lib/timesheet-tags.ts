@@ -24,7 +24,7 @@ export const TAGS: Record<TagKey, TagDef> = {
   leave: { label: 'Leave', cls: 'bg-violet-100 text-violet-700' },
   leave_pto: { label: 'PTO', cls: 'bg-[#e0f5f8] text-[#028a9e]' },
   leave_sick: { label: 'Sick', cls: 'bg-violet-100 text-violet-700' },
-  leave_vacation: { label: 'Vacation', cls: 'bg-amber-100 text-amber-700' },
+  leave_vacation: { label: 'Personal Days', cls: 'bg-amber-100 text-amber-700' },
   leave_bereavement: { label: 'Bereavement', cls: 'bg-slate-100 text-slate-600' },
   leave_jury: { label: 'Jury Duty', cls: 'bg-slate-100 text-slate-600' },
   incomplete: { label: 'Incomplete', cls: 'bg-amber-100 text-amber-700' },
