@@ -1,19 +1,17 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import DashboardGreeting from '@/components/DashboardGreeting'
 import WeatherBadge from '@/components/WeatherBadge'
 import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals, getMyLeaveOutlook } from '@/app/actions/leave-requests'
-import { getOrCreateTimesheet, getTimesheetForEmployeePeriod, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
+import { getOrCreateTimesheet, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
 import { getCurrentPeriod } from '@/lib/pay-periods'
-import { calcTier, PTO_CARRYOVER_CAP } from '@/lib/constants/accrual'
 import { fmtDateShort as fmtDate, fmtDaySet } from '@/lib/format-date'
 import { getBaltimoreWeather } from '@/lib/weather'
 import { fmtHrs } from '@/lib/format-hours'
-
-const PERSONAL_CAP = 24
 
 const TYPE_COLOR: Record<string, { bar: string; badge: string }> = {
   PTO: { bar: 'bg-[#02ACC0]', badge: 'bg-[#e0f5f8] text-[#028a9e]' },
@@ -44,7 +42,7 @@ export default async function DashboardPage() {
   if (!employee) redirect('/login')
 
   const isManager = MANAGER_ROLES.includes(employee.role)
-  const firstName = employee.name.split(' ')[0] || 'there'
+  const initials = employee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
 
   const period = getCurrentPeriod()
   const [balance, recent, nextLeave, { timesheet, rows }, pendingApprovals, weather, timesheetReminder, pendingExpenses, pendingTimesheets, outlook] = await Promise.all([
@@ -74,7 +72,6 @@ export default async function DashboardPage() {
   const oldestPending = pendingDates.reduce<string | null>((min, d) => (!min || d < min ? d : min), null)
 
   const now = new Date()
-
   const periodStart = new Date(`${period.start}T00:00:00`)
   const periodEnd = new Date(`${period.end}T00:00:00`)
   const periodDays = Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1
@@ -84,10 +81,6 @@ export default async function DashboardPage() {
   const ptoHours = balance ? Number(balance.pto_hours) : 0
   const sickHours = balance ? Number(balance.sick_hours) : 0
   const personalHours = balance ? Number(balance.personal_hours) : 0
-  const ptoDays = Math.floor(ptoHours / 8)
-  const sickDays = Math.floor(sickHours / 8)
-  const personalDays = Math.floor(personalHours / 8)
-  const ptoRate = calcTier(employee.hire_date).ptoRate
 
   const tsTotalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const tsTotalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
@@ -96,7 +89,14 @@ export default async function DashboardPage() {
   const tsTarget = 80
   const tsPct = Math.min(Math.round((tsTotal / tsTarget) * 100), 100)
   const tsRemaining = Math.max(tsTarget - tsTotal, 0)
-  const dueSoon = timesheet.status === 'draft'
+
+  const tiles = [
+    { href: '/request', icon: '🌴', title: 'Request/Use Leave', desc: `${fmtHrs(ptoHours)} PTO hrs available`, color: 'bg-[#02ACC0]' },
+    { href: '/timesheet', icon: '🕑', title: 'My Timesheet', desc: `${tsTotal} of ${tsTarget} hrs logged`, color: 'bg-amber-500' },
+    { href: '/expenses', icon: '🧾', title: 'My Expenses', desc: 'Submit or track reimbursements', color: 'bg-rose-500' },
+    { href: '/calendar', icon: '📅', title: 'Team Calendar', desc: "See who's out this week", color: 'bg-violet-500' },
+    ...(isManager ? [{ href: '/approvals', icon: '✅', title: 'Approvals', desc: `${pendingCount} item${pendingCount === 1 ? '' : 's'} waiting on you`, color: 'bg-emerald-600' }] : []),
+  ]
 
   return (
     <div className="space-y-6">
@@ -113,9 +113,10 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {/* Greeting + pay period progress, weather/alerts/quick actions */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <DashboardGreeting firstName={firstName} />
+          <DashboardGreeting firstName={employee.name.split(' ')[0] || 'there'} />
           <div className="flex items-center gap-3 mt-3">
             <div className="w-36 h-1.5 bg-[#e8f4f7] rounded-full overflow-hidden">
               <div className="h-full bg-[#02ACC0] rounded-full transition-all" style={{ width: `${periodPct}%` }} />
@@ -131,65 +132,28 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-[#02ACC0] rounded-t-xl" />
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">PTO Balance</p>
-          <div className="flex items-end gap-2 mb-0.5">
-            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{fmtHrs(ptoHours)}</p>
-            <p className="text-[13px] text-gray-400 mb-1.5">hrs</p>
-          </div>
-          <p className="text-[12px] text-gray-400 mb-3">≈ {ptoDays} working days</p>
-          {employee.pto_uncapped ? (
-            <div className="flex justify-between items-center">
-              <p className="text-[10px] font-semibold text-amber-600">∞ No carryover cap (exception)</p>
-              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
+      {/* Profile card */}
+      <div className="bg-[#0b2b35] rounded-2xl px-6 py-6 flex flex-wrap items-center gap-5">
+        {employee.avatar_url ? (
+          <Image src={employee.avatar_url} alt={employee.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-white/20" />
+        ) : (
+          <div className="w-16 h-16 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[20px] font-bold flex-shrink-0">{initials}</div>
+        )}
+        <div className="flex-1 min-w-[200px]">
+          <h2 className="text-white text-[20px] font-bold">{employee.name}</h2>
+          <p className="text-white/50 text-[13px] capitalize">{employee.job_title || employee.role.replace('_', ' ')} · {employee.department || 'Community Housing Associates'}</p>
+        </div>
+        <div className="flex gap-2">
+          {[
+            { label: 'PTO', v: `${fmtHrs(ptoHours)}h` },
+            { label: 'Sick', v: `${fmtHrs(sickHours)}h` },
+            { label: 'Vacation', v: `${Math.floor(personalHours / 8)}d` },
+          ].map(s => (
+            <div key={s.label} className="bg-white/10 rounded-lg px-3.5 py-2 text-center min-w-[72px]">
+              <p className="text-white text-[16px] font-bold leading-none">{s.v}</p>
+              <p className="text-white/50 text-[10px] uppercase tracking-wide mt-1">{s.label}</p>
             </div>
-          ) : (
-            <>
-              <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
-                <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${Math.min((ptoHours / PTO_CARRYOVER_CAP) * 100, 100)}%` }} />
-              </div>
-              <div className="flex justify-between items-center">
-                <p className="text-[10px] text-gray-400">{fmtHrs(ptoHours)} / {PTO_CARRYOVER_CAP} hr cap</p>
-                <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+{ptoRate}/pp</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-violet-500 rounded-t-xl" />
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">Sick Leave</p>
-          <div className="flex items-end gap-2 mb-0.5">
-            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{fmtHrs(sickHours)}</p>
-            <p className="text-[13px] text-gray-400 mb-1.5">hrs</p>
-          </div>
-          <p className="text-[12px] text-gray-400 mb-3">≈ {sickDays} working days</p>
-          <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
-            <div className="h-full bg-violet-500 rounded-full" style={{ width: '100%' }} />
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] text-gray-400">No annual cap</p>
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">+3.69/pp</span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-5 border border-[#d4eef2] relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-amber-400 rounded-t-xl" />
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-3">Vacation Days</p>
-          <div className="flex items-end gap-2 mb-0.5">
-            <p className="text-[38px] font-black text-[#0b2b35] leading-none">{personalDays}</p>
-            <p className="text-[13px] text-gray-400 mb-1.5">days</p>
-          </div>
-          <p className="text-[12px] text-gray-400 mb-3">{fmtHrs(personalHours)} hrs</p>
-          <div className="bg-[#f0f7f8] rounded-full h-1.5 overflow-hidden mb-1">
-            <div className="h-full bg-amber-400 rounded-full" style={{ width: `${Math.min((personalHours / PERSONAL_CAP) * 100, 100)}%` }} />
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-[10px] text-gray-400">{fmtHrs(personalHours)} / {PERSONAL_CAP} hrs</p>
-            <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Resets Jan 1</span>
-          </div>
+          ))}
         </div>
       </div>
 
@@ -217,6 +181,18 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Bold color tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {tiles.map(t => (
+          <Link key={t.href} href={t.href} className={`${t.color} rounded-xl p-5 text-white hover:opacity-90 transition-opacity relative overflow-hidden group`}>
+            <span className="text-[26px]">{t.icon}</span>
+            <h3 className="text-[15px] font-bold uppercase tracking-wide mt-3">{t.title}</h3>
+            <p className="text-[12px] text-white/80 mt-1 leading-snug">{t.desc}</p>
+            <span className="text-[11px] font-bold mt-3 inline-flex items-center gap-1 group-hover:gap-2 transition-all">VIEW <span>→</span></span>
+          </Link>
+        ))}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
@@ -254,7 +230,7 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-[#d4eef2]">
               <h2 className="text-[13px] font-bold text-[#0b2b35] flex items-center gap-1.5">
                 Timesheet
-                {dueSoon && <span className="w-1.5 h-1.5 bg-red-500 rounded-full inline-block" />}
+                {timesheet.status === 'draft' && <span className="w-1.5 h-1.5 bg-red-500 rounded-full inline-block" />}
               </h2>
               <Link href="/timesheet" className="text-[11px] font-semibold text-[#02ACC0] hover:underline">Open →</Link>
             </div>
@@ -275,15 +251,15 @@ export default async function DashboardPage() {
           </div>
 
           {nextLeave ? (
-            <div className="bg-[#0b2b35] rounded-xl p-4">
-              <p className="text-[10px] uppercase tracking-widest text-[#02ACC0] mb-2">Upcoming Leave</p>
-              <p className="text-white font-semibold text-[14px]">{nextLeave.leave_type}</p>
-              <p className="text-gray-400 text-[12px] mt-0.5">
+            <div className="bg-white rounded-xl border border-[#d4eef2] p-4">
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-2">Upcoming Leave</p>
+              <p className="text-[#0b2b35] font-semibold text-[14px]">{nextLeave.leave_type}</p>
+              <p className="text-gray-500 text-[12px] mt-0.5">
                 {nextLeave.days && nextLeave.days.length > 0 ? fmtDaySet(nextLeave.days.map((d: { date: string }) => d.date), true) : `${fmtDate(nextLeave.start_date)}${nextLeave.start_date !== nextLeave.end_date ? ` – ${fmtDate(nextLeave.end_date)}` : ''}`} · {nextLeave.hours} hrs
               </p>
-              <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
-                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                <span className="text-[11px] text-emerald-400 font-medium">Approved</span>
+              <div className="mt-3 pt-3 border-t border-[#f0f7f8] flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                <span className="text-[11px] text-emerald-600 font-semibold">Approved</span>
               </div>
             </div>
           ) : (
@@ -294,31 +270,16 @@ export default async function DashboardPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-xl border border-[#d4eef2] divide-y divide-[#f0f7f8] overflow-hidden">
-            {[
-              { href: '/history', label: 'My Request History', icon: '🕐' },
-              { href: '/calendar', label: 'Team Leave Calendar', icon: '📅' },
-              { href: '/expenses', label: 'My Expenses', icon: '🧾' },
-              ...(isManager ? [{ href: '/approvals', label: `Pending Approvals (${pendingCount})`, icon: '✅' }] : []),
-              { href: '/report-issue', label: 'Report an Issue', icon: '🆘' },
-            ].map(item => (
-              <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
-                <span className="text-[14px]">{item.icon}</span>
-                <span className="text-[12px] font-medium text-[#0b2b35]">{item.label}</span>
-                <span className="ml-auto text-gray-300 text-[11px]">›</span>
-              </Link>
-            ))}
-          </div>
-
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-4 py-3 border-b border-[#d4eef2]">
-              <p className="text-[12px] font-bold text-[#0b2b35]">Documentation</p>
+              <p className="text-[12px] font-bold text-[#0b2b35]">Documentation & Help</p>
             </div>
             <div className="divide-y divide-[#f0f7f8]">
               {[
                 { href: '/guide', label: 'How-To Guide', icon: '📘' },
                 { href: '/sop', label: 'Staff SOP', icon: '📄' },
                 ...(isManager ? [{ href: '/sop/admin', label: 'Admin & Leadership SOP', icon: '📋' }] : []),
+                { href: '/report-issue', label: 'Report an Issue', icon: '🆘' },
               ].map(item => (
                 <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 hover:bg-[#f8fcfd] transition-colors">
                   <span className="text-[14px]">{item.icon}</span>
