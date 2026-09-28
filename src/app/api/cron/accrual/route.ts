@@ -5,6 +5,7 @@ import { runYearEndCarryover } from '@/lib/carryover'
 import { runPersonalDaysGrant } from '@/lib/personal-grants'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
 import { sendApprovalDigest } from '@/lib/approval-digest'
+import { sendTrackingDigest } from '@/lib/tracking-digest'
 
 // Daily job (vercel.json), in two steps:
 //  0. Year-end carryover — in January only (from the 2027 year-end on), trims each employee's combined annual + personal +
@@ -15,6 +16,7 @@ import { sendApprovalDigest } from '@/lib/approval-digest'
 //     credited yet (accrual_log makes it idempotent), so a missed day never skips a period.
 //  2. Leave deductions — approved leave that was reserved while it was in the future comes off the balance once
 //     its start date arrives. Runs regardless of the accrual switch, after accruals so a shortfall isn't overstated.
+//  4. Tracking digest — a daily record for CHA (TRACKING_DIGEST_TO) of what was submitted and what is still waiting.
 //  3. Approver digest — a weekday reminder of anything that's been waiting on approval longer than REMINDER_AFTER_DAYS.
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
@@ -23,9 +25,9 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient()
-  const carryover = await runYearEndCarryover(admin).catch(e => ({ ran: false, reason: e instanceof Error ? e.message : String(e) }))
+  const carryover = await runYearEndCarryover(admin).catch(e => ({ ran: false, error: e instanceof Error ? e.message : String(e) }))
 
-  const personalGrant = await runPersonalDaysGrant(admin).catch(e => ({ ran: false, reason: e instanceof Error ? e.message : String(e) }))
+  const personalGrant = await runPersonalDaysGrant(admin).catch(e => ({ ran: false, error: e instanceof Error ? e.message : String(e) }))
 
   const { data: settings, error } = await admin.from('accrual_settings').select('enabled, first_period_start').maybeSingle()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -36,5 +38,15 @@ export async function GET(request: NextRequest) {
 
   const deductions = await applyDueLeaveDeductions(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
   const digest = await sendApprovalDigest(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
-  return NextResponse.json({ carryover, personalGrant, accruals, deductions, digest })
+  // Anything the daily job hit that needs a person to look at it goes into the tracking digest's "Needs attention" box.
+  const issues: string[] = []
+  const errs = (label: string, r: unknown) => {
+    const e = (r as { errors?: string[]; error?: string; reason?: string; shortfalls?: number }) ?? {}
+    for (const m of e.errors ?? []) issues.push(`${label}: ${m}`)
+    if (e.error) issues.push(`${label}: ${e.error}`)
+  }
+  errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest)
+  if ((deductions as { shortfalls?: number }).shortfalls) issues.push(`${(deductions as { shortfalls?: number }).shortfalls} approved leave request(s) came due with an insufficient balance — see the notices to approvers.`)
+  const tracking = await sendTrackingDigest(admin, issues).catch(e => ({ sent: false, reason: e instanceof Error ? e.message : String(e) }))
+  return NextResponse.json({ tracking, carryover, personalGrant, accruals, deductions, digest })
 }

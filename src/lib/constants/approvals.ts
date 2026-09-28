@@ -44,10 +44,10 @@ export const NOTIFICATION_TEST_MODE: { enabled: boolean; emailRecipients: string
   neverEmailRoles: ['ceo'],
 }
 
-// A copy of every LIVE "approval needed" alert (leave, expense and timesheet submissions) also goes
-// to these addresses, so CHA keeps a record of what Carrileen and Nico were told. Not sent in test mode, and never for test-account
-// submissions (those only ever reach the test recipients above).
-export const APPROVER_ALERT_COPY_TO: string[] = ['communityhousingassociates@gmail.com']
+// A daily digest of everything submitted (leave requests, expenses, timesheets) and everything still waiting on approval is emailed
+// here, for CHA's own tracking. Real staff only — test accounts are left out. Sent by the daily cron; nothing is sent on a day with
+// nothing to report.
+export const TRACKING_DIGEST_TO: string[] = ['communityhousingassociates@gmail.com']
 
 // Closing a date range for accounting (see closed_periods). Lifting a closure is restricted to the CEO override role.
 export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES
