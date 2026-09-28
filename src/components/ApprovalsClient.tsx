@@ -61,7 +61,6 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
 
   const tc = TYPE_STYLE[item.leave_type] || TYPE_STYLE.Bereavement
   const until = daysUntil(item.start_date)
-  const capPct = item.balance_after !== null ? Math.min(Math.round((item.balance_after / 400) * 100), 100) : 0
   const dateRange = item.start_date === item.end_date ? fmtDate(item.start_date) : `${fmtDate(item.start_date)} – ${fmtDate(item.end_date)}`
 
   async function submitApprove() {
@@ -144,10 +143,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
             ) : (
               <>
                 <p className={`text-[14px] font-semibold ${item.balance_after < 0 ? 'text-red-600' : 'text-[#0b2b35]'}`}>{fmtHrs(item.balance_after)} hrs</p>
-                <div className="mt-1.5 bg-[#e8f4f7] rounded-full h-1 overflow-hidden">
-                  <div className="h-full bg-[#02ACC0] rounded-full" style={{ width: `${capPct}%` }} />
-                </div>
-                <p className="text-[10px] text-gray-400 mt-0.5">{capPct}% of 400 hr cap</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{item.balance_current !== null ? `From ${fmtHrs(item.balance_current)} hrs` : 'Balance after this request'}</p>
               </>
             )}
           </div>

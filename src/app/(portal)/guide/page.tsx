@@ -15,6 +15,16 @@ function Section({ id, title, children }: { id: string; title: string; children:
   )
 }
 
+function Figure({ src, alt, caption }: { src: string; alt: string; caption: string }) {
+  return (
+    <figure className="my-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={alt} className="w-full max-w-[720px] rounded-lg border border-[#d4eef2] shadow-sm" loading="lazy" />
+      <figcaption className="text-[11px] text-gray-400 mt-1.5">{caption}</figcaption>
+    </figure>
+  )
+}
+
 function Steps({ items }: { items: React.ReactNode[] }) {
   return (
     <ol className="space-y-2 list-none">
@@ -128,6 +138,9 @@ export default async function GuidePage() {
               'Add a short description for each day worked.',
               <>The <strong>Tags</strong> column flags each day automatically — hover a tag for detail: <strong>Holiday</strong>, <strong>Holiday worked</strong> (hours logged on a holiday), the type of leave taken (<strong>PTO</strong>, <strong>Sick</strong>, <strong>Personal Days</strong>…), <strong>Incomplete</strong> (no hours), <strong>Over 8 hrs</strong>, <strong>Short day</strong> (full-time staff under 8 hours with no leave), and <strong>Overtime</strong> (regular hours past 40 in a week). Next to the pay period you may also see tags for the whole timesheet, such as <strong>Reopened</strong>, <strong>Correction requested</strong>, <strong>Leave added late</strong>, or <strong>Closed by accounting</strong>. Those automatic tags follow your hours and can&apos;t be edited. You can also add your own from the company&apos;s tag list — click <strong>+ Tag</strong> on a day and choose one (for example a grant or program); click the × on a tag to remove it. Your own tags save with the rest of the timesheet and can be changed until you submit. Everything appears in the CSV export and in what your approver sees.</>,
             ]} />
+            <Figure src="/guide/timesheet-add-leave.png" alt="Timesheet days with a + Leave link under each date" caption="Click “+ Leave” under a day to open the leave request form with that day already selected." />
+            <Figure src="/guide/holiday-worked.png" alt="A holiday row with the Worked this holiday at CHA's request box" caption="On a paid holiday, enter the hours you worked at CHA's request. The day is tagged “Holiday worked”." />
+            <Figure src="/guide/year-end-holiday.png" alt="The Year-end paid holiday choice on My Profile" caption="Choose Christmas Eve or New Year's Eve under My Profile → Year-end paid holiday." />
             <p><strong className="text-[#0b2b35]">Saving.</strong> Edits autosave a couple of seconds after you stop typing. You can also click <strong>Save Now</strong> to save immediately.</p>
             <p><strong className="text-[#0b2b35]">Due date.</strong> Each period&apos;s timesheet is due <strong>2 days after the pay period ends</strong>.</p>
             <p className="font-semibold text-[#0b2b35]">Submitting</p>
@@ -143,6 +156,7 @@ export default async function GuidePage() {
           <Section id="leave" title="4. Requesting Leave">
             <p>Go to <strong>Request/Use Leave</strong> from the Dashboard or sidebar — you use it both to ask for leave that needs approval and to record leave that doesn&apos;t (sick leave within your balance).</p>
             <p className="font-semibold text-[#0b2b35]">1. Choose a leave type</p>
+            <Figure src="/guide/leave-types.png" alt="The leave type cards on Request/Use Leave" caption="Pick a leave type. Balances show on the cards that draw from one; Flex Time appears once you have earned some." />
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead><tr className="border-b border-[#f0f7f8]"><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Type</th><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Draws from balance?</th><th className="text-left py-1.5 font-semibold text-[#0b2b35]">Needs approval?</th></tr></thead>
@@ -168,6 +182,7 @@ export default async function GuidePage() {
               <><strong>Personal Days</strong> are 24 hours (3 days), added each January 1. <strong>PTO</strong> means annual leave. Unused PTO, Personal Days and sick leave carry over into the new year up to a combined limit — 240 hours, or 400 hours once you have 60 months of service.</>,
               <><strong>Waiting periods.</strong> PTO and sick leave can&apos;t be taken until you&apos;ve been employed 90 days, and Personal Days not until 6 months (exceptions only by the President and CEO). CHA asks for PTO to be requested at least a week ahead; the form warns you when a request is shorter notice.</>,
             ]} />
+            <Figure src="/guide/voting-hours.png" alt="Election Voting hours with Standard and Extra +2 buttons" caption="Election Voting starts at 4 hours. Choose “Extra +2” to ask for 6 hours — your approver reviews the extra time." />
             <p className="font-semibold text-[#0b2b35]">Steps</p>
             <Bullets items={[
               <><strong>Shortcut:</strong> on your timesheet, click <strong>+ Leave</strong> under any day to open this form with that day already selected.</>,
