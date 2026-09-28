@@ -139,7 +139,7 @@ export default function ScopePage() {
               {
                 icon: '👥',
                 title: 'Employee Roster',
-                desc: 'Live search, employment-type filter, computed tenure, and expandable detail rows with individual PTO/Sick/Vacation balances.',
+                desc: 'Live search, employment-type filter, computed tenure, and expandable detail rows with individual PTO/Sick/Personal Days balances.',
               },
               {
                 icon: '📧',
@@ -182,7 +182,7 @@ export default function ScopePage() {
                 bullets: [
                   'Dynamic greeting with first name and live date',
                   'Pay period progress bar (days elapsed vs. days remaining)',
-                  'Three balance cards — PTO, Sick, Vacation — each with accrual rate badge and days equivalent',
+                  'Three balance cards — PTO, Sick, Personal Days — each with accrual rate badge and days equivalent',
                   'Recent leave requests with color-coded status borders',
                   'Timesheet status card with due-today indicator',
                   'Upcoming leave preview and quick-links panel',
@@ -195,7 +195,7 @@ export default function ScopePage() {
                 color: 'bg-violet-500',
                 status: 'live',
                 bullets: [
-                  '5 leave type cards (PTO, Sick, Vacation, Bereavement, Jury Duty) each showing current balance',
+                  '5 leave type cards (PTO, Sick, Personal Days, Bereavement, Jury Duty) each showing current balance',
                   'Start / end date pickers with auto-fill button calculating workdays × 8 hrs',
                   'Live balance preview — current → remaining with progress bar; red if negative',
                   'Team coverage panel — flags teammates already approved during the same dates',
@@ -254,7 +254,7 @@ export default function ScopePage() {
                 status: 'live',
                 bullets: [
                   'Full monthly grid with navigation — defaults to next month',
-                  'Color-coded event chips: PTO (teal), Sick (violet), Vacation (amber), Bereavement (slate), Holiday (rose), My Leave (navy)',
+                  'Color-coded event chips: PTO (teal), Sick (violet), Personal Days (amber), Bereavement (slate), Holiday (rose), My Leave (navy)',
                   'Today highlighted with teal ring; own leave days shown in dark navy',
                   'Upcoming Leave sidebar for next 30 days with approval status badges',
                   'My Scheduled Leave dark card linking to full request history',
@@ -267,9 +267,9 @@ export default function ScopePage() {
                 status: 'live',
                 bullets: [
                   'Pay period selector (6 rolling bi-weekly periods)',
-                  'Leave type filter tabs: All / PTO / Sick / Vacation',
-                  'Four stat cards: PTO Used, Sick Used, Vacation Used, Employees with Leave',
-                  'Per-employee stacked horizontal bars (teal=PTO, violet=Sick, amber=Vacation)',
+                  'Leave type filter tabs: All / PTO / Sick / Personal Days',
+                  'Four stat cards: PTO Used, Sick Used, Personal Days Used, Employees with Leave',
+                  'Per-employee stacked horizontal bars (teal=PTO, violet=Sick, amber=Personal Days)',
                   'Table with accrual rate, PTO cap % with amber warning ≥ 75%, personal balance',
                   "PDF export: print-optimized layout with CHA logo header and today's date",
                 ],
@@ -286,7 +286,7 @@ export default function ScopePage() {
                   'Include Inactive toggle',
                   'Computed tenure (X yr Y mo) from hire date vs. today',
                   'Hash-based avatar colors for consistent visual identity',
-                  'Expandable detail rows showing PTO, Sick, Vacation balance cards from payroll data',
+                  'Expandable detail rows showing PTO, Sick, Personal Days balance cards from payroll data',
                 ],
               },
               {
@@ -310,7 +310,7 @@ export default function ScopePage() {
                 status: 'planned',
                 bullets: [
                   'Dedicated login view for the Accounting Manager role',
-                  'Bi-weekly payroll report: regular hours worked + PTO, Sick, Vacation, Bereavement, and Jury Duty per employee',
+                  'Bi-weekly payroll report: regular hours worked + PTO, Sick, Personal Days, Bereavement, and Jury Duty per employee',
                   'Formatted for direct Sage data entry — columns match Sage import fields',
                   'Only shows timesheets that have been supervisor-approved',
                   'PDF and CSV (Excel) export with pay period and generation date in filename',
@@ -363,7 +363,7 @@ export default function ScopePage() {
           <div className="space-y-3 text-[13px] text-gray-600">
             <div className="flex gap-3 items-start">
               <span className="text-[#02ACC0] font-bold mt-0.5">•</span>
-              <span><strong className="text-[#0b2b35]">PTO:</strong> Tenure-based accrual — 4.62 to 6.00 hrs/pay period (0–12 mo → 36+ mo); 400-hour carryover cap</span>
+              <span><strong className="text-[#0b2b35]">PTO:</strong> Tenure-based accrual — 4.62 to 6.00 hrs/pay period (0–12 mo → 36+ mo); combined year-end carryover limit of 240 hrs (400 hrs after 60 months)</span>
             </div>
             <div className="flex gap-3 items-start">
               <span className="text-[#02ACC0] font-bold mt-0.5">•</span>
@@ -371,7 +371,7 @@ export default function ScopePage() {
             </div>
             <div className="flex gap-3 items-start">
               <span className="text-[#02ACC0] font-bold mt-0.5">•</span>
-              <span><strong className="text-[#0b2b35]">Vacation Days:</strong> 3 days/year; forfeited if unused at year-end</span>
+              <span><strong className="text-[#0b2b35]">Personal Days:</strong> 24 hrs (3 days) granted each January 1; counts toward the combined year-end carryover limit</span>
             </div>
             <div className="flex gap-3 items-start">
               <span className="text-[#02ACC0] font-bold mt-0.5">•</span>

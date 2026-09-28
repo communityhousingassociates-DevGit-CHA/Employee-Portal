@@ -32,6 +32,10 @@ const TYPE_STYLE: Record<string, { bar: string; badge: string }> = {
   Personal: { bar: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700' },
   Bereavement: { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
   'Jury Duty': { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
+  Voting: { bar: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700' },
+  'Workers Comp': { bar: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700' },
+  Military: { bar: 'bg-emerald-600', badge: 'bg-emerald-50 text-emerald-700' },
+  'Flex Time': { bar: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700' },
 }
 
 function daysAgo(iso: string) {
@@ -299,7 +303,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
   const totalHoliday = item.timesheet_rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
 
   const canOverride = REOPEN_OVERRIDE_ROLES.includes(viewerRole)
-  const dayTags = tagRows(item.timesheet_rows, { fullTime: item.employee_type === 'full-time', customTags })
+  const dayTags = tagRows(item.timesheet_rows, { fullTime: item.employee_type === 'full-time', customTags, yearEnd: item.year_end_holiday })
   // Lock state has its own badge below, so it's left out of the tag list here.
   const sheetTags = timesheetTags({ status: item.status, return_reason: item.return_reason, correction_requested_at: item.correction_requested_at, events: item.events })
   const isLocked = item.lock_reason !== null

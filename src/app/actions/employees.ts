@@ -23,6 +23,8 @@ export async function addEmployee(data: {
   end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
+  is_exempt?: boolean
+  is_director?: boolean
   is_active?: boolean
   address_line1?: string
   address_line2?: string
@@ -46,6 +48,8 @@ export async function addEmployee(data: {
     end_date: data.end_date || null,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
+    is_exempt: data.is_exempt ?? true,
+    is_director: data.is_director ?? false,
     address_line1: data.address_line1 || null,
     address_line2: data.address_line2 || null,
     city: data.city || null,
@@ -71,6 +75,8 @@ export async function editEmployee(id: string, data: {
   end_date?: string
   grant_id: string | null
   pto_uncapped?: boolean
+  is_exempt?: boolean
+  is_director?: boolean
   is_active?: boolean
   address_line1?: string
   address_line2?: string
@@ -94,6 +100,8 @@ export async function editEmployee(id: string, data: {
     end_date: data.end_date || null,
     grant_id: data.grant_id,
     pto_uncapped: data.pto_uncapped ?? false,
+    is_exempt: data.is_exempt ?? true,
+    is_director: data.is_director ?? false,
     // Status is configurable here, but an admin can never deactivate their own account (mirrors setEmployeesActive)
     ...(data.is_active !== undefined && id !== me.id ? { is_active: data.is_active } : {}),
     address_line1: data.address_line1 || null,
@@ -210,7 +218,7 @@ export async function getEmployees() {
   const admin = createAdminClient()
   let query = admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, is_exempt, is_director, year_end_holiday, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
     .order('name')
   // Test accounts (workflow testing) are only visible to the super admin who uses them — invisible to every other admin, including other 'admin'-role staff.
   if (!actor.is_super_admin) query = query.eq('is_test_account', false)
@@ -356,7 +364,7 @@ export async function getEmployeeSummary(id: string) {
   const admin = createAdminClient()
   const { data: e, error } = await admin
     .from('employees')
-    .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
+    .select('id, employee_number, name, email, employee_type, department, job_title, hire_date, is_active, avatar_url, pto_uncapped, is_exempt, is_director, year_end_holiday, leave_balances(pto_hours, sick_hours, personal_hours, flex_hours)')
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
@@ -369,6 +377,7 @@ export async function getEmployeeSummary(id: string) {
     pto_bal: bal ? Number(bal.pto_hours) : 0,
     sick_bal: bal ? Number(bal.sick_hours) : 0,
     personal_bal: bal ? Number(bal.personal_hours) : 0,
+    flex_bal: bal ? Number(bal.flex_hours ?? 0) : 0,
   }
 }
 

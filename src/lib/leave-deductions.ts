@@ -9,7 +9,7 @@ import { LEAVE_EXPENSE_APPROVER_ROLES } from '@/lib/constants/approvals'
 import { fmtDate } from '@/lib/format-date'
 import type { LeaveType } from '@/types'
 
-const COLUMN = { pto: 'pto_hours', sick: 'sick_hours', vacation: 'personal_hours' } as const
+const COLUMN = { pto: 'pto_hours', sick: 'sick_hours', vacation: 'personal_hours', flex: 'flex_hours' } as const
 
 /** Everything the projection needs about one employee: approved leave still waiting to come off the balance, and whether accruals run. */
 export async function loadProjectionContext(admin: SupabaseClient, employeeId: string) {
@@ -61,7 +61,7 @@ export async function applyDueLeaveDeductions(admin: SupabaseClient): Promise<{ 
     .select('id, employee_id, leave_type, start_date, end_date, hours')
     .eq('status', 'approved')
     .is('balance_deducted_at', null)
-    .in('leave_type', ['PTO', 'Sick', 'Personal'])
+    .in('leave_type', ['PTO', 'Sick', 'Personal', 'Flex Time'])
     .lte('start_date', through)
     .order('start_date')
   if (error) throw new Error(error.message)

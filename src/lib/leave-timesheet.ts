@@ -9,7 +9,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentPeriod, periodLockReason } from '@/lib/pay-periods'
 import { loadClosedRanges } from '@/lib/period-lock'
-import { holidayOn } from '@/lib/holidays'
+import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import type { LeaveType, TimesheetRow } from '@/types'
 
@@ -38,8 +38,14 @@ export function weekdaysBetween(start: string, end: string): string[] {
 }
 
 /** Weekdays in the range that are not scheduled holidays — the days leave can actually be taken. */
-export function workdaysBetween(start: string, end: string): string[] {
-  return weekdaysBetween(start, end).filter(d => !holidayOn(d))
+export function workdaysBetween(start: string, end: string, yearEnd?: YearEndChoice | null): string[] {
+  return weekdaysBetween(start, end).filter(d => !holidayOn(d, yearEnd))
+}
+
+/** The employee's Christmas Eve / New Year's Eve choice (null until they pick one). */
+export async function getYearEndChoice(admin: AdminClient, employeeId: string): Promise<YearEndChoice | null> {
+  const { data } = await admin.from('employees').select('year_end_holiday').eq('id', employeeId).maybeSingle()
+  return (data?.year_end_holiday as YearEndChoice | null) ?? null
 }
 
 export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employeeId: string, periodStart: string, periodEnd: string) {
@@ -64,9 +70,10 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
     // Salaried employees get Regular hours on every workday and Holiday hours (instead of Regular) on scheduled holidays.
     const salaried = await isSalariedEmployee(admin, employeeId)
     const defaultDailyHours = salaried ? SALARIED_DAILY_HOURS : 0
+    const yearEnd = await getYearEndChoice(admin, employeeId)
 
     const rows = weekdaysBetween(periodStart, periodEnd).map(work_date => {
-      const holiday = holidayOn(work_date)
+      const holiday = holidayOn(work_date, yearEnd)
       return {
         timesheet_id: timesheet!.id,
         work_date,
@@ -102,8 +109,9 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
  * to Holiday hours (salaried only). A description the employee cleared on purpose ('') is left alone.
  */
 async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: TimesheetRow[]): Promise<TimesheetRow[]> {
+  const yearEnd = await getYearEndChoice(admin, employeeId)
   const needs = rows.some(r => {
-    const holiday = holidayOn(r.work_date)
+    const holiday = holidayOn(r.work_date, yearEnd)
     return r.description === null || (holiday && r.description === holiday) ||
       (!!holiday && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0)
   })
@@ -112,7 +120,7 @@ async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: Ti
 
   const out: TimesheetRow[] = []
   for (const r of rows) {
-    const holiday = holidayOn(r.work_date)
+    const holiday = holidayOn(r.work_date, yearEnd)
     const patch: Partial<TimesheetRow> = {}
     if (r.description === null || (holiday && r.description === holiday)) patch.description = holiday ? HOLIDAY_DESCRIPTION : REGULAR_DESCRIPTION
     if (holiday && salaried && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0) {
@@ -340,10 +348,11 @@ export async function dailyLeaveOverage(
 ): Promise<string | null> {
   if (days.length === 0) return 'Add at least one day.'
   const fmt = (d: string) => `${d.slice(5, 7)}-${d.slice(8)}-${d.slice(0, 4)}`
+  const yearEnd = await getYearEndChoice(admin, employeeId)
   const perDate = new Map<string, number>()
   for (const d of days) {
     if (!(d.hours > 0)) return `${fmt(d.date)}: enter the hours for this day.`
-    if (workdaysBetween(d.date, d.date).length === 0) return `${fmt(d.date)} is a weekend or holiday — leave can only be taken on workdays.`
+    if (workdaysBetween(d.date, d.date, yearEnd).length === 0) return `${fmt(d.date)} is a weekend or holiday — leave can only be taken on workdays.`
     perDate.set(d.date, (perDate.get(d.date) ?? 0) + d.hours)
   }
   for (const [date, hrs] of perDate) {

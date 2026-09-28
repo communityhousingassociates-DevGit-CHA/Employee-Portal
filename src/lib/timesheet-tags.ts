@@ -6,12 +6,14 @@
 // tagRows() / timesheetTags(). Hand-assigned tags (grant/program, Sage codes, activity) would be a stored field merged
 // into these lists — the display code wouldn't change.
 
-import { holidayOn } from '@/lib/holidays'
+import { holidayOn, type YearEndChoice } from '@/lib/holidays'
+import { holidayWorkedHours } from '@/lib/constants/holiday-work'
 import type { LeaveType, TimesheetTag } from '@/types'
 
 export type TagKey =
   // day-level
   | 'holiday' | 'holiday_worked' | 'leave' | 'leave_pto' | 'leave_sick' | 'leave_vacation' | 'leave_bereavement' | 'leave_jury'
+  | 'leave_voting' | 'leave_workers_comp' | 'leave_military' | 'leave_flex'
   | 'incomplete' | 'long_day' | 'short_day' | 'overtime'
   // timesheet-level
   | 'correction_requested' | 'reopened' | 'late_leave' | 'closed'
@@ -27,6 +29,10 @@ export const TAGS: Record<TagKey, TagDef> = {
   leave_vacation: { label: 'Personal Days', cls: 'bg-amber-100 text-amber-700' },
   leave_bereavement: { label: 'Bereavement', cls: 'bg-slate-100 text-slate-600' },
   leave_jury: { label: 'Jury Duty', cls: 'bg-slate-100 text-slate-600' },
+  leave_voting: { label: 'Voting', cls: 'bg-sky-100 text-sky-700' },
+  leave_workers_comp: { label: 'Workers’ Comp', cls: 'bg-rose-100 text-rose-700' },
+  leave_military: { label: 'Military', cls: 'bg-emerald-100 text-emerald-700' },
+  leave_flex: { label: 'Flex Time', cls: 'bg-teal-100 text-teal-700' },
   incomplete: { label: 'Incomplete', cls: 'bg-amber-100 text-amber-700' },
   long_day: { label: 'Over 8 hrs', cls: 'bg-orange-100 text-orange-700' },
   short_day: { label: 'Short day', cls: 'bg-gray-100 text-gray-600' },
@@ -49,6 +55,10 @@ const LEAVE_TAG: Record<LeaveType, TagKey> = {
   Personal: 'leave_vacation',
   Bereavement: 'leave_bereavement',
   'Jury Duty': 'leave_jury',
+  Voting: 'leave_voting',
+  'Workers Comp': 'leave_workers_comp',
+  Military: 'leave_military',
+  'Flex Time': 'leave_flex',
 }
 
 // Colors a managed tag can use (the managed list stores just the key).
@@ -77,6 +87,7 @@ export type TaggableRow = {
   regular_hours: number | string
   leave_hours: number | string
   holiday_hours?: number | string | null
+  holiday_worked_hours?: number | string | null
   leave_type?: LeaveType | null
   tag_ids?: string[] | null
 }
@@ -109,7 +120,7 @@ function weekKey(iso: string): string {
  * Day-level tags for a whole timesheet (rows in date order). Needs the full set because Overtime depends on the
  * running total for the week. `fullTime` enables "Short day", which would be noise for part-time staff.
  */
-export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean; customTags?: TimesheetTag[] } = {}): RowTag[][] {
+export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean; customTags?: TimesheetTag[]; yearEnd?: YearEndChoice | null } = {}): RowTag[][] {
   const customById = new Map((ctx.customTags ?? []).map(t => [t.id, t]))
   const weekRegular = new Map<string, number>()
   return rows.map(row => {
@@ -117,10 +128,11 @@ export function tagRows(rows: TaggableRow[], ctx: { fullTime?: boolean; customTa
     const regular = Number(row.regular_hours)
     const leave = Number(row.leave_hours)
     const holidayHours = Number(row.holiday_hours ?? 0)
-    const holiday = holidayOn(row.work_date)
+    const holiday = holidayOn(row.work_date, ctx.yearEnd)
 
     if (holiday) tags.push(tag('holiday', holiday))
-    if (holiday && regular > 0) tags.push(tag('holiday_worked', `Worked ${regular} hrs on ${holiday}`))
+    const worked = holidayWorkedHours(row, !!holiday)
+    if (holiday && worked > 0) tags.push(tag('holiday_worked', `Worked ${worked} hrs on ${holiday}`))
 
     if (leave > 0) {
       const key = row.leave_type ? LEAVE_TAG[row.leave_type] ?? 'leave' : 'leave'

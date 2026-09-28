@@ -19,6 +19,10 @@ const TYPE_COLOR: Record<string, { bar: string; badge: string }> = {
   Personal: { bar: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700' },
   Bereavement: { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
   'Jury Duty': { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
+  Voting: { bar: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700' },
+  'Workers Comp': { bar: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700' },
+  Military: { bar: 'bg-emerald-600', badge: 'bg-emerald-50 text-emerald-700' },
+  'Flex Time': { bar: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700' },
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -81,6 +85,7 @@ export default async function DashboardPage() {
   const ptoHours = balance ? Number(balance.pto_hours) : 0
   const sickHours = balance ? Number(balance.sick_hours) : 0
   const personalHours = balance ? Number(balance.personal_hours) : 0
+  const flexHours = balance ? Number(balance.flex_hours ?? 0) : 0
 
   const tsTotalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const tsTotalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
@@ -100,6 +105,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {!employee.year_end_holiday && employee.employee_type === 'full-time' && (
+        <div className="bg-sky-50 border border-sky-200 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[13px] text-sky-800"><strong>Choose your year-end holiday.</strong> CHA gives you either Christmas Eve or New Year&apos;s Eve as a paid holiday.</p>
+          <Link href="/profile#year-end-holiday" className="bg-sky-600 text-white text-[12px] font-semibold px-4 py-1.5 rounded-lg hover:bg-sky-700 transition-colors flex-shrink-0">Choose →</Link>
+        </div>
+      )}
       {isManager && pendingCount > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -148,6 +159,7 @@ export default async function DashboardPage() {
             { label: 'PTO', v: `${fmtHrs(ptoHours)}h` },
             { label: 'Sick', v: `${fmtHrs(sickHours)}h` },
             { label: 'Personal Days', v: `${Math.floor(personalHours / 8)}d` },
+            ...(flexHours > 0 ? [{ label: 'Flex', v: `${fmtHrs(flexHours)}h` }] : []),
           ].map(s => (
             <div key={s.label} className="bg-white/10 rounded-lg px-3.5 py-2 text-center min-w-[72px]">
               <p className="text-white text-[16px] font-bold leading-none">{s.v}</p>

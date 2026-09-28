@@ -18,6 +18,7 @@ export default async function RequestPage() {
       employeeName={employee.name}
       employeeIdLabel={formatEmployeeId(employee.employee_number)}
       balance={balance}
+      yearEnd={employee.year_end_holiday}
       closedRanges={closedRanges}
       outlook={{ hireDate: outlook.hireDate, ptoUncapped: outlook.ptoUncapped, accrualsOn: outlook.accrualsOn, reserved: outlook.reserved }}
     />

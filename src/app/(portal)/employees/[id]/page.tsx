@@ -10,6 +10,7 @@ import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import HistoryClient from '@/components/HistoryClient'
 import EmployeeTimesheetView from '@/components/EmployeeTimesheetView'
+import ResignationPayoutCard from '@/components/ResignationPayoutCard'
 
 const MANAGER_ROLES = ['accounting_manager', 'ceo', 'admin']
 
@@ -43,6 +44,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">{employee.name} <span className="text-[13px] text-gray-400 font-normal">{formatEmployeeId(employee.employee_number)}</span></h1>
           <p className="text-[13px] text-gray-500">{employee.job_title || '—'} · {employee.department || '—'}</p>
+          <div className="flex gap-1.5 mt-1">
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${employee.is_exempt ? 'bg-gray-100 text-gray-600' : 'bg-sky-100 text-sky-700'}`}>{employee.is_exempt ? 'Exempt' : 'Non-exempt'}</span>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${employee.is_director ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'}`}>{employee.is_director ? 'Director' : 'Non-director'}</span>
+          </div>
         </div>
         {!employee.is_active && (
           <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-500 ml-auto">Inactive</span>
@@ -67,10 +72,14 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         </div>
       </div>
 
+      {employee.flex_bal > 0 && <p className="text-[12px] text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2 mb-6">Flex time balance: <strong>{employee.flex_bal} hrs</strong> (earned working paid holidays)</p>}
+
+      <ResignationPayoutCard isDirector={!!employee.is_director} ptoBalance={employee.pto_bal} />
+
       {showTimesheets && (
         <div className="mb-8">
           <h2 className="text-[15px] font-bold text-[#0b2b35] mb-3">Timesheets</h2>
-          <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} customTags={customTags} />
+          <EmployeeTimesheetView employeeId={id} periods={periods} initialTimesheet={timesheet} initialRows={rows} customTags={customTags} yearEnd={employee.year_end_holiday} />
         </div>
       )}
 

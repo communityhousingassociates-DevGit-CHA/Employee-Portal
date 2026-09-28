@@ -7,13 +7,14 @@ import { calcTier, SICK_RATE_PER_PERIOD } from '@/lib/constants/accrual'
 import { getCurrentPeriod } from '@/lib/pay-periods'
 import type { LeaveType } from '@/types'
 
-export type BalanceType = 'pto' | 'sick' | 'vacation'
+export type BalanceType = 'pto' | 'sick' | 'vacation' | 'flex'
 
 export function balanceTypeFor(leaveType: LeaveType): BalanceType | null {
   if (leaveType === 'PTO') return 'pto'
   if (leaveType === 'Sick') return 'sick'
   if (leaveType === 'Personal') return 'vacation'
-  return null // Bereavement, Jury Duty draw from no balance
+  if (leaveType === 'Flex Time') return 'flex'
+  return null // Bereavement, Jury Duty, Voting, Workers' Comp, Military draw from no balance
 }
 
 export type ReservedLeave = { id: string; leave_type: LeaveType; start_date: string; end_date?: string; hours: number }

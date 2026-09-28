@@ -67,11 +67,12 @@ async function announceLeavePosting(admin: ReturnType<typeof createAdminClient>,
   }
 }
 
-function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'personal_hours' | null {
+function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'personal_hours' | 'flex_hours' | null {
   if (leaveType === 'PTO') return 'pto_hours'
   if (leaveType === 'Sick') return 'sick_hours'
   if (leaveType === 'Personal') return 'personal_hours'
-  return null // Bereavement, Jury Duty — no balance column tracks these
+  if (leaveType === 'Flex Time') return 'flex_hours'
+  return null // Bereavement, Jury Duty, Voting, Workers' Comp, Military — no balance column tracks these
 }
 
 /** Everything that can reject a set of leave days before anything is saved. Throws a plain-language message. */
@@ -129,6 +130,21 @@ export async function createLeaveRequest(data: {
   if (days.length > 45) throw new Error('A single request can cover up to 45 days.')
   if (new Set(days.map(d => d.date)).size !== days.length) throw new Error('Each date can only appear once in a request.')
   const admin = createAdminClient()
+
+  // Per-type limits (SOP §4). Voting: 4 hrs standard, up to 6 with the approver's OK; it is flagged in the note so the approver
+  // sees that the extra time needs a decision against the policy. Workers' comp covers only the first 3 days.
+  let requestNote = data.note
+  const requestedHours = days.reduce((sum, d) => sum + d.hours, 0)
+  if (data.leave_type === 'Voting') {
+    if (days.length !== 1) throw new Error('Election voting leave is for a single day.')
+    if (requestedHours > 6) throw new Error('Election voting leave is limited to 6 hours (4 standard plus 2 more with manager approval).')
+    if (requestedHours > 4) requestNote = `Extra voting time requested: ${requestedHours} hrs. The standard is 4 hrs; up to 2 additional hrs require manager approval (long distance from home to work).${data.note ? ` ${data.note}` : ''}`
+  }
+  if (data.leave_type === 'Workers Comp' && requestedHours > 24) throw new Error('Workers’ compensation leave covers the first 3 days (24 hrs).')
+  if (data.leave_type === 'Flex Time') {
+    const { data: flex } = await admin.from('leave_balances').select('flex_hours').eq('employee_id', employee.id).maybeSingle()
+    if (requestedHours > Number(flex?.flex_hours ?? 0)) throw new Error('You don’t have enough flex time for this request.')
+  }
   await checkLeaveDays(admin, employee.id, data.leave_type, days)
 
   const totalHours = Math.round(days.reduce((sum, d) => sum + d.hours, 0) * 100) / 100
@@ -153,7 +169,7 @@ export async function createLeaveRequest(data: {
     start_date: startDate,
     end_date: endDate,
     hours: totalHours,
-    note: data.note || null,
+    note: requestNote || null,
     attachment_url: data.attachment_path || null,
     status: autoApprove ? 'approved' : 'pending',
     approved_at: autoApprove ? now : null,
@@ -566,7 +582,7 @@ export async function getMyLeaveOutlook() {
   const admin = createAdminClient()
   const ctx = await loadProjectionContext(admin, employee.id)
   const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
-  const current = { pto: Number(balance?.pto_hours ?? 0), sick: Number(balance?.sick_hours ?? 0), vacation: Number(balance?.personal_hours ?? 0) }
+  const current = { pto: Number(balance?.pto_hours ?? 0), sick: Number(balance?.sick_hours ?? 0), vacation: Number(balance?.personal_hours ?? 0), flex: Number(balance?.flex_hours ?? 0) }
 
   const reservedDays = await loadRequestDays(admin, ctx.reserved.map(r => ({ id: r.id, start_date: r.start_date, end_date: r.end_date ?? r.start_date, hours: r.hours })))
   const reservedDetail = [...ctx.reserved]

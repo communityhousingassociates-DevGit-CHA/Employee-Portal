@@ -6,7 +6,7 @@ import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimes
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
-import { holidayOn } from '@/lib/holidays'
+import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
@@ -57,6 +57,7 @@ export default function TimesheetClient({
   employeeName,
   employeeNumber,
   employeeType,
+  yearEnd,
   periods,
   initialTimesheet,
   initialRows,
@@ -68,6 +69,7 @@ export default function TimesheetClient({
   employeeName: string
   employeeNumber: number
   employeeType: string
+  yearEnd?: YearEndChoice | null
   periods: PayPeriod[]
   initialTimesheet: Timesheet
   initialRows: TimesheetRowType[]
@@ -124,6 +126,7 @@ export default function TimesheetClient({
         description: r.description,
         regular_hours: Number(r.regular_hours),
         leave_hours: Number(r.leave_hours),
+        holiday_worked_hours: Number(r.holiday_worked_hours ?? 0),
         tag_ids: r.tag_ids ?? [],
       })))
       setRows(rs => rs.map(r => ({ ...r, dirty: false })))
@@ -300,7 +303,7 @@ export default function TimesheetClient({
     )
   }
 
-  const dayTags = tagRows(rows, { fullTime: employeeType === 'full-time', customTags })
+  const dayTags = tagRows(rows, { fullTime: employeeType === 'full-time', customTags, yearEnd })
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
   const sheetTags = timesheetTags({ status: timesheet.status, return_reason: timesheet.return_reason, correction_requested_at: timesheet.correction_requested_at, lock_reason: periodLockReason(period, closedRanges) })
   const week1 = rows.slice(0, 5)
@@ -521,7 +524,7 @@ export default function TimesheetClient({
 
 function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean }) {
   const isLeave = Number(row.leave_hours) > 0
-  const isHoliday = !!holidayOn(row.work_date)
+  const isHoliday = tags.some(t => t.key === 'holiday')
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
   const isEmpty = rowTotal === 0 && !isHoliday
   const d = new Date(`${row.work_date}T00:00:00`)
@@ -536,7 +539,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
         <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}</p>
         <p className="text-[10px] text-gray-400">{dayShort}</p>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col gap-1">
         <input
           value={row.description || ''}
           onChange={e => onUpdate(row.id, { description: e.target.value })}
@@ -544,6 +547,14 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
           placeholder="Add description…"
           className="flex-1 px-2 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white"
         />
+        {isHoliday && isSalaried && (
+          <label className="flex items-center gap-1.5 text-[10px] text-rose-600" title="Only if CHA asked you to work this holiday. Exempt staff earn flex time (1.5 × hours worked); non-exempt staff are paid time-and-a-half.">
+            Worked this holiday at CHA&apos;s request:
+            <input type="number" min={0} max={24} step={0.5} value={Number(row.holiday_worked_hours ?? 0) || ''} placeholder="0" disabled={locked}
+              onChange={e => onUpdate(row.id, { holiday_worked_hours: Math.max(0, Math.min(24, Number(e.target.value))) })}
+              className="w-12 text-center px-1 py-0.5 border border-rose-200 rounded text-[11px] bg-white disabled:bg-[#f9fefe]" /> hrs
+          </label>
+        )}
       </div>
       <div className="flex items-center"><TagsCell tags={tags} allTags={allTags} selectedIds={row.tag_ids ?? []} editable={!locked} onChange={ids => onUpdate(row.id, { tag_ids: ids })} /></div>
       {isSalaried ? (

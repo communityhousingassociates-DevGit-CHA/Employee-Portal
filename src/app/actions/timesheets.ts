@@ -10,6 +10,7 @@ import { loadClosedRanges } from '@/lib/period-lock'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
+import { creditHolidayFlex } from '@/lib/holiday-work'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -130,7 +131,7 @@ async function assertNotClosed(admin: ReturnType<typeof createAdminClient>, ts: 
 
 export async function saveTimesheetDraft(
   timesheetId: string,
-  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number; tag_ids?: string[] }[]
+  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number; holiday_worked_hours?: number; tag_ids?: string[] }[]
 ) {
   await requireOwnTimesheet(timesheetId)
   const admin = createAdminClient()
@@ -144,7 +145,7 @@ export async function saveTimesheetDraft(
     const { error } = await admin
       .from('timesheet_rows')
       // Leave hours are never written from here — they come only from approved (or auto-approved sick) leave requests.
-      .update({ description: row.description, regular_hours: row.regular_hours, ...(tagIdsByRow.has(row.id) ? { tag_ids: tagIdsByRow.get(row.id) } : {}) })
+      .update({ description: row.description, regular_hours: row.regular_hours, ...(row.holiday_worked_hours !== undefined ? { holiday_worked_hours: Math.max(0, Math.min(24, Number(row.holiday_worked_hours) || 0)) } : {}), ...(tagIdsByRow.has(row.id) ? { tag_ids: tagIdsByRow.get(row.id) } : {}) })
       .eq('id', row.id)
       .eq('timesheet_id', timesheetId)
     if (error) throw new Error(error.message)
@@ -198,10 +199,10 @@ export async function submitTimesheet(timesheetId: string) {
   revalidatePath('/approvals')
 }
 
-const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number, employee_type), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
+const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number, employee_type, year_end_holiday), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
 
 type RawReviewRow = Timesheet & {
-  employee: { name: string; employee_type: string } | { name: string; employee_type: string }[]
+  employee: { name: string; employee_type: string; year_end_holiday: string | null } | { name: string; employee_type: string; year_end_holiday: string | null }[]
   timesheet_rows: TimesheetForReview['timesheet_rows'] | null
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor: { name: string } | { name: string }[] | null }[] | null
 }
@@ -219,6 +220,7 @@ function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): Timesheet
     events,
     employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
     employee_type: (Array.isArray(employee) ? employee[0]?.employee_type : employee?.employee_type) ?? '',
+    year_end_holiday: ((Array.isArray(employee) ? employee[0]?.year_end_holiday : employee?.year_end_holiday) ?? null) as TimesheetForReview['year_end_holiday'],
     lock_reason: periodLockReason({ start: t.period_start, end: t.period_end }, closedRanges),
   }
 }
@@ -276,10 +278,21 @@ export async function approveTimesheet(id: string) {
   if (error) throw new Error(error.message)
   await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: 'approved' })
 
+  // Holiday work earns exempt staff flex time. A failure here shouldn't undo the approval — tell the approvers instead.
+  let flexNote = ''
+  try {
+    const { credited } = await creditHolidayFlex(admin, id, timesheet.employee_id)
+    if (credited > 0) flexNote = `\n${credited} hrs of flex time were added for holiday work.`
+  } catch (e) {
+    console.error('creditHolidayFlex failed for timesheet', id, e)
+    flexNote = '\nFlex time for holiday work could not be credited automatically — accounting has been asked to check.'
+    await notifyApprovers(admin, timesheet.employee_id, TIMESHEET_APPROVER_ROLES, { title: 'Flex time not credited', body: `Approving this timesheet, the holiday-work flex time could not be credited: ${e instanceof Error ? e.message : 'unknown error'}` })
+  }
+
   await notifyEmployee(admin, timesheet.employee_id, {
     kind: 'approved',
     title: 'Your timesheet was approved',
-    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nApproved by ${actor.name}.`,
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nApproved by ${actor.name}.${flexNote}`,
     link: '/timesheet',
     cta: 'View Timesheet',
   })

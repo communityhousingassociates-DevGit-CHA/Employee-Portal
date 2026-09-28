@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDaySet } from '@/lib/format-date'
 import type { LeaveBalance, LeaveType } from '@/types'
-import { holidayOn } from '@/lib/holidays'
+import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
 import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
@@ -15,12 +15,16 @@ import { fmtHrs, halfHour } from '@/lib/format-hours'
 type DayRow = { id: string; date: string; hours: string }
 type Conflict = { start_date: string; end_date: string; employee_name?: string; dates: string[] }
 
-const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | null }[] = [
+const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; balanceKey: 'pto_hours' | 'sick_hours' | 'personal_hours' | 'flex_hours' | null }[] = [
   { key: 'PTO', label: 'PTO', icon: '🌴', desc: 'Personal time off', balanceKey: 'pto_hours' },
   { key: 'Sick', label: 'Sick Leave', icon: '🤒', desc: 'Illness or medical', balanceKey: 'sick_hours' },
   { key: 'Personal', label: 'Personal Days', icon: '🗓', desc: 'Personal Days time off', balanceKey: 'personal_hours' },
   { key: 'Bereavement', label: 'Bereavement', icon: '🕊', desc: 'Loss of a family member', balanceKey: null },
   { key: 'Jury Duty', label: 'Jury Duty', icon: '⚖️', desc: 'Court summons required', balanceKey: null },
+  { key: 'Voting', label: 'Election Voting', icon: '🗳', desc: '4 hrs standard, up to 6 with approval', balanceKey: null },
+  { key: 'Workers Comp', label: 'Workers’ Comp', icon: '🩹', desc: 'First 3 days of a covered injury', balanceKey: null },
+  { key: 'Military', label: 'Military Service', icon: '🎖', desc: 'Paid leave required by law', balanceKey: null },
+  { key: 'Flex Time', label: 'Flex Time', icon: '⏱', desc: 'Earned by working a paid holiday', balanceKey: 'flex_hours' },
 ]
 
 // A distinct accent per leave type — same idea as the dashboard's color-coded tiles — so the five
@@ -31,27 +35,38 @@ const TYPE_ACCENT: Record<LeaveType, { bar: string; border: string; bg: string; 
   Personal: { bar: 'bg-amber-500', border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
   Bereavement: { bar: 'bg-slate-500', border: 'border-slate-500', bg: 'bg-slate-50', text: 'text-slate-700' },
   'Jury Duty': { bar: 'bg-indigo-500', border: 'border-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-700' },
+  Voting: { bar: 'bg-sky-500', border: 'border-sky-500', bg: 'bg-sky-50', text: 'text-sky-700' },
+  'Workers Comp': { bar: 'bg-rose-500', border: 'border-rose-500', bg: 'bg-rose-50', text: 'text-rose-700' },
+  Military: { bar: 'bg-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  'Flex Time': { bar: 'bg-teal-500', border: 'border-teal-500', bg: 'bg-teal-50', text: 'text-teal-700' },
 }
+
+// Per-type limits (SOP §4). Voting: 4 hrs is standard, up to 6 with the approver's OK, one day. Workers' comp: first 3 days.
+const VOTING_STANDARD_HOURS = 4
+const VOTING_MAX_HOURS = 6
+const WORKERS_COMP_MAX_HOURS = 24
 
 function daysBetweenISO(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 
-function isWorkday(iso: string): boolean {
+function isWorkday(iso: string, yearEnd?: YearEndChoice | null): boolean {
   const dow = new Date(`${iso}T00:00:00`).getDay()
-  return dow !== 0 && dow !== 6 && !holidayOn(iso)
+  return dow !== 0 && dow !== 6 && !holidayOn(iso, yearEnd)
 }
 
 export default function RequestClient({
   employeeName,
   employeeIdLabel,
   balance,
+  yearEnd,
   closedRanges,
   outlook,
 }: {
   employeeName: string
   employeeIdLabel: string
   balance: LeaveBalance | null
+  yearEnd?: YearEndChoice | null
   closedRanges: ClosedRange[]
   outlook: { hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
@@ -74,6 +89,8 @@ export default function RequestClient({
   const selectedType = LEAVE_TYPES.find(t => t.key === leaveType)!
   const selectedBalance = selectedType.balanceKey ? Number(balance?.[selectedType.balanceKey] ?? 0) : null
   const attachmentRequired = leaveType === 'Jury Duty'
+  const defaultDayHours = leaveType === 'Voting' ? String(VOTING_STANDARD_HOURS) : '8'
+  const maxDayHours = leaveType === 'Voting' ? VOTING_MAX_HOURS : 8
 
   const filledDays = days.filter(d => d.date)
   const dates = filledDays.map(d => d.date).sort()
@@ -102,7 +119,7 @@ export default function RequestClient({
     setPicked(p => {
       const next = { ...p }
       if (date in next) delete next[date]
-      else next[date] = '8'
+      else next[date] = defaultDayHours
       return next
     })
     setSigned(false)
@@ -119,7 +136,7 @@ export default function RequestClient({
     setPicked(p => {
       const next = { ...p }
       if (open.length > 0 && open.every(d => d in next)) open.forEach(d => delete next[d])
-      else open.forEach(d => { if (!(d in next)) next[d] = '8' })
+      else open.forEach(d => { if (!(d in next)) next[d] = defaultDayHours })
       return next
     })
     setSigned(false)
@@ -147,7 +164,7 @@ export default function RequestClient({
 
   // Why a weekday can't be picked (null when it can).
   function unavailableReason(date: string): string | null {
-    const holiday = holidayOn(date)
+    const holiday = holidayOn(date, yearEnd)
     if (holiday) return holiday
     if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
     if (date > latest) return leaveType === 'Sick' ? 'Sick leave can’t be planned' : 'Too far ahead'
@@ -167,8 +184,9 @@ export default function RequestClient({
     d.setDate(d.getDate() + days)
     setViewStart(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
   }
-  const badRows = days.some(d => !d.date || !isWorkday(d.date) || !(Number(d.hours) > 0) || Number(d.hours) > 8)
-  const canSubmit = !closedHit && !dayOverage && !beyondLatest && !badRows && signed && !submitting && (!attachmentRequired || !!attachment)
+  const badRows = days.some(d => !d.date || !isWorkday(d.date, yearEnd) || !(Number(d.hours) > 0) || Number(d.hours) > maxDayHours)
+  const limitProblem = leaveType === 'Voting' ? (dayCount > 1 ? 'Election voting leave is for a single day.' : null) : leaveType === 'Workers Comp' && hoursNum > WORKERS_COMP_MAX_HOURS ? `Workers’ compensation leave covers the first 3 days (${WORKERS_COMP_MAX_HOURS} hrs).` : null
+  const canSubmit = !limitProblem && !closedHit && !dayOverage && !beyondLatest && !badRows && signed && !submitting && (!attachmentRequired || !!attachment)
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -235,7 +253,7 @@ export default function RequestClient({
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Leave Type</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {LEAVE_TYPES.map(t => {
+              {LEAVE_TYPES.filter(t => t.key !== 'Flex Time' || leaveType === 'Flex Time' || Number(balance?.flex_hours ?? 0) > 0).map(t => {
                 // A missing balance row means nothing has been loaded yet — show 0, not a blank card.
                 const bal = t.balanceKey ? Number(balance?.[t.balanceKey] ?? 0) : null
                 const isSel = leaveType === t.key
@@ -310,15 +328,15 @@ export default function RequestClient({
                           ) : on ? (
                             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                               <div className="relative">
-                                <input type="number" min="0.5" max="8" step="0.5" value={picked[date]} onChange={e => setDayHours(date, e.target.value)}
+                                <input type="number" min="0.5" max={maxDayHours} step="0.5" value={picked[date]} onChange={e => setDayHours(date, e.target.value)}
                                   className="w-24 pl-3 pr-9 py-1.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white" />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 pointer-events-none">hrs</span>
                               </div>
-                              {[['Full', '8'], ['Half', '4']].map(([lbl, hrs]) => (
+                              {(leaveType === 'Voting' ? [['Standard', '4'], ['Extra +2', '6']] : [['Full', '8'], ['Half', '4']]).map(([lbl, hrs]) => (
                                 <button key={lbl} type="button" onClick={() => setDayHours(date, hrs)}
                                   className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${picked[date] === hrs ? 'bg-[#e0f5f8] border-[#02ACC0] text-[#028a9e]' : 'border-[#d4eef2] text-gray-500 hover:bg-[#f0f7f8]'}`}>{lbl}</button>
                               ))}
-                              {(Number(picked[date]) > 8 || !(Number(picked[date]) > 0)) && <span className="text-[11px] text-red-500">Enter 0.5–8 hrs</span>}
+                              {(Number(picked[date]) > maxDayHours || !(Number(picked[date]) > 0)) && <span className="text-[11px] text-red-500">Enter 0.5–{maxDayHours} hrs</span>}
                             </div>
                           ) : <span className="text-[11px] text-gray-300">Click to add</span>}
                         </div>
@@ -356,6 +374,12 @@ export default function RequestClient({
             <textarea rows={3} placeholder="Add any context…" value={note} onChange={e => setNote(e.target.value)}
               className="w-full px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] resize-none" />
           </div>
+
+          {leaveType === 'Voting' && <div className="text-[12px] bg-sky-50 border border-sky-200 text-sky-800 rounded-xl px-4 py-3">Election voting leave is <strong>4 hours</strong> during normal working hours. If the distance from your home to your work location prevents you from voting outside working hours, up to <strong>2 additional hours</strong> (6 total) may be approved by your manager — choose &ldquo;Extra +2&rdquo; and your approver will review the request against the policy.</div>}
+          {leaveType === 'Workers Comp' && <div className="text-[12px] bg-rose-50 border border-rose-200 text-rose-800 rounded-xl px-4 py-3">For an on-the-job injury covered by Maryland&apos;s workers&apos; compensation law that doesn&apos;t pay disability benefits for the first 3 days, those 3 days are paid leave (up to 24 hours).</div>}
+          {leaveType === 'Military' && <div className="text-[12px] bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-3">CHA provides any paid leave required by applicable law for military service. Your approver will review the request.</div>}
+          {leaveType === 'Flex Time' && <div className="text-[12px] bg-teal-50 border border-teal-200 text-teal-800 rounded-xl px-4 py-3">Flex time is earned by exempt employees who work a paid holiday at CHA&apos;s request (1.5 × the hours worked). It comes off your flex balance when approved.</div>}
+          {limitProblem && <div className="text-[12px] bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3">{limitProblem}</div>}
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">
@@ -494,7 +518,7 @@ export default function RequestClient({
 
           <div className="bg-[#f8fcfd] rounded-xl border border-[#e8f4f7] p-4 space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Policy Reminders</p>
-            {['PTO, Personal Days, Jury Duty, and Bereavement need approval before they are taken. Sick leave is approved automatically when your balance covers it.', 'PTO cap: 400 hrs. Anything above is forfeited.', 'Personal Days days reset January 1 each year.', 'Negative balances require manager approval.'].map(tip => (
+            {['Everything except Sick leave needs approval before it is taken. Sick leave is approved automatically when your balance covers it.', 'Personal Days (24 hrs) are added each January 1.', 'Year-end carryover of PTO + Personal Days + sick is limited to 240 hrs (400 hrs after 60 months of service).', 'Negative balances require manager approval.'].map(tip => (
               <div key={tip} className="flex gap-2 text-[11px] text-gray-500"><span className="text-[#02ACC0] flex-shrink-0 mt-0.5">·</span>{tip}</div>
             ))}
           </div>

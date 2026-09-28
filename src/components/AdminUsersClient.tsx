@@ -32,6 +32,8 @@ type Employee = {
   invite_status: 'not_invited' | 'invited' | 'active'
   is_super_admin: boolean
   pto_uncapped: boolean
+  is_exempt: boolean
+  is_director: boolean
   address_line1: string | null
   address_line2: string | null
   city: string | null
@@ -48,7 +50,7 @@ const staffCategoryOptions: { value: string; label: string }[] = [
   { value: 'resident_advocate', label: 'Resident Advocate' },
 ]
 const deptOptions = ['Housing Programs', 'Finance & Accounting', 'Operations', 'Administration', 'Resident Services', 'Maintenance']
-const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', end_date: '', grant_id: '', pto_uncapped: false, is_active: true, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
+const emptyForm = { first_name: '', last_name: '', middle_initial: '', email: '', type: 'Full-time', role: 'employee', staff_category: 'cha_employee', department: '', job_title: '', hire_date: '', end_date: '', grant_id: '', pto_uncapped: false, is_exempt: true, is_director: false, is_active: true, address_line1: '', address_line2: '', city: '', state: '', postal_code: '' }
 
 const bulkFieldOptions: { value: BulkEditableField; label: string }[] = [
   { value: 'department', label: 'Department' },
@@ -141,7 +143,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
 
   function openEdit(e: Employee) {
     setEditId(e.id)
-    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, end_date: e.end_date || '', grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, is_active: e.status === 'active', address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
+    setForm({ first_name: e.first_name, last_name: e.last_name, middle_initial: e.middle_initial || '', email: e.email, type: e.employee_type, role: e.role, staff_category: e.staff_category, department: e.department || '', job_title: e.job_title || '', hire_date: e.hire_date, end_date: e.end_date || '', grant_id: e.grant_id || '', pto_uncapped: e.pto_uncapped, is_exempt: e.is_exempt ?? true, is_director: !!e.is_director, is_active: e.status === 'active', address_line1: e.address_line1 || '', address_line2: e.address_line2 || '', city: e.city || '', state: e.state || '', postal_code: e.postal_code || '' })
     setError('')
     setShowForm(true)
   }
@@ -153,11 +155,11 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const middle_initial = form.middle_initial || null
       const address = { address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code }
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_active: form.is_active, ...address })
+        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_exempt: form.is_exempt, is_director: form.is_director, is_active: form.is_active, ...address })
         if (editId !== currentEmployeeId) setEmployees(es => es.map(e => e.id === editId ? { ...e, status: form.is_active ? 'active' : 'archived' } : e))
         showToast('Employee updated')
       } else {
-        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_active: form.is_active, ...address })
+        await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_exempt: form.is_exempt, is_director: form.is_director, is_active: form.is_active, ...address })
         showToast('Employee added')
       }
       setShowForm(false)
@@ -370,6 +372,8 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{e.email}</td>
                 <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">
                   {e.role.replace('_', ' ')}
+                  {!e.is_exempt && <span title="Non-exempt" className="ml-1.5 text-[10px] font-bold bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full normal-case">Non-exempt</span>}
+                  {e.is_director && <span title="Director" className="ml-1.5 text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full normal-case">Director</span>}
                   {e.pto_uncapped && <span title="PTO Uncapped exception" className="ml-1.5 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full normal-case">∞ PTO</span>}
                 </td>
                 <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.employee_type}</td>
@@ -530,6 +534,22 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Postal Code</label>
                 <input value={form.postal_code} onChange={e => setForm(f => ({ ...f, postal_code: e.target.value }))} placeholder="21201" className={inputCls} />
+              </div>
+              <div className="sm:col-span-2 flex items-start gap-2.5 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-3 py-2.5">
+                <input type="checkbox" id="is_exempt" checked={form.is_exempt} onChange={e => setForm(f => ({ ...f, is_exempt: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 accent-[#02ACC0] cursor-pointer flex-shrink-0" />
+                <label htmlFor="is_exempt" className="cursor-pointer">
+                  <span className="text-[13px] font-semibold text-[#0b2b35]">Exempt employee</span>
+                  <span className="block text-[11px] text-gray-400">Exempt staff who work a paid holiday at CHA&apos;s request earn flex time (1.5 × hours worked). Uncheck for a non-exempt employee, who is paid time-and-a-half for holiday hours worked instead.</span>
+                </label>
+              </div>
+              <div className="sm:col-span-2 flex items-start gap-2.5 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-3 py-2.5">
+                <input type="checkbox" id="is_director" checked={form.is_director} onChange={e => setForm(f => ({ ...f, is_director: e.target.checked }))}
+                  className="mt-0.5 w-4 h-4 accent-[#02ACC0] cursor-pointer flex-shrink-0" />
+                <label htmlFor="is_director" className="cursor-pointer">
+                  <span className="text-[13px] font-semibold text-[#0b2b35]">Director position</span>
+                  <span className="block text-[11px] text-gray-400">Directors must give 4 weeks&apos; resignation notice to be paid out up to 120 hours of annual leave; non-Directors need 2 weeks.</span>
+                </label>
               </div>
               <div className="sm:col-span-2 flex items-start gap-2.5 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-3 py-2.5">
                 <input type="checkbox" id="pto_uncapped" checked={form.pto_uncapped} onChange={e => setForm(f => ({ ...f, pto_uncapped: e.target.checked }))}

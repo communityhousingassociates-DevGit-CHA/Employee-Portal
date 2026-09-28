@@ -138,7 +138,7 @@ export default async function AdminSopPage() {
           </Section>
 
           <Section id="leave" title="4. Procedure — Leave Requests">
-            <p><strong className="text-[#0b2b35]">Leave types.</strong> Full-time employees receive paid <strong>annual leave</strong> (tracked in the portal as PTO), <strong>personal leave</strong> (tracked as <strong>Personal Days</strong>), and paid <strong>sick and safe leave</strong> (&ldquo;sick leave&rdquo;), each drawn from the employee&apos;s leave balance. <strong>Administrative leave</strong> (jury duty/witness service, election voting, workers&apos; compensation, bereavement, and military service) and <strong>holiday leave</strong> are paid but do not accrue and do not draw from any balance. Part-time employees and independent contractors accrue neither annual, personal, nor sick leave.</p>
+            <p><strong className="text-[#0b2b35]">Leave types.</strong> Full-time employees receive paid <strong>annual leave</strong> (tracked in the portal as PTO), <strong>personal leave</strong> (tracked as <strong>Personal Days</strong>), and paid <strong>sick and safe leave</strong> (&ldquo;sick leave&rdquo;), each drawn from the employee&apos;s leave balance. <strong>Administrative leave</strong> (jury duty/witness service, election voting, workers&apos; compensation, bereavement, and military service) and <strong>holiday leave</strong> are paid but do not accrue and do not draw from any balance. <strong>Flex Time</strong>, earned by exempt employees for holiday work, is a separate balance and can be requested as leave. Part-time employees and independent contractors accrue neither annual, personal, nor sick leave.</p>
             <p className="font-semibold text-[#0b2b35]">Submission</p>
             <Numbered items={[
               <>Leave should be requested through the portal <strong>as it happens</strong> — planned leave (PTO, Personal Days, Bereavement, Jury Duty) can be requested as far ahead as needed, through 12-31-2027, and should be requested as soon as it is known; <strong>Sick leave</strong> cannot be requested in advance and is entered for the day it occurs or after — so timesheets stay current. Dates up to <strong>14 days in the past</strong> can be entered to catch up (through 10-08-2026, entries back to 09-13-2026 are accepted so the current pay period can be brought up to date); earlier dates are not accepted in the portal and must go through the Accounting Manager. Once accounting closes out a pay period, no further changes or requests are made for it.</>,
@@ -155,7 +155,7 @@ export default async function AdminSopPage() {
                 ['', '13–24 months', '5.08 hrs per pay period', '132 hrs'],
                 ['', '25–36 months', '5.54 hrs per pay period', '144 hrs'],
                 ['', 'Over 36 months', '6.00 hrs per pay period', '156 hrs'],
-                ['Personal Days', 'Any tenure', 'Three times per year', '24 hrs'],
+                ['Personal Days', 'Any tenure', 'Granted January 1 each year (3 days)', '24 hrs'],
                 ['Sick leave', 'Any tenure', '3.69 hrs per pay period', '96 hrs'],
               ]}
             />
@@ -175,20 +175,20 @@ export default async function AdminSopPage() {
             <p className="font-semibold text-[#0b2b35]">Payout on separation</p>
             <Bullets items={[
               <>If the employee voluntarily resigns from CHA, CHA pays for up to <strong>120 hours</strong> of accrued annual leave when a <strong>Director</strong> gives at least <strong>4 weeks&apos;</strong> notice of the effective date of resignation, or a <strong>non-Director</strong> gives at least <strong>2 weeks&apos;</strong> notice.</>,
-              'Otherwise, CHA does not pay for any accrued annual leave when employment ends, whether voluntarily or involuntarily.',
+              'Otherwise, CHA does not pay for any accrued annual leave when employment ends, whether voluntarily or involuntarily. Whether an employee is a Director is set on their profile by the Accounting Manager, and the resignation payout calculator on the employee&apos;s page applies this rule.',
               <>CHA <strong>never</strong> pays out accrued sick leave when employment ends.</>,
             ]} />
             <p className="font-semibold text-[#0b2b35]">Administrative leave</p>
             <p>Paid administrative leave is not subject to accrual:</p>
             <Bullets items={[
               <><strong>Jury duty / witness service.</strong> Paid at the regular wage rate for jury duty served, or witness service provided in a matter that is not the employee&apos;s own litigation, during regular hours of employment. The summons must be attached to the leave request.</>,
-              <><strong>Election voting.</strong> Up to 4 hours of paid leave to vote during normal working hours. If the distance between home and work prevents voting outside working hours, the supervisor may extend this leave at their discretion.</>,
+              <><strong>Election voting.</strong> 4 hours of paid leave to vote during normal working hours. If the distance between home and work prevents voting outside working hours, an additional 2 hours (6 in all) may be approved by the supervisor. Choose "Extra +2" on the request; the approver reviews it against this policy.</>,
               <><strong>Workers&apos; compensation.</strong> For an on-the-job injury covered by Maryland&apos;s workers&apos; compensation law, where that law does not pay temporary total disability benefits for the first 3 days of disability, those 3 days are paid leave.</>,
               <><strong>Bereavement.</strong> At the supervisor&apos;s discretion, up to 3 days of paid bereavement leave for the death of a significant other or a family member (grandparent, parent, sibling, child, or grandchild) of the employee or the employee&apos;s significant other.</>,
               <><strong>Military service.</strong> CHA provides any paid leave required by applicable law for military service.</>,
             ]} />
             <p className="font-semibold text-[#0b2b35]">Holiday leave</p>
-            <p>CHA observes the following paid holidays: New Year&apos;s Day, Martin Luther King&apos;s Birthday, Presidents Day, Memorial Day, Juneteenth, Independence Day, Labor Day, Indigenous Day, Thanksgiving Day, Thanksgiving Friday (the day after Thanksgiving), Christmas Day, and either Christmas Eve or New Year&apos;s Eve (each employee&apos;s choice). An exempt employee who works on a paid holiday at CHA&apos;s request is granted flex-time equal to 1.5 times the hours worked that day; a non-exempt employee who does so is paid time-and-a-half for the hours worked.</p>
+            <p>CHA observes the following paid holidays: New Year&apos;s Day, Martin Luther King&apos;s Birthday, Presidents Day, Memorial Day, Juneteenth, Independence Day, Labor Day, Indigenous Day, Thanksgiving Day, Thanksgiving Friday (the day after Thanksgiving), Christmas Day, and either Christmas Eve or New Year&apos;s Eve (each employee&apos;s choice). An exempt employee who works on a paid holiday at CHA&apos;s request is granted flex-time equal to 1.5 times the hours worked that day; a non-exempt employee who does so is paid time-and-a-half for the hours worked. Each employee&apos;s exempt or non-exempt status is set on their profile by the Accounting Manager. Flex time is credited automatically when the timesheet is approved, appears as a separate Flex balance, and is used by requesting <strong>Flex Time</strong> leave; record holiday work on the holiday row of the timesheet. The Christmas Eve or New Year&apos;s Eve day is chosen by each employee under <strong>My Profile → Year-end paid holiday</strong> (changes lock on December 1).</p>
           </Section>
 
           <Section id="benefits" title="5. Benefits Summary">

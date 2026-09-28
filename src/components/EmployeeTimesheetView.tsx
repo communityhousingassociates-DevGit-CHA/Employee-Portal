@@ -6,6 +6,7 @@ import { fmtDateRange, fmtDateShort } from '@/lib/format-date'
 import type { Timesheet, TimesheetRow, TimesheetTag } from '@/types'
 import type { PayPeriod } from '@/lib/pay-periods'
 import RowTags from '@/components/RowTags'
+import type { YearEndChoice } from '@/lib/holidays'
 import { tagRows } from '@/lib/timesheet-tags'
 
 const TARGET_HOURS = 80
@@ -22,12 +23,14 @@ export default function EmployeeTimesheetView({
   initialTimesheet,
   initialRows,
   customTags = [],
+  yearEnd = null,
 }: {
   employeeId: string
   periods: PayPeriod[]
   initialTimesheet: Timesheet | null
   initialRows: TimesheetRow[]
   customTags?: TimesheetTag[]
+  yearEnd?: YearEndChoice | null
 }) {
   const [periodIdx, setPeriodIdx] = useState(0)
   const [timesheet, setTimesheet] = useState<Timesheet | null>(initialTimesheet)
@@ -58,7 +61,7 @@ export default function EmployeeTimesheetView({
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
   const totalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
   const total = totalReg + totalLeave + totalHoliday
-  const dayTags = tagRows(rows, { customTags })
+  const dayTags = tagRows(rows, { customTags, yearEnd })
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
   const week1 = rows.slice(0, 5)
   const week2 = rows.slice(5, 10)

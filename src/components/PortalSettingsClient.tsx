@@ -1,5 +1,6 @@
 'use client'
 
+import { HOLIDAY_WORK_MULTIPLIER } from '@/lib/constants/holiday-work'
 import { useState } from 'react'
 import MileageRateClient from '@/components/MileageRateClient'
 
@@ -165,6 +166,18 @@ export default function PortalSettingsClient({
         </Field>
         <Field label="New Hire Waiting Period (days)" hint="Annual (PTO) and sick leave cannot be taken until this period ends">
           <input type="number" value={settings.new_hire_waiting_days} onChange={e => set('new_hire_waiting_days', Number(e.target.value))} className={inputCls} />
+        </Field>
+        <Field label="Holiday work — exempt employees" hint="Set per employee (Admin → Users → Exempt). Applied when the timesheet is approved.">
+          <p className="text-[13px] text-[#0b2b35] py-2">Flex time = {HOLIDAY_WORK_MULTIPLIER} × hours worked on the paid holiday</p>
+        </Field>
+        <Field label="Holiday work — non-exempt employees" hint="Shown on Reports → Timesheets for payroll.">
+          <p className="text-[13px] text-[#0b2b35] py-2">Time-and-a-half ({HOLIDAY_WORK_MULTIPLIER}×) for hours worked</p>
+        </Field>
+        <Field label="Election voting leave" hint="Approver reviews any request above the standard.">
+          <p className="text-[13px] text-[#0b2b35] py-2">4 hrs standard · up to 6 hrs with manager approval</p>
+        </Field>
+        <Field label="Resignation payout" hint="Director flag is set per employee (Admin → Users). Use the calculator on an employee&apos;s page.">
+          <p className="text-[13px] text-[#0b2b35] py-2">Up to 120 hrs annual leave · Director 4 weeks&apos; notice · non-Director 2 weeks · sick never paid</p>
         </Field>
         <Field label="Personal Days Waiting Period (months)" hint="Personal Days cannot be taken until this period ends">
           <input type="number" value={settings.personal_waiting_months} onChange={e => set('personal_waiting_months', Number(e.target.value))} className={inputCls} />

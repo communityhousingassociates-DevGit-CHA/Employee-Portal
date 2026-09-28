@@ -29,6 +29,7 @@ export default async function TimesheetPage() {
       employeeName={employee.name}
       employeeNumber={employee.employee_number}
       employeeType={employee.employee_type}
+      yearEnd={employee.year_end_holiday}
       periods={periods}
       initialTimesheet={timesheet}
       initialRows={rows}

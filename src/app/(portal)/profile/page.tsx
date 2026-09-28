@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ProfileForm from '@/components/ProfileForm'
 import SalaryCard from '@/components/SalaryCard'
+import YearEndHolidayCard from '@/components/YearEndHolidayCard'
+import type { YearEndChoice } from '@/lib/holidays'
 import { getMySalary } from '@/app/actions/salary'
 
 export default async function ProfilePage() {
@@ -13,7 +15,7 @@ export default async function ProfilePage() {
   const admin = createAdminClient()
   const { data: emp } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, department, job_title, hire_date, avatar_url')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, department, job_title, hire_date, avatar_url, year_end_holiday')
     .eq('user_id', user.id)
     .single()
 
@@ -43,6 +45,7 @@ export default async function ProfilePage() {
         <p className="text-[13px] text-gray-500 mt-0.5">Update your name, photo, and personal details</p>
       </div>
       <ProfileForm profile={profile} userId={user.id} />
+      {emp && <YearEndHolidayCard initial={(emp.year_end_holiday as YearEndChoice | null) ?? null} />}
       <SalaryCard salary={salary} />
     </div>
   )

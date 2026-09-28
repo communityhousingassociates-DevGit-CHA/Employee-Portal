@@ -46,7 +46,7 @@ export async function balancesAsOf(admin: SupabaseClient, asOf: string, employee
   for (const r of leave ?? []) {
     const rec = out.get(r.employee_id as string)
     const type = balanceTypeFor(r.leave_type as LeaveType)
-    if (!rec || !type) continue
+    if (!rec || !type || type === 'flex') continue // flex time isn't reconciled against Sage
     const hours = Number(r.hours)
     if (r.balance_deducted_at && (r.start_date as string) > asOf) rec.since.leaveTaken[type] += hours // deducted, but after D
     else if (!r.balance_deducted_at && (r.start_date as string) <= asOf) rec.since.leaveTaken[type] -= hours // began by D, not yet deducted

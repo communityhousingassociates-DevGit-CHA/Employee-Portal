@@ -17,6 +17,10 @@ const TYPE_STYLE: Record<string, { bar: string; badge: string }> = {
   Personal: { bar: 'bg-amber-400', badge: 'bg-amber-50 text-amber-700' },
   Bereavement: { bar: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600' },
   'Jury Duty': { bar: 'bg-blue-400', badge: 'bg-blue-50 text-blue-700' },
+  Voting: { bar: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700' },
+  'Workers Comp': { bar: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700' },
+  Military: { bar: 'bg-emerald-600', badge: 'bg-emerald-50 text-emerald-700' },
+  'Flex Time': { bar: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700' },
 }
 
 const STATUS_STYLE: Record<string, string> = {

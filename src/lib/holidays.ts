@@ -28,6 +28,23 @@ export const HOLIDAYS: Record<string, string> = {
   '2027-12-31': "New Year's Day (observed)",
 }
 
-export function holidayOn(iso: string): string | null {
-  return HOLIDAYS[iso] ?? null
+// Each employee picks Christmas Eve OR New Year's Eve as their paid holiday (employees.year_end_holiday). When the
+// 24th / 31st is already an observed holiday (2027: Christmas and New Year's Day fall on those dates) the "eve" is the
+// weekday before it. PROVISIONAL until CHA confirms how it handles the weekend/observed years.
+export type YearEndChoice = 'christmas_eve' | 'new_years_eve'
+const YEAR_END_DATES: Record<string, Record<YearEndChoice, string>> = {
+  '2026': { christmas_eve: '2026-12-24', new_years_eve: '2026-12-31' },
+  '2027': { christmas_eve: '2027-12-23', new_years_eve: '2027-12-30' },
+}
+
+export function yearEndDate(year: number | string, choice: YearEndChoice): string | null {
+  return YEAR_END_DATES[String(year)]?.[choice] ?? null
+}
+
+/** The holiday on `iso`, if any. Pass the employee's year-end choice to include their Christmas Eve / New Year's Eve day. */
+export function holidayOn(iso: string, yearEnd?: YearEndChoice | null): string | null {
+  const shared = HOLIDAYS[iso]
+  if (shared) return shared
+  if (yearEnd && yearEndDate(iso.slice(0, 4), yearEnd) === iso) return yearEnd === 'christmas_eve' ? 'Christmas Eve' : "New Year's Eve"
+  return null
 }

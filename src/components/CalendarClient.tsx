@@ -28,6 +28,10 @@ const TYPE_STYLE: Record<string, { cell: string; dot: string; label: string }> =
   personal: { cell: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400', label: 'Personal Days' },
   bereavement: { cell: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400', label: 'Bereavement' },
   'jury duty': { cell: 'bg-blue-100 text-blue-700', dot: 'bg-blue-400', label: 'Jury Duty' },
+  voting: { cell: 'bg-sky-100 text-sky-700', dot: 'bg-sky-400', label: 'Voting' },
+  'workers comp': { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Workers’ Comp' },
+  military: { cell: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', label: 'Military' },
+  'flex time': { cell: 'bg-teal-100 text-teal-700', dot: 'bg-teal-400', label: 'Flex Time' },
   holiday: { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Holiday' },
   mine: { cell: 'bg-[#0b2b35] text-white', dot: 'bg-[#0b2b35]', label: 'My Leave' },
 }

@@ -1,6 +1,7 @@
 export type Role = 'employee' | 'accounting_manager' | 'ceo' | 'admin'
 export type LeaveStatus = 'pending' | 'approved' | 'denied' | 'cancelled'
-export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty'
+export type LeaveType = 'PTO' | 'Sick' | 'Personal' | 'Bereavement' | 'Jury Duty' | 'Voting' | 'Workers Comp' | 'Military' | 'Flex Time'
+export type YearEndHoliday = 'christmas_eve' | 'new_years_eve'
 export type EmployeeType = 'full-time' | 'part-time' | 'consultant'
 export type StaffCategory = 'cha_employee' | 'resident_advocate'
 export type TimesheetStatus = 'draft' | 'submitted' | 'approved'
@@ -41,6 +42,9 @@ export interface Employee {
   force_password_change: boolean
   issues_seen_at: string | null
   pto_uncapped: boolean
+  is_exempt: boolean
+  is_director: boolean
+  year_end_holiday: YearEndHoliday | null
   timesheet_reminder_dismissed_at: string | null
   created_at: string
 }
@@ -110,6 +114,7 @@ export interface LeaveBalance {
   pto_hours: number
   sick_hours: number
   personal_hours: number
+  flex_hours: number
   updated_at: string
 }
 
@@ -157,6 +162,7 @@ export interface TimesheetRow {
   regular_hours: number
   leave_hours: number
   holiday_hours: number
+  holiday_worked_hours: number
   tag_ids: string[]
   leave_type: LeaveType | null
 }
@@ -199,6 +205,7 @@ export interface TimesheetEvent {
 export interface TimesheetForReview extends Timesheet {
   employee_name: string
   employee_type: string
+  year_end_holiday: YearEndHoliday | null
   timesheet_rows: { id: string; work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; tag_ids: string[]; leave_type: LeaveType | null; description: string | null }[]
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null }[]
   /** 'closed' when accounting has closed the dates (reopening then needs the CEO override); null = open. */

@@ -3,6 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
+import { holidayOn } from '@/lib/holidays'
+import { HOLIDAY_WORK_MULTIPLIER, holidayWorkedHours } from '@/lib/constants/holiday-work'
 import { loadRequestDays } from '@/lib/leave-timesheet'
 import { canViewSalaries, canViewTimesheetReports } from '@/lib/constants/salary-access'
 import type { Role } from '@/types'
@@ -21,7 +23,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const { data: employees, error: empError } = await admin
     .from('employees')
-    .select('id, name, hire_date')
+    .select('id, name, hire_date, is_exempt, year_end_holiday')
     .eq('is_active', true)
     .eq('is_test_account', false)
     .order('name')
@@ -34,7 +36,7 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
   const [{ data: balances }, { data: leaveRequests }, { data: timesheets }, { data: expenses }, { data: salaries }] = await Promise.all([
     admin.from('leave_balances').select('*').in('employee_id', employeeIds),
     admin.from('leave_requests').select('*').in('employee_id', employeeIds).eq('status', 'approved').lte('start_date', periodEnd).gte('end_date', periodStart),
-    admin.from('timesheets').select('*, timesheet_rows(regular_hours, leave_hours, holiday_hours, tag_ids)').in('employee_id', employeeIds).eq('period_start', periodStart),
+    admin.from('timesheets').select('*, timesheet_rows(work_date, regular_hours, leave_hours, holiday_hours, holiday_worked_hours, tag_ids)').in('employee_id', employeeIds).eq('period_start', periodStart),
     admin.from('expenses').select('*').in('employee_id', employeeIds).gte('expense_date', periodStart).lte('expense_date', periodEnd),
     admin.from('employee_current_salary').select('employee_id, annual_salary').in('employee_id', employeeIds),
   ])
@@ -80,16 +82,20 @@ export async function getReportSummary(periodStart: string, periodEnd: string) {
 
   const timesheetRows = !canViewTimesheets ? [] : targetEmployees.map(emp => {
     const ts = timesheetByEmployee.get(emp.id)
-    const rows = (ts?.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number }[]
+    const rows = (ts?.timesheet_rows ?? []) as { work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; holiday_worked_hours: number }[]
     const reg_hours = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
     const leave_hours = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
     const holiday_hours = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
+    // Holiday work (SOP §4): exempt staff earn flex time, non-exempt staff are paid time-and-a-half for the hours worked.
+    const holiday_worked = rows.reduce((s, r) => s + holidayWorkedHours(r, !!holidayOn(r.work_date, emp.year_end_holiday)), 0)
+    const is_exempt = emp.is_exempt !== false
+    const holiday_work_credit = Math.round(holiday_worked * HOLIDAY_WORK_MULTIPLIER * 100) / 100
     const annual_salary = salaryByEmployee.get(emp.id) ?? null
     const isSelf = emp.id === me.id
     // Amounts leave the server only for your own row; for others a salary viewer gets a flag and reveals the figure on click.
     const weekly_gross = isSelf && annual_salary !== null ? annual_salary / 52 : null
     const can_reveal = canViewSalary && !isSelf && annual_salary !== null
-    return { id: emp.id, name: emp.name, reg_hours, leave_hours, holiday_hours, status: ts?.status ?? 'draft', weekly_gross, can_reveal }
+    return { id: emp.id, name: emp.name, reg_hours, leave_hours, holiday_hours, holiday_worked, holiday_work_credit, is_exempt, status: ts?.status ?? 'draft', weekly_gross, can_reveal }
   })
 
   const expenseRows = targetEmployees.map(emp => {
