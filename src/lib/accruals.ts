@@ -23,7 +23,7 @@ export async function runAccruals(admin: SupabaseClient, firstPeriodStart: strin
   const count = Math.round((Date.parse(`${current.start}T00:00:00Z`) - Date.parse(`${firstPeriodStart}T00:00:00Z`)) / (14 * 86400000)) + 1
   const periods = getPayPeriods(firstPeriodStart, Math.max(count, 1))
 
-  const { data: employees, error: empError } = await admin.from('employees').select('id, hire_date').eq('is_active', true)
+  const { data: employees, error: empError } = await admin.from('employees').select('id, hire_date').eq('is_active', true).eq('employee_type', 'full-time') // part-time staff and contractors accrue no leave (SOP §4)
   if (empError) { summary.errors.push(empError.message); return summary }
 
   for (const period of periods) {
