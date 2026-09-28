@@ -10,7 +10,7 @@ import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_L
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { firstEligibleDate } from '@/lib/constants/accrual'
 import { loadPolicy } from '@/lib/policy-server'
-import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
 import { denyReasonProblem } from '@/lib/deny-reason'
@@ -88,9 +88,6 @@ async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, emplo
       const what = leaveType === 'Personal' ? 'Personal Days' : leaveType === 'Sick' ? 'sick leave' : 'annual leave (PTO)'
       throw new Error(`${label}: ${what} can’t be taken until ${fmtDate(eligibleFrom)}, when your ${leaveType === 'Personal' ? '6-month' : '90-day'} waiting period ends. An exception can only be granted by the President and CEO.`)
     }
-    if (leaveType === 'Sick' && day.date > latestSickLeaveDate()) {
-      throw new Error(`${label}: sick leave can only be entered for today or earlier — it can’t be planned in advance. Use PTO or Personal Days for planned time off.`)
-    }
     if (day.date > latestLeaveDate()) {
       throw new Error(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
     }
@@ -156,11 +153,21 @@ export async function createLeaveRequest(data: {
   const col = balanceColumnFor(data.leave_type)
   let autoApprove = false
   let balanceBefore = 0
+  // Foreseeable sick leave (a planned appointment) can be booked ahead. Like PTO, leave starting beyond the two-pay-period
+  // window is only RESERVED — judged against the balance projected for its start date and deducted later by the daily job.
+  const startsLater = startDate > deductThroughDate()
   if (col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)) {
     const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
     if (balError) throw new Error(balError.message)
     balanceBefore = balance ? Number(balance[col]) : 0
-    autoApprove = balanceBefore >= totalHours
+    const balanceType = balanceTypeFor(data.leave_type)
+    if (startsLater && balanceType) {
+      const ctx = await loadProjectionContext(admin, employee.id)
+      const proj = projectedAvailable({ type: balanceType, onDate: startDate, current: balanceBefore, reserved: ctx.reserved, hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
+      autoApprove = proj.projected >= totalHours
+    } else {
+      autoApprove = balanceBefore >= totalHours
+    }
   }
 
   const now = new Date().toISOString()
@@ -174,8 +181,8 @@ export async function createLeaveRequest(data: {
     attachment_url: data.attachment_path || null,
     status: autoApprove ? 'approved' : 'pending',
     approved_at: autoApprove ? now : null,
-    // Auto-approved leave is never in the future (sick can't be planned), so its hours come off right away.
-    balance_deducted_at: autoApprove ? now : null,
+    // Auto-approved leave that starts soon comes off the balance right away; leave further out stays reserved until the daily job deducts it.
+    balance_deducted_at: autoApprove && !startsLater ? now : null,
     employee_signed_at: now,
   }).select('id').single()
   if (error) throw new Error(error.message)
@@ -187,11 +194,13 @@ export async function createLeaveRequest(data: {
   }
 
   if (autoApprove && col) {
-    const newBalance = Math.round((balanceBefore - totalHours) * 100) / 100
-    const { error: deductError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', employee.id)
-    if (deductError) {
-      await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
-      throw new Error(deductError.message)
+    const newBalance = startsLater ? balanceBefore : Math.round((balanceBefore - totalHours) * 100) / 100
+    if (!startsLater) {
+      const { error: deductError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', employee.id)
+      if (deductError) {
+        await admin.from('leave_requests').delete().eq('id', created.id) // don't leave an approved request with no balance deduction
+        throw new Error(deductError.message)
+      }
     }
     const leaveLabel = `${data.leave_type} leave (${rangeLabel(startDate, endDate)})`
     const posting = await applyLeaveToTimesheets(admin, employee.id, data.leave_type, days.map(d => ({ date: d.date, hours: d.hours })), { actorId: employee.id, leaveLabel })
@@ -200,7 +209,7 @@ export async function createLeaveRequest(data: {
     await notifyEmployee(admin, employee.id, {
       kind: 'approved',
       title: `Your ${data.leave_type} leave was recorded`,
-      body: `${data.leave_type}\n${daysLabel(days)}\nApproved automatically — ${data.leave_type} leave needs no approval while your balance covers it. New balance: ${newBalance} hrs.`,
+      body: `${data.leave_type}\n${daysLabel(days)}\nApproved automatically — ${data.leave_type} leave needs no approval while your balance covers it. ${startsLater ? 'It is reserved against your projected balance and comes off your balance within two pay periods of the start date.' : `New balance: ${newBalance} hrs.`}`,
       link: '/history',
       cta: 'View My Requests',
     })

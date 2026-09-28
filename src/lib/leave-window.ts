@@ -31,7 +31,3 @@ export function latestLeaveDate(): string {
   return `${lastYear}-12-31`
 }
 
-/** Sick leave can't be planned: it may only be entered for today or earlier (no one can schedule being sick). */
-export function latestSickLeaveDate(now: Date = new Date()): string {
-  return todayET(now)
-}

@@ -8,7 +8,7 @@ import type { LeaveBalance, LeaveType } from '@/types'
 import type { PolicySettings } from '@/lib/policy'
 import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
-import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate, latestSickLeaveDate } from '@/lib/leave-window'
+import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/leave-window'
 import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { ADVANCE_NOTICE_DAYS } from '@/lib/constants/accrual'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
@@ -165,8 +165,8 @@ export default function RequestClient({
   const closedHit = days.map(d => d.date ? closedRangeOverlapping(d.date, d.date, closedRanges) : null).find(Boolean) ?? null
 
   const earliest = earliestLeaveDate()
-  // Planned leave can be booked well ahead; sick leave can't (no one can schedule being sick).
-  const latest = leaveType === 'Sick' ? latestSickLeaveDate() : latestLeaveDate()
+  // Any leave — including foreseeable sick leave like a planned appointment — can be booked ahead.
+  const latest = latestLeaveDate()
   const beyondLatest = !!end && end > latest
 
   // Why a weekday can't be picked (null when it can).
@@ -174,7 +174,7 @@ export default function RequestClient({
     const holiday = holidayOn(date, yearEnd)
     if (holiday) return holiday
     if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
-    if (date > latest) return leaveType === 'Sick' ? 'Sick leave can’t be planned' : 'Too far ahead'
+    if (date > latest) return 'Too far ahead'
     if (closedRangeOverlapping(date, date, closedRanges)) return 'Period closed'
     return null
   }
@@ -362,13 +362,11 @@ export default function RequestClient({
               {dayCount === 0 ? 'No days selected yet.' : <><strong className="text-[#0b2b35]">{dayCount} day{dayCount === 1 ? '' : 's'}</strong> selected · <strong className="text-[#0b2b35]">{hoursNum} hrs</strong> total{dates.some(d => d < viewStart || d > viewEnd) ? ' (including other pay periods — use Prev/Next to review)' : ''}</>}
             </p>
             <p className="text-[11px] text-gray-400 -mt-2 mb-4">
-              Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). <strong>Sick leave</strong> can only be for today or earlier. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
+              Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). Foreseeable <strong>sick leave</strong> (like a planned appointment) can be booked ahead too — give at least 7 days&apos; notice when you know that far in advance. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
             </p>
             {beyondLatest && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">
-                {leaveType === 'Sick'
-                  ? 'Sick leave can’t be requested for future dates. Use PTO or Personal Days for planned time off.'
-                  : `Leave can be requested through ${fmtDate(latestLeaveDate())}.`}
+                {`Leave can be requested through ${fmtDate(latestLeaveDate())}.`}
               </div>
             )}
             {dayOverage && (
@@ -482,6 +480,7 @@ export default function RequestClient({
                   )}
                   {isNegative && <div className="mt-3 text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2">{projection ? `Your projected balance on ${fmtDate(start)} doesn’t cover this request, so it can’t be approved as is.` : 'Negative balance will require manager approval.'}</div>}
                   {startsLater && !isNegative && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">Leave starting more than two pay periods out is <strong>reserved</strong> when approved. It comes off your balance once it is within two pay periods of the start date, and the projected balance above must actually be available then for the leave to be valid.{!outlook.accrualsOn && ' (Accruals aren’t switched on yet, so none are projected.)'}</div>}
+                  {leaveType === 'Sick' && !!start && start > todayET() && daysBetweenISO(todayET(), start) < ADVANCE_NOTICE_DAYS && <div className="mt-3 text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2">If you knew about this more than a week ago, CHA asks for at least 7 days&apos; notice of foreseeable sick leave. Otherwise, let your supervisor know as soon as practicable.</div>}
                   {leaveType === 'PTO' && !!start && start > todayET() && daysBetweenISO(todayET(), start) < ADVANCE_NOTICE_DAYS && <div className="mt-3 text-[11px] bg-amber-50 border border-amber-200 text-amber-700 rounded-lg px-3 py-2">CHA asks for annual leave to be requested at least one week in advance. This starts in {daysBetweenISO(todayET(), start)} day{daysBetweenISO(todayET(), start) === 1 ? '' : 's'}, so approval is at your supervisor&apos;s discretion and depends on staffing.</div>}
                   {!startsLater && !!start && start > todayET() && !isNegative && hoursNum > 0 && balType && <div className="mt-3 text-[11px] bg-[#f0fbfc] border border-[#d4eef2] text-[#028a9e] rounded-lg px-3 py-2">This leave starts within the next two pay periods, so the hours come off your balance as soon as it is approved.</div>}
                   {leaveType === 'Sick' && hoursNum > 0 && !isNegative && <div className="mt-3 text-[11px] bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg px-3 py-2">Sick leave is approved automatically when your balance covers it.</div>}
