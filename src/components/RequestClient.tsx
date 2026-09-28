@@ -22,6 +22,16 @@ const LEAVE_TYPES: { key: LeaveType; label: string; icon: string; desc: string; 
   { key: 'Jury Duty', label: 'Jury Duty', icon: '⚖️', desc: 'Court summons required', balanceKey: null },
 ]
 
+// A distinct accent per leave type — same idea as the dashboard's color-coded tiles — so the five
+// cards read at a glance instead of only differing by which one has the teal "selected" highlight.
+const TYPE_ACCENT: Record<LeaveType, { bar: string; border: string; bg: string; text: string }> = {
+  PTO: { bar: 'bg-[#02ACC0]', border: 'border-[#02ACC0]', bg: 'bg-[#f0fbfc]', text: 'text-[#028a9e]' },
+  Sick: { bar: 'bg-violet-500', border: 'border-violet-500', bg: 'bg-violet-50', text: 'text-violet-700' },
+  Personal: { bar: 'bg-amber-500', border: 'border-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
+  Bereavement: { bar: 'bg-slate-500', border: 'border-slate-500', bg: 'bg-slate-50', text: 'text-slate-700' },
+  'Jury Duty': { bar: 'bg-indigo-500', border: 'border-indigo-500', bg: 'bg-indigo-50', text: 'text-indigo-700' },
+}
+
 function isWorkday(iso: string): boolean {
   const dow = new Date(`${iso}T00:00:00`).getDay()
   return dow !== 0 && dow !== 6 && !holidayOn(iso)
@@ -225,11 +235,13 @@ export default function RequestClient({
                 const bal = t.balanceKey ? Number(balance?.[t.balanceKey] ?? 0) : null
                 const isSel = leaveType === t.key
                 const after = isSel && bal !== null && hoursNum > 0 ? bal - hoursNum : null
+                const accent = TYPE_ACCENT[t.key]
                 return (
                   <button key={t.key} onClick={() => { setLeaveType(t.key) }}
-                    className={`text-left p-3 rounded-xl border-2 transition-all ${leaveType === t.key ? 'border-[#02ACC0] bg-[#f0fbfc]' : 'border-[#e8f4f7] hover:border-[#d4eef2]'}`}>
+                    className={`relative text-left p-3 pt-4 rounded-xl border-2 overflow-hidden transition-all ${isSel ? `${accent.border} ${accent.bg}` : 'border-[#e8f4f7] hover:border-[#d4eef2]'}`}>
+                    <div className={`absolute top-0 left-0 right-0 h-1 ${accent.bar}`} />
                     <div className="text-[18px] mb-1">{t.icon}</div>
-                    <p className={`text-[12px] font-bold ${leaveType === t.key ? 'text-[#028a9e]' : 'text-[#0b2b35]'}`}>{t.label}</p>
+                    <p className={`text-[12px] font-bold ${isSel ? accent.text : 'text-[#0b2b35]'}`}>{t.label}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{t.desc}</p>
                     {bal !== null && (
                       <div className="mt-2 pt-2 border-t border-[#e8f4f7]">

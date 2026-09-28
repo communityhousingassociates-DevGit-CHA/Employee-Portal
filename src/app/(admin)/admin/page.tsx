@@ -54,11 +54,12 @@ export default async function AdminPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
         {[
-          { label: 'Active Employees', value: active ?? 0, icon: '👥', color: 'text-[#02ACC0]' },
-          { label: 'Pending Approvals', value: pendingApprovals, icon: '⏳', color: 'text-amber-500' },
-          { label: 'Inactive Users', value: archived ?? 0, icon: '🗄️', color: 'text-gray-400' },
+          { label: 'Active Employees', value: active ?? 0, icon: '👥', color: 'text-[#02ACC0]', bar: 'bg-[#02ACC0]' },
+          { label: 'Pending Approvals', value: pendingApprovals, icon: '⏳', color: 'text-amber-500', bar: 'bg-amber-400' },
+          { label: 'Inactive Users', value: archived ?? 0, icon: '🗄️', color: 'text-gray-400', bar: 'bg-gray-300' },
         ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] p-5">
+          <div key={s.label} className="relative bg-white rounded-xl border border-[#d4eef2] p-5 overflow-hidden">
+            <div className={`absolute top-0 left-0 right-0 h-1 ${s.bar}`} />
             <div className="text-2xl mb-2">{s.icon}</div>
             <div className={`text-[28px] font-black ${s.color}`}>{s.value}</div>
             <div className="text-[11px] text-gray-400 uppercase tracking-wide mt-0.5">{s.label}</div>
@@ -66,34 +67,40 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div className="bg-white rounded-xl border border-[#d4eef2] p-6">
-          <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">User Management</h2>
-          <div className="flex flex-col gap-2">
-            <Link href="/admin/users" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">👤</span> View &amp; manage all employees
-            </Link>
-            <Link href="/admin/users?action=new" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">➕</span> Add new employee
-            </Link>
-            <Link href="/admin/import" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">📥</span> Bulk import from spreadsheet
-            </Link>
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-[13px] font-bold text-[#0b2b35] mb-3 uppercase tracking-wide">User Management</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { href: '/admin/users', icon: '👤', title: 'Manage Employees', desc: 'View, edit, and manage every portal user', color: 'bg-[#02ACC0]' },
+              { href: '/admin/users?action=new', icon: '➕', title: 'Add Employee', desc: 'Create a new employee record', color: 'bg-emerald-600' },
+              { href: '/admin/import', icon: '📥', title: 'Bulk Import', desc: 'Load employees from a spreadsheet', color: 'bg-rose-500' },
+            ].map(t => (
+              <Link key={t.href} href={t.href} className={`${t.color} rounded-xl p-5 text-white hover:opacity-90 transition-opacity group`}>
+                <span className="text-[24px]">{t.icon}</span>
+                <h3 className="text-[14px] font-bold uppercase tracking-wide mt-3">{t.title}</h3>
+                <p className="text-[12px] text-white/80 mt-1 leading-snug">{t.desc}</p>
+                <span className="text-[11px] font-bold mt-3 inline-flex items-center gap-1 group-hover:gap-2 transition-all">VIEW <span>→</span></span>
+              </Link>
+            ))}
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-[#d4eef2] p-6">
-          <h2 className="text-[14px] font-bold text-[#0b2b35] mb-4">Portal Settings</h2>
-          <div className="flex flex-col gap-2">
-            <Link href="/admin/grants" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">🏷️</span> Manage grants &amp; funding sources
-            </Link>
-            <Link href="/admin/settings#leave" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">📋</span> Leave policy &amp; accrual rules
-            </Link>
-            <Link href="/admin/settings#payroll" className="flex items-center gap-3 p-3 rounded-lg border border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f0f7f8] transition-colors text-[13px] font-medium text-[#0b2b35]">
-              <span className="text-lg">💰</span> Pay period &amp; payroll settings
-            </Link>
+        <div>
+          <h2 className="text-[13px] font-bold text-[#0b2b35] mb-3 uppercase tracking-wide">Portal Settings</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[
+              { href: '/admin/grants', icon: '🏷️', title: 'Grants & Funding', desc: 'Manage grants and funding sources', color: 'bg-violet-500' },
+              { href: '/admin/settings#leave', icon: '📋', title: 'Leave Policy', desc: 'Accrual rules and leave settings', color: 'bg-amber-500' },
+              { href: '/admin/settings#payroll', icon: '💰', title: 'Payroll Settings', desc: 'Pay periods and payroll configuration', color: 'bg-slate-600' },
+            ].map(t => (
+              <Link key={t.href} href={t.href} className={`${t.color} rounded-xl p-5 text-white hover:opacity-90 transition-opacity group`}>
+                <span className="text-[24px]">{t.icon}</span>
+                <h3 className="text-[14px] font-bold uppercase tracking-wide mt-3">{t.title}</h3>
+                <p className="text-[12px] text-white/80 mt-1 leading-snug">{t.desc}</p>
+                <span className="text-[11px] font-bold mt-3 inline-flex items-center gap-1 group-hover:gap-2 transition-all">VIEW <span>→</span></span>
+              </Link>
+            ))}
           </div>
         </div>
       </div>
