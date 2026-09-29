@@ -460,7 +460,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                         {e.invite_status === 'invited' ? 'Resend Invite' : 'Send Invite'}
                       </button>
                     )}
-                    {isSuperAdmin && e.status === 'active' && !e.login_geofence_regions?.includes('*') && (
+                    {e.status === 'active' && !e.login_geofence_regions?.includes('*') && (
                       e.geofence_override_until && Date.parse(e.geofence_override_until) > Date.now() ? (
                         <button onClick={() => handleGeofence(e.id, 0)} disabled={busy} title={`Signing in from anywhere until ${fmtDate(e.geofence_override_until)}`} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40">Travel access until {fmtDate(e.geofence_override_until)} · Clear</button>
                       ) : (

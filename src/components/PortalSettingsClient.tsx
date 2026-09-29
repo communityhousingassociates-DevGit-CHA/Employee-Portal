@@ -4,6 +4,10 @@ import { useState, useTransition } from 'react'
 import MileageRateClient from '@/components/MileageRateClient'
 import { savePolicySettings, saveGeofenceSettings } from '@/app/actions/portal-settings'
 import type { GeofenceSettings } from '@/lib/geofence'
+import { setGeofenceOverride } from '@/app/actions/employees'
+import { fmtDate } from '@/lib/format-date'
+
+type TravelRow = { id: string; name: string; job_title: string | null; override_until: string | null; granted_by: string | null }
 import { HOLIDAY_WORK_MULTIPLIER } from '@/lib/constants/holiday-work'
 import type { PolicySettings } from '@/lib/policy'
 
@@ -39,13 +43,29 @@ export default function PortalSettingsClient({
   initialPolicy,
   initialGeofence,
   canEditGeofence,
+  travel,
 }: {
   mileageRates: { id: string; year: number; rate_per_mile: number; updated_at: string }[]
   canEditMileage: boolean
   initialPolicy: PolicySettings
   initialGeofence: GeofenceSettings
   canEditGeofence: boolean
+  travel: TravelRow[]
 }) {
+  const [travelRows, setTravelRows] = useState<TravelRow[]>(travel)
+  const [travelMsg, setTravelMsg] = useState<string | null>(null)
+  const [travelPending, startTravel] = useTransition()
+  function setTravel(id: string, days: number) {
+    setTravelMsg(null)
+    startTravel(async () => {
+      try {
+        await setGeofenceOverride(id, days)
+        const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null
+        setTravelRows(rs => rs.map(r => r.id === id ? { ...r, override_until: until, granted_by: until ? 'you' : null } : r))
+        setTravelMsg(days > 0 ? `Travel access granted for ${days} days.` : 'Travel access cleared.')
+      } catch (e) { setTravelMsg(e instanceof Error ? e.message : 'Could not update travel access') }
+    })
+  }
   const [geoEnabled, setGeoEnabled] = useState(initialGeofence.enabled)
   const [geoRegions, setGeoRegions] = useState(initialGeofence.regions.join(', '))
   const [geoMsg, setGeoMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -154,6 +174,25 @@ export default function PortalSettingsClient({
           {geoMsg && <span className={`text-[12px] ${geoMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{geoMsg.text}</span>}
         </div>
         {!canEditGeofence && <p className="sm:col-span-2 text-[11px] text-gray-400">Only the super administrator can change this rule.</p>}
+      </Section>
+
+      <Section id="travel" title="Travel Access (temporary sign-in from anywhere)">
+        <div className="sm:col-span-2 space-y-2">
+          <p className="text-[11px] text-gray-400">If someone is traveling, or their phone shows up outside the allowed states, grant travel access before they sign in. It expires on its own, and who granted it is recorded. The System Administrator&apos;s account is always allowed from anywhere.</p>
+          {travelRows.map(r => (
+            <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 bg-[#f8fcfd] border border-[#e8f4f7] rounded-lg px-4 py-2.5">
+              <div>
+                <p className="text-[13px] font-semibold text-[#0b2b35]">{r.name}{r.job_title && <span className="font-normal text-gray-400"> · {r.job_title}</span>}</p>
+                <p className={`text-[11px] ${r.override_until ? 'text-sky-700' : 'text-gray-400'}`}>{r.override_until ? `Travel access until ${fmtDate(r.override_until)}${r.granted_by ? ` (granted by ${r.granted_by})` : ''}` : 'Allowed states only'}</p>
+              </div>
+              <div className="flex gap-1.5">
+                {[1, 7, 14].map(d => <button key={d} disabled={travelPending} onClick={() => setTravel(r.id, d)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8] disabled:opacity-40">{d} day{d === 1 ? '' : 's'}</button>)}
+                {r.override_until && <button disabled={travelPending} onClick={() => setTravel(r.id, 0)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40">Clear</button>}
+              </div>
+            </div>
+          ))}
+          {travelMsg && <p className="text-[12px] text-emerald-600">{travelMsg}</p>}
+        </div>
       </Section>
 
       <Section id="payroll" title="Pay Period &amp; Payroll (reference)">

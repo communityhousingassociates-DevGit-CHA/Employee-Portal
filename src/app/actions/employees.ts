@@ -225,15 +225,40 @@ export async function getEmployees() {
   })
 }
 
-/** Super admin only — lets someone sign in from anywhere for `days` days (a business trip, a phone on an odd carrier). 0 clears it. */
+/** Roles that may grant or clear travel access (temporary sign-in from outside the allowed states). */
+const TRAVEL_ACCESS_ROLES = ['admin', 'ceo', 'accounting_manager'] as const
+
+/** Lets someone sign in from anywhere for `days` days (a business trip, a phone on an odd carrier). 0 clears it. Records who granted it. */
 export async function setGeofenceOverride(id: string, days: number) {
-  await requireSuperAdmin()
+  const me = await requireRole([...TRAVEL_ACCESS_ROLES])
   if (!Number.isFinite(days) || days < 0 || days > 30) throw new Error('Choose between 0 and 30 days.')
   const admin = createAdminClient()
+  const { data: target, error: readError } = await admin.from('employees').select('login_geofence_regions').eq('id', id).single()
+  if (readError) throw new Error(readError.message)
+  if ((target.login_geofence_regions as string[] | null)?.includes('*')) throw new Error('This account is already allowed from anywhere.')
   const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null
-  const { error } = await admin.from('employees').update({ geofence_override_until: until }).eq('id', id)
+  const { error } = await admin.from('employees').update({ geofence_override_until: until, geofence_override_by: days > 0 ? me.id : null }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
+  revalidatePath('/admin/settings')
+}
+
+/** Staff the location rule applies to, with any travel access currently granted. */
+export async function getTravelAccessList() {
+  await requireRole([...TRAVEL_ACCESS_ROLES])
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('employees')
+    .select('id, name, job_title, geofence_override_until, login_geofence_regions, granter:employees!employees_geofence_override_by_fkey(name)')
+    .eq('is_active', true).eq('is_test_account', false).order('name')
+  if (error) throw new Error(error.message)
+  return (data ?? [])
+    .filter(e => !(e.login_geofence_regions as string[] | null)?.includes('*'))
+    .map(e => {
+      const g = e.granter as unknown as { name: string } | { name: string }[] | null
+      const until = e.geofence_override_until as string | null
+      return { id: e.id as string, name: e.name as string, job_title: (e.job_title as string | null) ?? null, override_until: until && Date.parse(until) > Date.now() ? until : null, granted_by: (Array.isArray(g) ? g[0]?.name : g?.name) ?? null }
+    })
 }
 
 /** Super admin only — flips an employee's test-account flag. Test accounts are hidden from every other admin, the shared calendar, the directory, and real approvers' queues; used for workflow testing without touching real staff data. */
