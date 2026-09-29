@@ -8,6 +8,7 @@ import { getUnseenIssueCount, getOpenIssueCount } from '@/app/actions/report-iss
 import { getMyNotifications } from '@/app/actions/notifications'
 import Image from 'next/image'
 import Link from 'next/link'
+import IdleLogout from '@/components/IdleLogout'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let displayName = 'User'
@@ -64,6 +65,7 @@ export default async function PortalLayout({ children }: { children: React.React
       }
       sidebar={<Sidebar role={role} openIssueCount={openIssueCount} />}
     >
+      <IdleLogout />
       {children}
     </ResponsiveShell>
   )

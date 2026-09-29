@@ -1,5 +1,6 @@
 'use client'
 
+import { ACTIVITY_COOKIE } from '@/lib/constants/session'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -43,6 +44,7 @@ export default function Sidebar({ role = 'employee', openIssueCount = 0 }: { rol
     await fetch('/api/demo-logout', { method: 'POST' })
     const supabase = createClient()
     await supabase.auth.signOut()
+    document.cookie = `${ACTIVITY_COOKIE}=; path=/; max-age=0`
     router.push('/login')
     router.refresh()
   }

@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { ACTIVITY_COOKIE, IDLE_LOGOUT_MS } from '@/lib/constants/session'
 
 const SUPABASE_HOST = (() => {
   try {
@@ -152,6 +153,23 @@ export async function middleware(request: NextRequest) {
       return securityHeaders(NextResponse.redirect(new URL('/login', request.url)), csp)
     }
   }
+
+  // Inactivity sign-out. The browser keeps ACTIVITY_COOKIE fresh while the person is actually using the portal (see IdleLogout);
+  // a page request from a session idle longer than the limit — laptop asleep, browser reopened — signs it out here instead.
+  // Only page loads are checked: an RPC-style Server Action can't sensibly be redirected, and open tabs are covered by the timer.
+  if (user && request.method === 'GET' && !isServerAction) {
+    const lastActive = Number(request.cookies.get(ACTIVITY_COOKIE)?.value)
+    if (lastActive > 0 && Date.now() - lastActive > IDLE_LOGOUT_MS) {
+      try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* cookies are cleared below regardless */ }
+      const redirect = NextResponse.redirect(new URL('/login?reason=idle', request.url))
+      supabaseResponse.cookies.getAll().forEach(c => redirect.cookies.set(c))
+      redirect.cookies.set(ACTIVITY_COOKIE, '', { path: '/', maxAge: 0 })
+      return securityHeaders(redirect, csp)
+    }
+    if (!lastActive) supabaseResponse.cookies.set(ACTIVITY_COOKIE, String(Date.now()), { path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+  }
+  // Nobody signed in: drop any leftover activity time so the next login starts a fresh clock.
+  if (!user && request.cookies.has(ACTIVITY_COOKIE)) supabaseResponse.cookies.set(ACTIVITY_COOKIE, '', { path: '/', maxAge: 0 })
 
   // Redirect unauthenticated users to login
   if (!user && !pathname.startsWith('/login')) {

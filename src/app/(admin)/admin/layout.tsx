@@ -5,6 +5,7 @@ import ResponsiveShell from '@/components/ResponsiveShell'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canViewSalaries, hasPayrollAccess } from '@/lib/constants/salary-access'
+import IdleLogout from '@/components/IdleLogout'
 
 const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
@@ -92,6 +93,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       }
     >
       <div className="bg-[#f0f7f8] -m-4 sm:-m-6 md:-m-8 p-4 sm:p-6 md:p-8 min-h-full">
+        <IdleLogout />
         {children}
       </div>
     </ResponsiveShell>

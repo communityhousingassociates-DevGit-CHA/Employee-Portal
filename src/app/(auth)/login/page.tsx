@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -18,6 +18,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [idleNotice, setIdleNotice] = useState(false)
+  useEffect(() => { setIdleNotice(new URLSearchParams(window.location.search).get('reason') === 'idle') }, [])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -102,6 +104,11 @@ export default function LoginPage() {
               required />
           </div>
 
+          {idleNotice && !error && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[13px] rounded-lg px-3 py-2">
+              You were signed out after 4 hours of inactivity. Please sign in again.
+            </div>
+          )}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-3 py-2">
               {error}
