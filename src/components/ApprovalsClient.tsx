@@ -14,6 +14,7 @@ import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
 import LeaveDaysList from '@/components/LeaveDaysList'
+import LeaveRecordDetail from '@/components/LeaveRecordDetail'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null; reserve_only?: boolean; projected_after?: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -59,6 +60,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
   const [denyReason, setDenyReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showRecord, setShowRecord] = useState(false)
 
   const tc = TYPE_STYLE[item.leave_type] || TYPE_STYLE.Bereavement
   const until = daysUntil(item.start_date)
@@ -110,6 +112,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
               <p className="font-bold text-[15px] text-[#0b2b35] leading-tight">{item.employee_name}</p>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{item.leave_type}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pending review</span>
                 <span className="text-[11px] text-gray-400">Submitted {daysAgo(item.created_at)}</span>
                 {until && <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded-full">Starts {until}</span>}
               </div>
@@ -166,6 +169,9 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-red-500 mb-4">⚠️ No summons attached</div>
         )}
 
+        <button onClick={() => setShowRecord(v => !v)} className="text-[11px] font-semibold text-[#028a9e] hover:underline mb-2">{showRecord ? 'Hide request record ▴' : 'View request record — employee signature ▾'}</button>
+        {showRecord && <div className="mb-4"><LeaveRecordDetail events={item.events ?? []} /></div>}
+
         {confirming === 'approve' && (
           <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
             <p className="text-[13px] font-semibold text-emerald-800 mb-1">Confirm approval</p>
@@ -199,22 +205,38 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
 }
 
 function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
+  const [open, setOpen] = useState(false)
   const tc = TYPE_STYLE[item.leave_type] || TYPE_STYLE.Bereavement
   const dateRange = item.start_date === item.end_date ? fmtDate(item.start_date) : `${fmtDate(item.start_date)} – ${fmtDate(item.end_date)}`
+  const cancelled = item.status === 'cancelled'
+  const decision = item.events?.find(e => e.action === 'approved' || e.action === 'denied')
+  const decidedAs = decision ? decision.action : item.status === 'denied' ? 'denied' : 'approved'
+  const manager = decision?.actor_name ?? item.approver_name ?? null
+  const decidedAt = decision?.created_at ?? item.approved_at
   return (
-    <div className="bg-white rounded-xl border border-[#e8f4f7] opacity-70 overflow-hidden">
+    <div className={`bg-white rounded-xl border overflow-hidden transition-shadow ${open ? 'border-[#02ACC0] shadow-md' : 'border-[#e8f4f7] hover:shadow-sm'}`}>
       <div className={`h-1 ${tc.bar}`} />
-      <div className="p-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-bold text-[14px] text-[#0b2b35]">{item.employee_name} <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{item.leave_type}</span></p>
-          <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs{item.days && item.days.length > 1 ? ` · ${item.days.length} days` : ''}</p>
-          {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-2 max-w-xs" />}
-          {item.status === 'denied' && item.deny_reason && <p className="text-[12px] text-red-500 mt-1">&ldquo;{item.deny_reason}&rdquo;</p>}
+      <div className="p-5 cursor-pointer" role="button" tabIndex={0} aria-expanded={open} onClick={() => setOpen(v => !v)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v) } }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-bold text-[14px] text-[#0b2b35]">{item.employee_name} <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{item.leave_type}</span></p>
+            <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs{item.days && item.days.length > 1 ? ` · ${item.days.length} days` : ''}</p>
+            {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-2 max-w-xs" />}
+            {decidedAs === 'denied' && item.deny_reason && <p className="text-[12px] text-red-500 mt-1">&ldquo;{item.deny_reason}&rdquo;</p>}
+            <p className="text-[12px] text-gray-500 mt-1.5">
+              {decidedAs === 'denied' ? 'Denied' : 'Approved'} by <span className="font-semibold text-[#0b2b35]">{manager ?? 'a manager'}</span>
+              {decidedAt && <> · {fmtDate(decidedAt)}</>}
+              {cancelled && <span className="ml-2 text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Later cancelled by employee</span>}
+            </p>
+          </div>
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 ${decidedAs === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+            <span>{decidedAs === 'approved' ? '✓' : '✕'}</span>
+            <span>Reviewed · {decidedAs === 'approved' ? 'Approved' : 'Denied'}</span>
+          </div>
         </div>
-        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 ${item.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-          <span>{item.status === 'approved' ? '✓' : '✕'}</span>
-          <span className="capitalize">{item.status}</span>
-        </div>
+        <p className="mt-3 text-[11px] font-semibold text-[#028a9e]">{open ? 'Hide request record ▴' : 'View request record — signatures & history ▾'}</p>
+        {open && <div className="mt-4 cursor-default" onClick={e => e.stopPropagation()}><LeaveRecordDetail events={item.events ?? []} /></div>}
       </div>
     </div>
   )

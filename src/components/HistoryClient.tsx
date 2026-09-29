@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDateRange, fmtDaySet } from '@/lib/format-date'
 import LeaveDaysList from '@/components/LeaveDaysList'
+import LeaveRecordDetail from '@/components/LeaveRecordDetail'
 import { todayET } from '@/lib/pay-periods'
 import type { LeaveRequest } from '@/types'
 
@@ -72,7 +73,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
   }
   const tc = TYPE_STYLE[r.leave_type] || TYPE_STYLE.PTO
   const multiDay = (r.days?.length ?? 0) > 1
-  const hasNote = !!(r.note || r.attachment_url || multiDay || (r.status === 'denied' && r.deny_reason))
+  const hasNote = !!(r.note || r.attachment_url || multiDay || (r.status === 'denied' && r.deny_reason) || (r.events?.length ?? 0) > 0)
 
   async function viewAttachment(e: React.MouseEvent) {
     e.stopPropagation()
@@ -96,8 +97,8 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
           </div>
           <p className="text-[11px] text-gray-400">
             {r.hours} hrs{multiDay ? ` · ${r.days!.length} days` : ''} · Submitted {daysAgo(r.created_at)}
-            {r.approver_name && r.status !== 'denied' && <> · Approved by {r.approver_name}</>}
-            {r.status === 'denied' && r.approver_name && <> · Reviewed by {r.approver_name}</>}
+            {r.approver_name && r.status !== 'denied' && <> · Reviewed · Approved by {r.approver_name}</>}
+            {r.status === 'denied' && r.approver_name && <> · Reviewed · Denied by {r.approver_name}</>}
           </p>
           {cancelError && <p className="text-[11px] text-red-600 mt-1">{cancelError}</p>}
         </div>
@@ -137,6 +138,9 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
             <button onClick={viewAttachment} className="flex items-center gap-1.5 text-[12px] font-semibold text-[#02ACC0] hover:underline">
               📎 {r.leave_type === 'Jury Duty' ? 'View summons' : 'View attachment'}
             </button>
+          )}
+          {(r.events?.length ?? 0) > 0 && (
+            <LeaveRecordDetail events={r.events!} />
           )}
         </div>
       )}

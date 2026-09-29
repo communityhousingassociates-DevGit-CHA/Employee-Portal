@@ -118,6 +118,24 @@ export interface LeaveBalance {
   updated_at: string
 }
 
+export type LeaveEventAction = 'submitted' | 'auto_approved' | 'approved' | 'denied' | 'cancelled'
+
+export interface LeaveEvent {
+  id: string
+  request_id: string
+  action: LeaveEventAction
+  actor_id: string | null
+  actor_name: string | null
+  actor_role: string | null
+  note: string | null
+  backfilled: boolean
+  created_at: string
+  /** Present when the actor signed: the name signed, their employee number, and the wording they agreed to. */
+  signature_name: string | null
+  signer_employee_number: number | null
+  attestation: string | null
+}
+
 export interface LeaveRequest {
   id: string
   employee_id: string
@@ -134,6 +152,10 @@ export interface LeaveRequest {
   employee_signed_at: string | null
   approver_signed_at: string | null
   balance_deducted_at?: string | null
+  /** Audit trail, oldest first (present on results from the approvals actions). */
+  events?: LeaveEvent[]
+  /** Name of the manager who approved/denied it (present on results from the approvals actions). */
+  approver_name?: string | null
   /** Day-by-day hours (present on results from the leave actions). */
   days?: { date: string; hours: number }[]
   created_at: string

@@ -14,6 +14,8 @@ import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/l
 import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
 import { denyReasonProblem } from '@/lib/deny-reason'
+import { logLeaveEvent, loadLeaveEvents } from '@/lib/leave-events'
+import { EMPLOYEE_ATTESTATION, APPROVER_APPROVE_ATTESTATION, APPROVER_DENY_ATTESTATION } from '@/lib/constants/leave-signature'
 import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import { balanceTypeFor, projectedAvailable } from '@/lib/leave-projection'
@@ -193,6 +195,9 @@ export async function createLeaveRequest(data: {
     throw new Error(daysError.message)
   }
 
+  await logLeaveEvent(admin, { requestId: created.id, action: 'submitted', actor: employee, note: requestNote || null, attestation: EMPLOYEE_ATTESTATION })
+  if (autoApprove) await logLeaveEvent(admin, { requestId: created.id, action: 'auto_approved', actor: null, note: 'Approved automatically: the employee’s balance covered the request.' })
+
   if (autoApprove && col) {
     const newBalance = startsLater ? balanceBefore : Math.round((balanceBefore - totalHours) * 100) / 100
     if (!startsLater) {
@@ -274,10 +279,11 @@ export async function getLeaveHistory(employeeId?: string) {
     .order('start_date', { ascending: false })
   if (error) throw new Error(error.message)
   const daysByRequest = await loadRequestDays(admin, data ?? [])
+  const eventsByRequest = await loadLeaveEvents(admin, (data ?? []).map(r => r.id))
   return (data ?? []).map(r => {
     const approver = r.approver as unknown as { name: string } | { name: string }[] | null
     const approver_name = Array.isArray(approver) ? approver[0]?.name : approver?.name
-    return { ...r, approver_name: approver_name ?? null, days: daysByRequest.get(r.id) ?? [] }
+    return { ...r, approver_name: approver_name ?? null, days: daysByRequest.get(r.id) ?? [], events: eventsByRequest.get(r.id) ?? [] }
   })
 }
 
@@ -369,6 +375,7 @@ export async function getPendingLeaveApprovals() {
   if (error) throw new Error(error.message)
 
   const daysByRequest = await loadRequestDays(admin, data ?? [])
+  const eventsByRequest = await loadLeaveEvents(admin, (data ?? []).map(r => r.id))
   const results = []
   for (const r of data ?? []) {
     const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', r.employee_id).maybeSingle()
@@ -393,25 +400,36 @@ export async function getPendingLeaveApprovals() {
       reserve_only: reserveOnly,
       projected_after: projectedAfter,
       days: daysByRequest.get(r.id) ?? [],
+      events: eventsByRequest.get(r.id) ?? [],
     })
   }
   return results
 }
 
-export async function getReviewedLeaveApprovals(limit = 30) {
+export async function getReviewedLeaveApprovals(limit = 50) {
   await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
   const admin = createAdminClient()
+  // Reviewed = a manager approved or denied it. Cancelled requests stay listed when a manager had approved them first,
+  // so an approval never silently drops out of the record.
   const { data, error } = await admin
     .from('leave_requests')
-    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url)')
-    .in('status', ['approved', 'denied'])
-    .order('approved_at', { ascending: false })
+    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), approver:employees!leave_requests_approver_id_fkey(name)')
+    .or('status.in.(approved,denied),and(status.eq.cancelled,approver_id.not.is.null)')
+    .order('approved_at', { ascending: false, nullsFirst: false })
     .limit(limit)
   if (error) throw new Error(error.message)
   const daysByRequest = await loadRequestDays(admin, data ?? [])
+  const eventsByRequest = await loadLeaveEvents(admin, (data ?? []).map(r => r.id))
   return (data ?? []).map(r => {
     const emp = r.employee as unknown as { name: string } | { name: string }[]
-    return { ...r, employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name, days: daysByRequest.get(r.id) ?? [] }
+    const approver = r.approver as unknown as { name: string } | { name: string }[] | null
+    return {
+      ...r,
+      employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name,
+      approver_name: (Array.isArray(approver) ? approver[0]?.name : approver?.name) ?? null,
+      days: daysByRequest.get(r.id) ?? [],
+      events: eventsByRequest.get(r.id) ?? [],
+    }
   })
 }
 
@@ -466,6 +484,7 @@ export async function approveLeaveRequest(id: string) {
     approver_signed_at: new Date().toISOString(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+  await logLeaveEvent(admin, { requestId: id, action: 'approved', actor, attestation: APPROVER_APPROVE_ATTESTATION })
   if (col && !startsLater) await deductRequestFromBalance(admin, { id, employee_id: request.employee_id, leave_type: request.leave_type as LeaveType, hours: Number(request.hours) })
 
   // Push the approved days onto the employee's timesheet(s), creating a
@@ -508,6 +527,7 @@ export async function denyLeaveRequest(id: string, reason: string) {
     deny_reason: reason.trim(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+  await logLeaveEvent(admin, { requestId: id, action: 'denied', actor, note: reason.trim(), attestation: APPROVER_DENY_ATTESTATION })
 
   await notifyEmployee(admin, request.employee_id, {
     kind: 'denied',
@@ -549,6 +569,7 @@ export async function cancelMyLeaveRequest(id: string) {
     .eq('id', id).eq('status', request.status).select('id').maybeSingle()
   if (claimError) throw new Error(claimError.message)
   if (!claimed) throw new Error('This request was just changed — refresh and try again.')
+  await logLeaveEvent(admin, { requestId: id, action: 'cancelled', actor: employee, note: 'Cancelled by employee' })
 
   const col = balanceColumnFor(request.leave_type)
   let newBalance: number | null = null
