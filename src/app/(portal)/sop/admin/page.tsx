@@ -118,7 +118,7 @@ export default async function AdminSopPage() {
               rows={[
                 ['All staff', 'employee', 'Log time each pay period, submit leave requests before taking time off, submit expenses/mileage with supporting detail, keep profile info current, report discrepancies promptly'],
                 ['Accounting Manager — Carrileen Edwards (cedwards@communityhousingmd.org)', 'admin', 'Reviews and approves/denies leave requests, expenses, and timesheets (her own items route to the CEO, except during beta testing), sets the annual mileage rate, manages employee records via the Admin Console, first point of contact for pay/balance discrepancies'],
-                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Final approver in the workflow; approves/denies leave requests, expenses, and timesheets, and may approve his own items. Holds administrator access equal to the Accounting Manager (user management, imports, grants, portal settings) and is also a super administrator, so he can send invites, commit imports and manage the sign-in location rule'],
+                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Final approver in the workflow; approves/denies leave requests, expenses, and timesheets, and may approve his own items. Holds administrator access equal to the Accounting Manager (user management, imports, grants, portal settings) and is also a super administrator (commits data imports, manages the sign-in location rule), serving as backup to the System Administrator for business continuity'],
                 ['System Administrator', 'Globalist Pro (portal vendor)', 'Technical support: account provisioning, resets, bug fixes, system-level issues'],
               ]}
             />
@@ -275,6 +275,7 @@ export default async function AdminSopPage() {
           <Section id="security" title="10. Account Security">
             <Bullets items={[
               <>Invite links are valid for <strong>48 hours</strong> from the time the invite is sent.</>,
+              <>Invites can be sent or resent by the Accounting Manager, the President/CEO and the System Administrator, under <strong>Admin Console → User Management</strong>. Committing a data import remains a super administrator step.</>,
               <>Staff who were invited but have not finished setting a password get an automatic <strong>reminder email each morning</strong> (up to 7), each with a fresh link — the newest email always works. Managers see anyone still outstanding, with the date the invite was sent, in the weekday manager summary and in <strong>Admin Console → User Management</strong>.</>,
               <>Password reset links are valid for <strong>48 hours</strong>.</>,
               <>Users are signed out automatically after <strong>4 hours of inactivity</strong> (a warning appears a few minutes before), and returning to a browser that sat idle longer signs them out on the next page load.</>,

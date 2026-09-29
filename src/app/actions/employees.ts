@@ -285,7 +285,7 @@ export async function setEmployeeTestAccount(id: string, isTest: boolean) {
 export async function sendInvites(
   employeeIds: string[]
 ): Promise<{ invited: string[]; failed: { email: string; error: string }[]; skipped: string[] }> {
-  await requireSuperAdmin()
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data: employees, error } = await admin
     .from('employees')

@@ -373,7 +373,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       {selected.size > 0 && (
         <div className="bg-[#0b2b35] text-white rounded-xl px-4 py-3 mb-4 flex flex-wrap items-center gap-2 print:hidden">
           <span className="text-[13px] font-semibold mr-2">{selected.size} selected</span>
-          {isSuperAdmin && (
+          {(
             <button onClick={() => setConfirmBulk('invite')} disabled={busy || invitable.length === 0}
               className="text-[12px] font-semibold px-3 py-1.5 rounded-lg bg-[#02ACC0] hover:bg-[#028a9e] disabled:opacity-40 disabled:cursor-not-allowed">
               ✉️ Send / Resend Invite ({invitable.length})
@@ -455,7 +455,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5 whitespace-nowrap">
                     <button onClick={() => openEdit(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] hover:bg-[#f0f7f8]">Edit</button>
-                    {isSuperAdmin && e.status === 'active' && e.invite_status !== 'active' && (
+                    {e.status === 'active' && e.invite_status !== 'active' && (
                       <button onClick={() => runInvites([e.id])} disabled={busy} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#02ACC0] text-[#028a9e] hover:bg-[#e0f5f8] disabled:opacity-40">
                         {e.invite_status === 'invited' ? 'Resend Invite' : 'Send Invite'}
                       </button>

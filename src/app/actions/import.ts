@@ -405,7 +405,7 @@ export async function discardImportBatch(id: string): Promise<void> {
 export async function inviteEmployees(
   employeeIds: string[]
 ): Promise<{ invited: string[]; failed: { email: string; error: string }[] }> {
-  await requireSuperAdmin()
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
 
   const { data: employees, error } = await admin
