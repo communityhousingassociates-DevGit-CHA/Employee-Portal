@@ -1,5 +1,6 @@
 'use server'
 
+import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
@@ -35,7 +36,7 @@ export async function addEmployee(data: {
   state?: string
   postal_code?: string
 }) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').insert({
     first_name: data.first_name,
@@ -87,7 +88,7 @@ export async function editEmployee(id: string, data: {
   state?: string
   postal_code?: string
 }) {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({
     first_name: data.first_name,
@@ -118,7 +119,7 @@ export async function editEmployee(id: string, data: {
 }
 
 export async function archiveEmployee(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ is_active: false }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -126,7 +127,7 @@ export async function archiveEmployee(id: string) {
 }
 
 export async function restoreEmployee(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ is_active: true }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -134,7 +135,7 @@ export async function restoreEmployee(id: string) {
 }
 
 export async function deleteEmployee(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').delete().eq('id', id)
   if (error) throw new Error(error.message)
@@ -148,7 +149,7 @@ export async function deleteEmployee(id: string) {
  * themselves via the same /set-password flow used for invites.
  */
 export async function sendPasswordReset(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data: employee, error } = await admin
     .from('employees')
@@ -174,7 +175,7 @@ export async function sendPasswordReset(id: string) {
  * caller must show it immediately and hand it to the employee securely.
  */
 export async function setTemporaryPassword(id: string): Promise<string> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data: employee, error } = await admin
     .from('employees')
@@ -200,7 +201,7 @@ export async function setTemporaryPassword(id: string): Promise<string> {
 export type InviteStatus = 'not_invited' | 'invited' | 'active'
 
 export async function getEmployees() {
-  const actor = await requireRole(['admin'])
+  const actor = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const policy = await loadPolicy(admin)
   let query = admin
@@ -338,7 +339,7 @@ export async function sendInvites(
 
 /** Bulk archive/restore. Never applies to the caller's own row, so an admin can't lock themself out. */
 export async function setEmployeesActive(ids: string[], active: boolean) {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ is_active: active }).in('id', ids.filter(id => id !== me.id))
   if (error) throw new Error(error.message)
@@ -347,7 +348,7 @@ export async function setEmployeesActive(ids: string[], active: boolean) {
 
 /** Bulk delete. Never applies to the caller's own row or to any super admin. */
 export async function deleteEmployees(ids: string[]) {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').delete().in('id', ids.filter(id => id !== me.id)).eq('is_super_admin', false)
   if (error) throw new Error(error.message)
@@ -368,7 +369,7 @@ const BULK_EDITABLE_FIELDS: BulkEditableField[] = ['role', 'employee_type', 'sta
  */
 export async function bulkEditEmployees(ids: string[], field: BulkEditableField, value: string | null) {
   if (!BULK_EDITABLE_FIELDS.includes(field)) throw new Error('Not a bulk-editable field')
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const targetIds = ids.filter(id => id !== me.id)
   if (targetIds.length === 0) return

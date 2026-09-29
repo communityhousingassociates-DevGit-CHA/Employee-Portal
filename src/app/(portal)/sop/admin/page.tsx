@@ -118,7 +118,7 @@ export default async function AdminSopPage() {
               rows={[
                 ['All staff', 'employee', 'Log time each pay period, submit leave requests before taking time off, submit expenses/mileage with supporting detail, keep profile info current, report discrepancies promptly'],
                 ['Accounting Manager — Carrileen Edwards (cedwards@communityhousingmd.org)', 'admin', 'Reviews and approves/denies leave requests, expenses, and timesheets (her own items route to the CEO, except during beta testing), sets the annual mileage rate, manages employee records via the Admin Console, first point of contact for pay/balance discrepancies'],
-                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Final approver in the workflow; approves/denies leave requests, expenses, and timesheets, and may approve his own items'],
+                ['President / CEO — Nico Sanders (nsanders@communityhousingmd.org)', 'ceo', 'Final approver in the workflow; approves/denies leave requests, expenses, and timesheets, and may approve his own items. Holds administrator access equal to the Accounting Manager (user management, imports, grants, portal settings) and is also a super administrator, so he can send invites, commit imports and manage the sign-in location rule'],
                 ['System Administrator', 'Globalist Pro (portal vendor)', 'Technical support: account provisioning, resets, bug fixes, system-level issues'],
               ]}
             />

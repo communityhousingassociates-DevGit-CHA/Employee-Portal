@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth/session'
 
-const RATE_SETTER_ROLES = ['admin', 'accounting_manager'] as const
+const RATE_SETTER_ROLES = ['admin', 'ceo', 'accounting_manager'] as const
 
 export async function getMileageRates() {
   await requireRole(['admin', 'accounting_manager', 'ceo'])

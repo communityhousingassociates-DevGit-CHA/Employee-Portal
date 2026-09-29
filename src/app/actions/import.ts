@@ -1,5 +1,6 @@
 'use server'
 
+import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
 import { revalidatePath } from 'next/cache'
@@ -22,21 +23,21 @@ async function getExistingEmployees() {
 
 /** For the Review screen: who actually has authority to commit an import. */
 export async function getImportApprover(): Promise<{ isSuperAdmin: boolean; superAdminName: string | null }> {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data } = await admin.from('employees').select('name').eq('is_super_admin', true).eq('is_active', true).limit(1).maybeSingle()
   return { isSuperAdmin: me.is_super_admin, superAdminName: data?.name ?? null }
 }
 
 export async function parseEmployeeFile(formData: FormData): Promise<ParsedEmployeeRow[]> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file uploaded')
   return parseEmployeeWorkbook(await file.arrayBuffer())
 }
 
 export async function parseBalanceFile(formData: FormData): Promise<ParsedBalanceRow[]> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file uploaded')
   return parseBalanceWorkbook(await file.arrayBuffer())
@@ -44,7 +45,7 @@ export async function parseBalanceFile(formData: FormData): Promise<ParsedBalanc
 
 /** The As Of Date typed into the balance workbook, if any — pre-fills the required "balances as of" field. */
 export async function readBalanceFileAsOf(formData: FormData): Promise<string | null> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
   if (!(file instanceof File)) return null
   return readTemplateAsOf(await file.arrayBuffer())
@@ -52,7 +53,7 @@ export async function readBalanceFileAsOf(formData: FormData): Promise<string | 
 
 /** Saves a copy of the uploaded balance workbook and returns its path, so the original (and the date written on it) is never lost. */
 export async function storeBalanceFileForImport(formData: FormData): Promise<string | null> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
   if (!(file instanceof File)) return null
   return storeBalanceFile(createAdminClient(), file, 'import')
@@ -66,7 +67,7 @@ function assertBalancesAsOf(asOf: string | null | undefined): string {
 }
 
 export async function parseSalaryFile(formData: FormData): Promise<ParsedSalaryRow[]> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
   if (!(file instanceof File)) throw new Error('No file uploaded')
   return parseSalaryWorkbook(await file.arrayBuffer())
@@ -77,7 +78,7 @@ export async function validateImport(
   balanceRows: ParsedBalanceRow[],
   salaryRows: ParsedSalaryRow[] = []
 ): Promise<ImportPreview> {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const existing = await getExistingEmployees()
   return buildPreview(employeeRows, balanceRows, existing, salaryRows)
 }
@@ -263,7 +264,7 @@ export async function submitImportForReview(payload: {
   balancesAsOf: string
   balanceFilePath?: string | null
 }): Promise<{ id: string }> {
-  const actor = await requireRole(['admin'])
+  const actor = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const balancesAsOf = assertBalancesAsOf(payload.balancesAsOf)
 
@@ -296,7 +297,7 @@ export async function submitImportForReview(payload: {
 
 /** Lightweight count for the "Data Import" nav badge — superadmin-only, since only they can act on it. */
 export async function getPendingImportCount(): Promise<number> {
-  const me = await requireRole(['admin'])
+  const me = await requireRole(ADMIN_ROLES)
   if (!me.is_super_admin) return 0
   const admin = createAdminClient()
   const { count, error } = await admin
@@ -385,7 +386,7 @@ export async function getPendingImportBatch(id: string): Promise<{
 
 /** Either the admin who submitted it, or a superadmin, can discard a batch instead of committing it. */
 export async function discardImportBatch(id: string): Promise<void> {
-  const actor = await requireRole(['admin'])
+  const actor = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data: batch, error: fetchError } = await admin
     .from('import_batches')

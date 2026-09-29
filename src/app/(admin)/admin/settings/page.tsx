@@ -3,6 +3,7 @@ import { getCurrentEmployee } from '@/lib/auth/session'
 import { getTravelAccessList } from '@/app/actions/employees'
 import { getMileageRates } from '@/app/actions/mileage-rates'
 import { getPolicySettings, getGeofenceSettings } from '@/app/actions/portal-settings'
+import { isAdminRole } from '@/lib/constants/admin-access'
 import PortalSettingsClient from '@/components/PortalSettingsClient'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +15,7 @@ export default async function AdminSettingsPage() {
   if (!employee || !ALLOWED.includes(employee.role)) redirect('/dashboard')
 
   const [mileageRates, policy, geofence, travel] = await Promise.all([getMileageRates(), getPolicySettings(), getGeofenceSettings(), getTravelAccessList()])
-  const canEditMileage = employee.role === 'admin' || employee.role === 'accounting_manager'
+  const canEditMileage = isAdminRole(employee.role) || employee.role === 'accounting_manager'
 
   return <PortalSettingsClient mileageRates={mileageRates} canEditMileage={canEditMileage} initialPolicy={policy} initialGeofence={geofence} canEditGeofence={!!employee.is_super_admin} travel={travel} />
 }

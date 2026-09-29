@@ -1,11 +1,12 @@
 'use server'
 
+import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth/session'
 
 export async function getGrants() {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { data, error } = await admin.from('grants').select('id, name, is_active, created_at').order('name')
   if (error) throw new Error(error.message)
@@ -13,7 +14,7 @@ export async function getGrants() {
 }
 
 export async function addGrant(name: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('grants').insert({ name, is_active: true })
   if (error) throw new Error(error.message)
@@ -21,7 +22,7 @@ export async function addGrant(name: string) {
 }
 
 export async function renameGrant(id: string, name: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('grants').update({ name }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -29,7 +30,7 @@ export async function renameGrant(id: string, name: string) {
 }
 
 export async function deactivateGrant(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('grants').update({ is_active: false }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -37,7 +38,7 @@ export async function deactivateGrant(id: string) {
 }
 
 export async function restoreGrant(id: string) {
-  await requireRole(['admin'])
+  await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const { error } = await admin.from('grants').update({ is_active: true }).eq('id', id)
   if (error) throw new Error(error.message)

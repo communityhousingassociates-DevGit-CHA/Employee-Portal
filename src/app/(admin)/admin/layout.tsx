@@ -5,15 +5,16 @@ import ResponsiveShell from '@/components/ResponsiveShell'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canViewSalaries, hasPayrollAccess } from '@/lib/constants/salary-access'
+import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import IdleLogout from '@/components/IdleLogout'
 
 const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
 const navItems = [
   { href: '/admin', icon: '🛡️', label: 'Admin Overview', exact: true, roles: CONSOLE_ROLES },
-  { href: '/admin/users', icon: '👥', label: 'User Management', roles: ['admin'] },
-  { href: '/admin/import', icon: '📥', label: 'Data Import', roles: ['admin'] },
-  { href: '/admin/grants', icon: '🏷️', label: 'Grants', roles: ['admin'] },
+  { href: '/admin/users', icon: '👥', label: 'User Management', roles: ADMIN_ROLES },
+  { href: '/admin/import', icon: '📥', label: 'Data Import', roles: ADMIN_ROLES },
+  { href: '/admin/grants', icon: '🏷️', label: 'Grants', roles: ADMIN_ROLES },
   { href: '/admin/salary', icon: '💰', label: 'Salary', roles: CONSOLE_ROLES },
   { href: '/admin/tags', icon: '🏷️', label: 'Timesheet Tags', roles: CONSOLE_ROLES },
   { href: '/admin/balances', icon: '⚖️', label: 'Leave Balances', roles: CONSOLE_ROLES },

@@ -1,3 +1,4 @@
+import { isAdminRole } from '@/lib/constants/admin-access'
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { getEmployees } from '@/app/actions/employees'
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function AdminUsersPage() {
   const employee = await getCurrentEmployee()
-  if (!employee || employee.role !== 'admin') redirect('/dashboard')
+  if (!employee || !isAdminRole(employee.role)) redirect('/dashboard')
 
   const [employees, grants] = await Promise.all([getEmployees(), getGrants()])
   return <AdminUsersClient initialEmployees={employees} grants={grants.filter(g => g.is_active)} isSuperAdmin={employee.is_super_admin} currentEmployeeId={employee.id} />
