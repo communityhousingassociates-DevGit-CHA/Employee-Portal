@@ -10,7 +10,7 @@ import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { projectedAvailable, balanceTypeFor, type ReservedLeave } from '@/lib/leave-projection'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/leave-window'
 import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
-import { ADVANCE_NOTICE_DAYS } from '@/lib/constants/accrual'
+import { ADVANCE_NOTICE_DAYS, firstEligibleDate } from '@/lib/constants/accrual'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
 
 type DayRow = { id: string; date: string; hours: string }
@@ -172,10 +172,16 @@ export default function RequestClient({
   const latest = latestLeaveDate()
   const beyondLatest = !!end && end > latest
 
+  // New-hire waiting period (90 days for PTO/Sick, 6 months for Personal Days): a hard stop — nothing before this date can be requested.
+  const eligibleFrom = outlook.hireDate ? firstEligibleDate(outlook.hireDate, leaveType, outlook.policy) : null
+  const waitingPeriodLabel = leaveType === 'Personal' ? '6-month' : '90-day'
+  const leaveWhat = leaveType === 'Personal' ? 'Personal Days' : leaveType === 'Sick' ? 'Sick leave' : 'PTO'
+
   // Why a weekday can't be picked (null when it can).
   function unavailableReason(date: string): string | null {
     const holiday = holidayOn(date, yearEnd)
     if (holiday) return holiday
+    if (eligibleFrom && date < eligibleFrom) return `Waiting period — available from ${fmtDate(eligibleFrom)}`
     if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
     if (date > latest) return 'Too far ahead'
     if (closedRangeOverlapping(date, date, closedRanges)) return 'Period closed'
@@ -304,6 +310,11 @@ export default function RequestClient({
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-3">Dates &amp; Hours</p>
+            {eligibleFrom && eligibleFrom > todayET() && (
+              <div role="alert" className="mb-4 text-[12px] bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3">
+                <strong>{leaveWhat} isn&apos;t available to you yet.</strong> Your {waitingPeriodLabel} waiting period ends {fmtDate(eligibleFrom)}, so you can&apos;t request {leaveWhat} for any earlier date. An exception can only be granted by the President and CEO.
+              </div>
+            )}
             <p className="text-[12px] text-gray-500 mb-4">
               Pick the days you&apos;ll be out, like a timesheet. Each day keeps its own hours (8 is a full day, 4 a half day), and everything you pick goes to your approver as <strong>one request</strong> — they see each day listed and approve or deny it together.
             </p>
