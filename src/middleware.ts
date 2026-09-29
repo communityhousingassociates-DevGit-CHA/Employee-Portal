@@ -131,7 +131,7 @@ export async function middleware(request: NextRequest) {
 
   // Public routes — no auth required. /api/cron/* is called by Vercel Cron with no user session; each handler checks
   // its own `Authorization: Bearer CRON_SECRET` header and refuses everything if the secret isn't configured.
-  if (pathname.startsWith('/api/cron/') || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password') || pathname.startsWith('/forgot-password')) {
+  if (pathname.startsWith('/api/cron/') || pathname === '/api/geo' || pathname.startsWith('/api/demo-login') || pathname.startsWith('/api/demo-logout') || pathname.startsWith('/set-password') || pathname.startsWith('/forgot-password')) {
     return securityHeaders(supabaseResponse, csp)
   }
 
