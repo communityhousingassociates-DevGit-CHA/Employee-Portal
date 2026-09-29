@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, setGeofenceOverride, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
@@ -46,6 +46,7 @@ type Employee = {
 }
 
 type Grant = { id: string; name: string }
+type SortKey = 'name' | 'role' | 'department' | 'hire' | 'tier' | 'invite' | 'status'
 
 const typeOptions = ['Full-time', 'Part-time', 'Consultant']
 const roleOptions = ['employee', 'accounting_manager', 'ceo', 'admin']
@@ -98,7 +99,50 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   const [bulkField, setBulkField] = useState<BulkEditableField>('department')
   const [bulkValue, setBulkValue] = useState('')
 
-  const visible = employees.filter(e => e.status === filter)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [inviteFilter, setInviteFilter] = useState('all')
+  const [deptFilter, setDeptFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'name', dir: 'asc' })
+  const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null)
+
+  // The row action menu is drawn with fixed positioning (the table scrolls sideways and would clip it), so close it whenever the page moves.
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    window.addEventListener('click', close)
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); window.removeEventListener('click', close) }
+  }, [menu])
+
+  const tabRows = employees.filter(e => e.status === filter)
+  const departments = useMemo(() => Array.from(new Set(employees.map(e => e.department).filter((d): d is string => !!d))).sort(), [employees])
+  const filtersActive = !!search || roleFilter !== 'all' || inviteFilter !== 'all' || deptFilter !== 'all' || typeFilter !== 'all'
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const rows = tabRows.filter(e =>
+      (!q || [e.name, e.email, e.job_title, e.department, formatEmployeeId(e.employee_number)].some(v => (v ?? '').toLowerCase().includes(q))) &&
+      (roleFilter === 'all' || e.role === roleFilter) &&
+      (inviteFilter === 'all' || e.invite_status === inviteFilter) &&
+      (deptFilter === 'all' || (e.department ?? '') === deptFilter) &&
+      (typeFilter === 'all' || e.employee_type === typeFilter))
+    const inviteOrder = { not_invited: 0, invited: 1, active: 2 } as const
+    const cmp: Record<SortKey, (a: Employee, b: Employee) => number> = {
+      name: (a, b) => a.name.localeCompare(b.name),
+      role: (a, b) => roleOptions.indexOf(a.role) - roleOptions.indexOf(b.role),
+      department: (a, b) => (a.department ?? '~').localeCompare(b.department ?? '~'),
+      hire: (a, b) => a.hire_date.localeCompare(b.hire_date),
+      tier: (a, b) => a.accrual - b.accrual,
+      invite: (a, b) => inviteOrder[a.invite_status] - inviteOrder[b.invite_status],
+      status: (a, b) => a.status.localeCompare(b.status),
+    }
+    const dir = sort.dir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => dir * cmp[sort.key](a, b) || a.name.localeCompare(b.name))
+  }, [tabRows, search, roleFilter, inviteFilter, deptFilter, typeFilter, sort])
+  function toggleSort(key: SortKey) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
+  function clearFilters() { setSearch(''); setRoleFilter('all'); setInviteFilter('all'); setDeptFilter('all'); setTypeFilter('all') }
   const selectedEmployees = useMemo(() => employees.filter(e => selected.has(e.id)), [employees, selected])
   // Anyone active who has never signed in can be (re)invited; people who have are left alone.
   const invitable = selectedEmployees.filter(e => e.status === 'active' && e.invite_status !== 'active')
@@ -393,107 +437,157 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
         </div>
       )}
 
-      {/* Table — columns size to their content; the wrapper scrolls horizontally if the window is narrower */}
+      {/* Search + filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 print:hidden">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, title, department…" aria-label="Search employees"
+          className="flex-1 min-w-[220px] max-w-sm px-3 py-2 border border-[#d4eef2] rounded-lg text-[13px] bg-white focus:outline-none focus:border-[#02ACC0]" />
+        {([
+          ['Role', roleFilter, setRoleFilter, roleOptions.map(r => [r, r.replace('_', ' ')] as const)],
+          ['Invite', inviteFilter, setInviteFilter, (Object.keys(inviteBadge) as Employee['invite_status'][]).map(k => [k, inviteBadge[k].label] as const)],
+          ['Department', deptFilter, setDeptFilter, departments.map(d => [d, d] as const)],
+          ['Type', typeFilter, setTypeFilter, ['full-time', 'part-time', 'consultant'].map(t => [t, t] as const)],
+        ] as const).map(([label, value, setValue, options]) => (
+          <select key={label} value={value} onChange={e => setValue(e.target.value)} aria-label={`Filter by ${label}`}
+            className={`px-2.5 py-2 border rounded-lg text-[13px] bg-white capitalize focus:outline-none focus:border-[#02ACC0] ${value !== 'all' ? 'border-[#02ACC0] text-[#028a9e] font-semibold' : 'border-[#d4eef2] text-gray-600'}`}>
+            <option value="all">{label}: all</option>
+            {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        ))}
+        {filtersActive && <button onClick={clearFilters} className="text-[12px] font-semibold text-[#028a9e] hover:underline">Clear filters</button>}
+        <span className="text-[12px] text-gray-400 ml-auto">{visible.length} of {tabRows.length}</span>
+      </div>
+
+      {/* Table — the checkbox and Name columns stay put when scrolling sideways; Actions stays on the right. */}
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 print:hidden">
         <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[13px] min-w-[1150px] border-separate border-spacing-0">
           <thead>
-            <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-              <th className="pl-4 pr-2 py-2.5 w-8">
+            <tr className="bg-[#f9fefe]">
+              <th className="sticky left-0 z-20 bg-[#f9fefe] border-b border-[#d4eef2] pl-4 pr-2 py-2.5 w-10">
                 <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label="Select all" className="accent-[#02ACC0] w-4 h-4 cursor-pointer" />
               </th>
-              {['Employee ID', 'Name', 'Email', 'Role', 'Type', 'Category', 'Grant', 'Hire Date', 'End Date', 'Accrual Tier', 'Invite', 'Status', 'Actions'].map(h => (
-                <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
+              {([
+                ['name', 'Name', 'sticky left-10 z-20 bg-[#f9fefe] w-[270px] min-w-[270px] shadow-[2px_0_4px_-2px_rgba(11,43,53,0.12)]'],
+                ['role', 'Role', ''],
+                ['department', 'Job / Department', ''],
+                ['hire', 'Hire date', ''],
+                ['tier', 'Accrual tier', ''],
+                ['invite', 'Invite', ''],
+                ['status', 'Status', ''],
+              ] as const).map(([key, label, cls]) => (
+                <th key={key} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'} className={`border-b border-[#d4eef2] text-left px-4 py-2.5 whitespace-nowrap ${cls}`}>
+                  <button onClick={() => toggleSort(key)} className={`text-[11px] uppercase tracking-wide font-semibold inline-flex items-center gap-1 hover:text-[#028a9e] ${sort.key === key ? 'text-[#028a9e]' : 'text-gray-400'}`}>
+                    {label}<span className="text-[10px]">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                  </button>
+                </th>
               ))}
+              <th className="sticky right-0 z-20 bg-[#f9fefe] border-b border-[#d4eef2] text-right px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap shadow-[-2px_0_4px_-2px_rgba(11,43,53,0.12)]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {visible.length === 0 && (
-              <tr><td colSpan={14} className="px-5 py-8 text-center text-gray-400">No {filter} employees</td></tr>
+              <tr><td colSpan={9} className="px-5 py-8 text-center text-gray-400">{filtersActive ? 'No employees match these filters' : `No ${filter === 'archived' ? 'inactive' : filter} employees`}</td></tr>
             )}
-            {visible.map(e => (
-              <tr key={e.id} className={`border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors ${selected.has(e.id) ? 'bg-[#f0fafb]' : ''}`}>
-                <td className="pl-4 pr-2 py-3">
+            {visible.map(e => {
+              const rowBg = selected.has(e.id) ? 'bg-[#f0fafb]' : 'bg-white group-hover:bg-[#f9fefe]'
+              const travelOn = !!e.geofence_override_until && Date.parse(e.geofence_override_until) > Date.now()
+              return (
+              <tr key={e.id} className="group">
+                <td className={`sticky left-0 z-10 border-b border-[#f0f7f8] pl-4 pr-2 py-3 ${rowBg}`}>
                   <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggleOne(e.id)} aria-label={`Select ${e.name}`} className="accent-[#02ACC0] w-4 h-4 cursor-pointer" />
                 </td>
-                <td className="px-4 py-3 text-gray-400 font-mono text-[12px] whitespace-nowrap">{formatEmployeeId(e.employee_number)}</td>
-                <td className="px-4 py-3 font-medium text-[#0b2b35] whitespace-nowrap">{e.name}</td>
-                <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{e.email}</td>
-                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">
-                  {e.role.replace('_', ' ')}
-                  {!e.is_exempt && <span title="Non-exempt" className="ml-1.5 text-[10px] font-bold bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full normal-case">Non-exempt</span>}
-                  {e.is_director && <span title="Director" className="ml-1.5 text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full normal-case">Director</span>}
-                  {e.pto_uncapped && <span title="PTO Uncapped exception" className="ml-1.5 text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full normal-case">∞ PTO</span>}
+                <td className={`sticky left-10 z-10 border-b border-[#f0f7f8] px-4 py-2.5 w-[270px] min-w-[270px] shadow-[2px_0_4px_-2px_rgba(11,43,53,0.12)] ${rowBg}`}>
+                  <button onClick={() => openEdit(e)} className="font-semibold text-[#0b2b35] hover:text-[#028a9e] text-left block truncate max-w-[240px]" title="Edit">{e.name}</button>
+                  <span className="block text-[11px] text-gray-400 truncate max-w-[240px]" title={e.email}>{e.email}</span>
+                  <span className="block text-[10px] text-gray-300 font-mono">{formatEmployeeId(e.employee_number)}</span>
                 </td>
-                <td className="px-4 py-3 text-gray-500 capitalize whitespace-nowrap">{e.employee_type}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {e.staff_category === 'resident_advocate'
-                    ? <span className="bg-violet-100 text-violet-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">Resident Advocate</span>
-                    : <span className="text-gray-400">CHA Employee</span>}
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 ${rowBg}`}>
+                  <span className="text-gray-600 capitalize block">{e.role.replace('_', ' ')}</span>
+                  <span className="flex flex-wrap gap-1 mt-0.5">
+                    {e.is_super_admin && <span title="Super administrator" className="text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full">Super</span>}
+                    {e.is_director && <span title="Director" className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">Director</span>}
+                    {!e.is_exempt && <span title="Non-exempt" className="text-[10px] font-bold bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">Non-exempt</span>}
+                    {e.pto_uncapped && <span title="PTO Uncapped exception" className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">∞ PTO</span>}
+                  </span>
                 </td>
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.grant_name || '—'}</td>
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(e.hire_date)}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {e.end_date ? <span className="text-red-500 font-medium">{fmtDate(e.end_date)}</span> : <span className="text-gray-300">—</span>}
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 ${rowBg}`}>
+                  <span className="text-gray-700 block">{e.job_title || <span className="text-gray-300">—</span>}</span>
+                  <span className="text-[11px] text-gray-400 capitalize block">{[e.department, e.employee_type].filter(Boolean).join(' · ')}</span>
+                  {(e.staff_category === 'resident_advocate' || e.grant_name) && (
+                    <span className="flex flex-wrap gap-1 mt-0.5">
+                      {e.staff_category === 'resident_advocate' && <span className="bg-violet-100 text-violet-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">Resident Advocate</span>}
+                      {e.grant_name && <span className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded-full">{e.grant_name}</span>}
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 whitespace-nowrap ${rowBg}`}>
+                  <span className="text-gray-600 block">{fmtDate(e.hire_date)}</span>
+                  {e.end_date && <span className="text-[11px] text-red-500 font-medium block">Ends {fmtDate(e.end_date)}</span>}
+                </td>
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 whitespace-nowrap ${rowBg}`}>
                   <span className="bg-[#e0f5f8] text-[#028a9e] text-[11px] font-semibold px-2 py-0.5 rounded-full">{e.tier}</span>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 whitespace-nowrap ${rowBg}`}>
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${inviteBadge[e.invite_status].cls}`}>{inviteBadge[e.invite_status].label}</span>
                   {e.invite_sent_at && e.invite_status !== 'not_invited' && (
                     <span className="block text-[10px] text-gray-400 mt-1" title="When the invite email was last sent">
                       Sent {fmtDate(e.invite_sent_at)}{e.invite_expired && <span className="ml-1 font-semibold text-red-500">· link expired</span>}
                     </span>
                   )}
+                  {travelOn && <span className="block text-[10px] text-sky-600 mt-0.5" title="Can sign in from anywhere until this date">Travel access to {fmtDate(e.geofence_override_until!)}</span>}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className={`border-b border-[#f0f7f8] px-4 py-2.5 whitespace-nowrap ${rowBg}`}>
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : e.status === 'test' ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-500'}`}>
                     {e.status === 'archived' ? 'inactive' : e.status}
                   </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                <td className={`sticky right-0 z-10 border-b border-[#f0f7f8] px-4 py-2.5 shadow-[-2px_0_4px_-2px_rgba(11,43,53,0.12)] ${rowBg}`}>
+                  <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                     <button onClick={() => openEdit(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] hover:bg-[#f0f7f8]">Edit</button>
                     {e.status === 'active' && e.invite_status !== 'active' && (
                       <button onClick={() => runInvites([e.id])} disabled={busy} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#02ACC0] text-[#028a9e] hover:bg-[#e0f5f8] disabled:opacity-40">
-                        {e.invite_status === 'invited' ? 'Resend Invite' : 'Send Invite'}
+                        {e.invite_status === 'invited' ? 'Resend' : 'Invite'}
                       </button>
                     )}
-                    {e.status === 'active' && !e.login_geofence_regions?.includes('*') && (
-                      e.geofence_override_until && Date.parse(e.geofence_override_until) > Date.now() ? (
-                        <button onClick={() => handleGeofence(e.id, 0)} disabled={busy} title={`Signing in from anywhere until ${fmtDate(e.geofence_override_until)}`} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40">Travel access until {fmtDate(e.geofence_override_until)} · Clear</button>
-                      ) : (
-                        <button onClick={() => handleGeofence(e.id, 7)} disabled={busy} title="Let this person sign in from outside the allowed states for 7 days" className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8] disabled:opacity-40">Travel access (7 days)</button>
-                      )
-                    )}
-                    {e.user_id && (
-                      <button onClick={() => handleResetPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-[#028a9e] hover:bg-[#f0f7f8]">Reset Password</button>
-                    )}
-                    {e.user_id && (
-                      <button onClick={() => handleSetTempPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-amber-600 hover:bg-amber-50">Set Temp Password</button>
-                    )}
-                    {e.status === 'active' && (
-                      <button onClick={() => handleArchive(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-amber-200 text-amber-600 hover:bg-amber-50">Deactivate</button>
-                    )}
-                    {e.status === 'archived' && (
-                      <button onClick={() => handleRestore(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-emerald-200 text-emerald-600 hover:bg-emerald-50">Restore</button>
-                    )}
-                    {isSuperAdmin && e.id !== currentEmployeeId && (
-                      <button onClick={() => handleToggleTest(e)} title="Test accounts are hidden from other admins, the calendar, the directory, and real approvers' queues"
-                        className="text-[12px] font-semibold px-2.5 py-1 rounded border border-violet-200 text-violet-600 hover:bg-violet-50">
-                        {e.is_test_account ? 'Unmark Test' : 'Mark as Test'}
-                      </button>
-                    )}
-                    <button onClick={() => setConfirmDelete(e.id)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50">Delete</button>
+                    <button aria-label={`More actions for ${e.name}`} aria-haspopup="menu"
+                      onClick={ev => { ev.stopPropagation(); const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setMenu(m => m?.id === e.id ? null : { id: e.id, top: r.bottom + 4, left: Math.max(8, r.right - 208) }) }}
+                      className="text-[14px] leading-none font-bold w-7 h-7 rounded border border-[#d4eef2] text-gray-500 hover:bg-[#f0f7f8]">⋯</button>
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
         </div>
       </div>
+
+      {/* Row action menu (fixed-position so the scrolling table can't clip it) */}
+      {menu && (() => {
+        const e = employees.find(x => x.id === menu.id)
+        if (!e) return null
+        const travelOn = !!e.geofence_override_until && Date.parse(e.geofence_override_until) > Date.now()
+        const item = 'w-full text-left px-3 py-2 text-[13px] hover:bg-[#f0f7f8] disabled:opacity-40'
+        return (
+          <div role="menu" onClick={ev => ev.stopPropagation()} style={{ top: menu.top, left: menu.left }}
+            className="fixed z-50 w-52 bg-white border border-[#d4eef2] rounded-lg shadow-lg py-1 print:hidden">
+            {e.user_id && <button role="menuitem" className={item} onClick={() => { setMenu(null); handleResetPassword(e) }}>Send password reset link</button>}
+            {e.user_id && <button role="menuitem" className={`${item} text-amber-600`} onClick={() => { setMenu(null); handleSetTempPassword(e) }}>Set temporary password</button>}
+            {e.status === 'active' && !e.login_geofence_regions?.includes('*') && (
+              travelOn
+                ? <button role="menuitem" className={`${item} text-sky-700`} disabled={busy} onClick={() => { setMenu(null); handleGeofence(e.id, 0) }}>Clear travel access</button>
+                : <button role="menuitem" className={item} disabled={busy} onClick={() => { setMenu(null); handleGeofence(e.id, 7) }} title="Let this person sign in from outside the allowed states for 7 days">Travel access (7 days)</button>
+            )}
+            {isSuperAdmin && e.id !== currentEmployeeId && (
+              <button role="menuitem" className={`${item} text-violet-600`} onClick={() => { setMenu(null); handleToggleTest(e) }}>{e.is_test_account ? 'Unmark as test account' : 'Mark as test account'}</button>
+            )}
+            {e.status === 'active' && <button role="menuitem" className={`${item} text-amber-600`} onClick={() => { setMenu(null); handleArchive(e.id) }}>Deactivate</button>}
+            {e.status === 'archived' && <button role="menuitem" className={`${item} text-emerald-600`} onClick={() => { setMenu(null); handleRestore(e.id) }}>Restore</button>}
+            <div className="my-1 border-t border-[#f0f7f8]" />
+            <button role="menuitem" className={`${item} text-red-500`} onClick={() => { setMenu(null); setConfirmDelete(e.id) }}>Delete…</button>
+          </div>
+        )
+      })()}
 
       {/* Print-only table — simplified columns, no actions/checkboxes. Hidden on screen, shown only via window.print(). */}
       <div className="hidden print:block">
