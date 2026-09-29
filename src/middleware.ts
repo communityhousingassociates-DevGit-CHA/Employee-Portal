@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ACTIVITY_COOKIE, IDLE_LOGOUT_MS } from '@/lib/constants/session'
+import { checkGeofence, regionsFor, resolveGeofenceSettings } from '@/lib/geofence'
 
 const SUPABASE_HOST = (() => {
   try {
@@ -174,6 +175,43 @@ export async function middleware(request: NextRequest) {
   // Redirect unauthenticated users to login
   if (!user && !pathname.startsWith('/login')) {
     return securityHeaders(NextResponse.redirect(new URL('/login', request.url)), csp)
+  }
+
+  // Sign-in location rule (see lib/geofence.ts): unless switched off in Portal Settings, the portal only works from the configured
+  // states (default MD, DC, VA, PA, DE), by IP location as seen by Vercel. A person can have their own exception ({'*'} = anywhere)
+  // or a time-limited travel override. Fails open if the lookup itself errors or hangs — a broken check must not lock everyone out.
+  if (user && !pathname.startsWith('/login')) {
+    try {
+      const admin = createAdminClient()
+      const lookup = Promise.all([
+        admin.from('employees').select('id, name, login_geofence_regions, geofence_override_until').eq('user_id', user.id).single(),
+        admin.from('portal_settings').select('values').maybeSingle(),
+      ])
+      const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('geofence lookup timed out')), 3000))
+      const [{ data: person }, { data: settings }] = await Promise.race([lookup, timeout])
+      if (person) {
+        const regions = regionsFor(person.login_geofence_regions as string[] | null, resolveGeofenceSettings(settings?.values as Record<string, unknown> | undefined))
+        const country = request.headers.get('x-vercel-ip-country')
+        const region = request.headers.get('x-vercel-ip-country-region')
+        const verdict = checkGeofence({ regions, overrideUntil: person.geofence_override_until as string | null, country, region, production: process.env.NODE_ENV === 'production' })
+        if (!verdict.allowed) {
+          // Record the refusal (at most one row a minute per person) so it shows up in the daily problems email.
+          try {
+            const since = new Date(Date.now() - 60_000).toISOString()
+            const { count } = await admin.from('geofence_blocks').select('id', { count: 'exact', head: true }).eq('employee_id', person.id).gte('created_at', since)
+            if (!count) await admin.from('geofence_blocks').insert({ employee_id: person.id, country, region, city: request.headers.get('x-vercel-ip-city'), ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null, path: pathname })
+          } catch { /* logging is best-effort */ }
+          if (isServerAction) return securityHeaders(NextResponse.json({ error: 'Sign-in from this location is not allowed.' }, { status: 403 }), csp)
+          try { await supabase.auth.signOut({ scope: 'local' }) } catch { /* cookies cleared below regardless */ }
+          const redirect = NextResponse.redirect(new URL('/login?reason=geo', request.url))
+          supabaseResponse.cookies.getAll().forEach(c => redirect.cookies.set(c))
+          redirect.cookies.set(ACTIVITY_COOKIE, '', { path: '/', maxAge: 0 })
+          return securityHeaders(redirect, csp)
+        }
+      }
+    } catch {
+      // Fail open.
+    }
   }
 
   // Forced password change — an admin set this employee's password directly

@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react'
 import MileageRateClient from '@/components/MileageRateClient'
-import { savePolicySettings } from '@/app/actions/portal-settings'
+import { savePolicySettings, saveGeofenceSettings } from '@/app/actions/portal-settings'
+import type { GeofenceSettings } from '@/lib/geofence'
 import { HOLIDAY_WORK_MULTIPLIER } from '@/lib/constants/holiday-work'
 import type { PolicySettings } from '@/lib/policy'
 
@@ -36,11 +37,27 @@ export default function PortalSettingsClient({
   mileageRates,
   canEditMileage,
   initialPolicy,
+  initialGeofence,
+  canEditGeofence,
 }: {
   mileageRates: { id: string; year: number; rate_per_mile: number; updated_at: string }[]
   canEditMileage: boolean
   initialPolicy: PolicySettings
+  initialGeofence: GeofenceSettings
+  canEditGeofence: boolean
 }) {
+  const [geoEnabled, setGeoEnabled] = useState(initialGeofence.enabled)
+  const [geoRegions, setGeoRegions] = useState(initialGeofence.regions.join(', '))
+  const [geoMsg, setGeoMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [geoPending, startGeo] = useTransition()
+  function saveGeo() {
+    setGeoMsg(null)
+    startGeo(async () => {
+      try { const r = await saveGeofenceSettings({ enabled: geoEnabled, regionsText: geoRegions }); setGeoEnabled(r.enabled); setGeoRegions(r.regions.join(', ')); setGeoMsg({ ok: true, text: 'Saved — applies to the next request.' }) }
+      catch (e) { setGeoMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save' }) }
+    })
+  }
+
   const [settings, setSettings] = useState<PolicySettings>(initialPolicy)
   const [savedSettings, setSavedSettings] = useState<PolicySettings>(initialPolicy)
   const [saved, setSaved] = useState(false)
@@ -117,6 +134,26 @@ export default function PortalSettingsClient({
         <Field label="Holiday work — non-exempt employees" hint="Shown on Reports → Timesheets for payroll."><Static>Time-and-a-half ({HOLIDAY_WORK_MULTIPLIER}×) for hours worked</Static></Field>
         <Field label="Election voting leave" hint="Approver reviews any request above the standard."><Static>4 hrs standard · up to 6 hrs with manager approval</Static></Field>
         <Field label="Resignation payout" hint="Director flag is set per employee (Admin → Users). Use the calculator on an employee's page."><Static>Up to 120 hrs annual leave · Director 4 weeks&apos; notice · non-Director 2 weeks · sick never paid</Static></Field>
+      </Section>
+
+      <Section id="security" title="Sign-in Location (Security)">
+        <div className="sm:col-span-2 flex items-center justify-between py-1">
+          <div>
+            <p className="text-[13px] font-semibold text-[#0b2b35]">Only allow the portal to be used from these states</p>
+            <p className="text-[11px] text-gray-400">Uses the location of the person&apos;s internet connection (approximate). Someone outside the list is signed out and can&apos;t use the portal. Individuals can be given travel access from User Management.</p>
+          </div>
+          <button type="button" disabled={!canEditGeofence} onClick={() => setGeoEnabled(v => !v)} className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${geoEnabled ? 'bg-[#02ACC0]' : 'bg-gray-300'} disabled:opacity-50`} aria-pressed={geoEnabled}>
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${geoEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+          </button>
+        </div>
+        <Field label="Allowed states" hint="Two-letter codes, comma separated (Maryland region: MD, DC, VA, PA, DE)">
+          <input type="text" value={geoRegions} disabled={!canEditGeofence} onChange={e => setGeoRegions(e.target.value)} className={inputCls} />
+        </Field>
+        <div className="flex items-end gap-3">
+          <button onClick={saveGeo} disabled={!canEditGeofence || geoPending} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{geoPending ? 'Saving…' : 'Save location rule'}</button>
+          {geoMsg && <span className={`text-[12px] ${geoMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{geoMsg.text}</span>}
+        </div>
+        {!canEditGeofence && <p className="sm:col-span-2 text-[11px] text-gray-400">Only the super administrator can change this rule.</p>}
       </Section>
 
       <Section id="payroll" title="Pay Period &amp; Payroll (reference)">

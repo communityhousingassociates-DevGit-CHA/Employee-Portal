@@ -232,6 +232,8 @@ export default async function StaffSopPage() {
             <Bullets items={[
               <>Invite links are valid for <strong>48 hours</strong> from the time the invite is sent.</>,
               <>Password reset links are valid for <strong>48 hours</strong>.</>,
+              <>You are signed out automatically after <strong>4 hours of inactivity</strong>; a warning appears a few minutes before.</>,
+              <>The portal can only be used from <strong>Maryland, DC, Virginia, Pennsylvania and Delaware</strong> (based on the location of your internet connection). Signing in from elsewhere is blocked. If you will be traveling, or a mobile connection is being treated as outside the area, contact the System Administrator for temporary access.</>,
               <>Passwords must be at least <strong>8 characters</strong>.</>,
               'Credentials are personal and must not be shared; you’re individually responsible for the accuracy of entries and e-signatures made under your own login.',
             ]} />

@@ -101,6 +101,7 @@ export default async function GuidePage() {
               <>Click <strong>Set Password &amp; Continue</strong> — you&apos;ll be signed in and taken straight to your Dashboard.</>,
             ]} />
             <p><strong className="text-[#0b2b35]">Signing in later.</strong> Go to <code className="bg-[#f0f7f8] px-1.5 py-0.5 rounded text-[12px]">portal.communityhousingassociates.org</code> and sign in with your CHA email address and password.</p>
+            <p><strong className="text-[#0b2b35]">Security.</strong> You&apos;re signed out automatically after <strong>4 hours of inactivity</strong> (you&apos;ll see a warning first — click <em>Stay signed in</em> to continue). The portal can only be used from Maryland, DC, Virginia, Pennsylvania and Delaware; if you&apos;re traveling, ask your system administrator for temporary access before you go.</p>
             <p className="font-semibold text-[#0b2b35]">Forgot your password?</p>
             <Steps items={[
               <>On the sign-in screen, click <strong>Forgot password?</strong></>,

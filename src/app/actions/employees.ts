@@ -205,7 +205,7 @@ export async function getEmployees() {
   const policy = await loadPolicy(admin)
   let query = admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, is_exempt, is_director, year_end_holiday, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, is_exempt, is_director, year_end_holiday, login_geofence_regions, geofence_override_until, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
     .order('name')
   // Test accounts (workflow testing) are only visible to the super admin who uses them — invisible to every other admin, including other 'admin'-role staff.
   if (!actor.is_super_admin) query = query.eq('is_test_account', false)
@@ -223,6 +223,17 @@ export async function getEmployees() {
     const status = e.is_test_account ? 'test' : e.is_active ? 'active' : 'archived'
     return { ...e, tier, accrual: ptoRate, status, grant_name: grant?.name ?? null, invite_status, invite_sent_at, invite_expired }
   })
+}
+
+/** Super admin only — lets someone sign in from anywhere for `days` days (a business trip, a phone on an odd carrier). 0 clears it. */
+export async function setGeofenceOverride(id: string, days: number) {
+  await requireSuperAdmin()
+  if (!Number.isFinite(days) || days < 0 || days > 30) throw new Error('Choose between 0 and 30 days.')
+  const admin = createAdminClient()
+  const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null
+  const { error } = await admin.from('employees').update({ geofence_override_until: until }).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
 }
 
 /** Super admin only — flips an employee's test-account flag. Test accounts are hidden from every other admin, the shared calendar, the directory, and real approvers' queues; used for workflow testing without touching real staff data. */

@@ -19,7 +19,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [idleNotice, setIdleNotice] = useState(false)
-  useEffect(() => { setIdleNotice(new URLSearchParams(window.location.search).get('reason') === 'idle') }, [])
+  const [geoNotice, setGeoNotice] = useState(false)
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get('reason')
+    setIdleNotice(reason === 'idle')
+    setGeoNotice(reason === 'geo')
+  }, [])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -104,6 +109,11 @@ export default function LoginPage() {
               required />
           </div>
 
+          {geoNotice && !error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-[13px] rounded-lg px-3 py-2">
+              The portal can&apos;t be used from your current location. If you are traveling or on a mobile network, contact your administrator for temporary access.
+            </div>
+          )}
           {idleNotice && !error && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[13px] rounded-lg px-3 py-2">
               You were signed out after 4 hours of inactivity. Please sign in again.

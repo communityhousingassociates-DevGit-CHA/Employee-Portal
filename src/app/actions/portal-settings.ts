@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireRole } from '@/lib/auth/session'
+import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
+import { resolveGeofenceSettings, parseRegions, type GeofenceSettings } from '@/lib/geofence'
 import { POLICY_KEYS, resolvePolicy, type PolicySettings } from '@/lib/policy'
 import { loadPolicy } from '@/lib/policy-server'
 
@@ -39,10 +40,33 @@ export async function savePolicySettings(input: PolicySettings): Promise<PolicyS
     values[key] = Math.round(v * 100) / 100
   }
   const admin = createAdminClient()
-  const { error } = await admin.from('portal_settings').upsert({ id: true, values, updated_by: me.id, updated_at: new Date().toISOString() })
+  // Merge into the stored values so other keys (the sign-in location rule) are never wiped by saving the policy numbers.
+  const { data: current } = await admin.from('portal_settings').select('values').maybeSingle()
+  const { error } = await admin.from('portal_settings').upsert({ id: true, values: { ...((current?.values as Record<string, unknown>) ?? {}), ...values }, updated_by: me.id, updated_at: new Date().toISOString() })
   if (error) throw new Error(error.message)
   revalidatePath('/admin/settings')
   revalidatePath('/request')
   revalidatePath('/dashboard')
   return resolvePolicy(values)
+}
+
+/** Portal-wide sign-in location rule (enforced by the middleware — see lib/geofence.ts). */
+export async function getGeofenceSettings(): Promise<GeofenceSettings> {
+  await requireRole([...EDIT_ROLES])
+  const { data } = await createAdminClient().from('portal_settings').select('values').maybeSingle()
+  return resolveGeofenceSettings(data?.values as Record<string, unknown> | undefined)
+}
+
+/** Super admin only: switch the location rule on/off and set the allowed states. */
+export async function saveGeofenceSettings(input: { enabled: boolean; regionsText: string }): Promise<GeofenceSettings> {
+  const me = await requireSuperAdmin()
+  const regions = parseRegions(input.regionsText)
+  if (input.enabled && (!regions || regions.some(r => !/^[A-Z]{2}$/.test(r)))) throw new Error('Enter two-letter US state codes separated by commas, e.g. MD, DC, VA, PA, DE.')
+  const admin = createAdminClient()
+  const { data: current } = await admin.from('portal_settings').select('values').maybeSingle()
+  const values = { ...((current?.values as Record<string, unknown>) ?? {}), geofence_enabled: !!input.enabled, ...(regions ? { geofence_regions: regions } : {}) }
+  const { error } = await admin.from('portal_settings').upsert({ id: true, values, updated_by: me.id, updated_at: new Date().toISOString() })
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/settings')
+  return resolveGeofenceSettings(values)
 }

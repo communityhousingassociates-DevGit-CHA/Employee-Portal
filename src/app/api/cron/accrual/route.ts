@@ -49,6 +49,15 @@ export async function GET(request: NextRequest) {
     if (e.error) issues.push(`${label}: ${e.error}`)
   }
   errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest)
+  // Sign-ins the location rule refused in the last 24 hours (someone traveling, a VPN, or a real attempt) — worth a look.
+  const { data: blocks } = await admin.from('geofence_blocks').select('employee_id, region, country, city, employee:employees(name)').gte('created_at', new Date(Date.now() - 86400000).toISOString())
+  const byPerson = new Map<string, { name: string; where: string; n: number }>()
+  for (const b of (blocks ?? []) as unknown as { employee_id: string; region: string | null; country: string | null; city: string | null; employee: { name: string } | { name: string }[] | null }[]) {
+    const nm = (Array.isArray(b.employee) ? b.employee[0]?.name : b.employee?.name) ?? 'Someone'
+    const cur = byPerson.get(b.employee_id) ?? { name: nm, where: [b.city, b.region, b.country].filter(Boolean).join(', ') || 'unknown location', n: 0 }
+    cur.n++; byPerson.set(b.employee_id, cur)
+  }
+  for (const v of byPerson.values()) issues.push(`Sign-in blocked by the location rule: ${v.name} (${v.n} attempt${v.n === 1 ? '' : 's'}, from ${v.where}). If this is legitimate travel, grant travel access in User Management.`)
   for (const f of inviteReminders.failed) issues.push(`Invite reminder for ${f.name}: ${f.error}`)
   if ((deductions as { shortfalls?: number }).shortfalls) issues.push(`${(deductions as { shortfalls?: number }).shortfalls} approved leave request(s) came due with an insufficient balance — see the notices to approvers.`)
   const tracking = await sendTrackingDigest(admin, issues).catch(e => ({ sent: false, reason: e instanceof Error ? e.message : String(e) }))

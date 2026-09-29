@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, type BulkEditableField } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, setGeofenceOverride, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate } from '@/lib/format-date'
 
@@ -32,6 +32,8 @@ type Employee = {
   invite_status: 'not_invited' | 'invited' | 'active'
   invite_sent_at: string | null
   invite_expired: boolean
+  login_geofence_regions: string[] | null
+  geofence_override_until: string | null
   is_super_admin: boolean
   pto_uncapped: boolean
   is_exempt: boolean
@@ -188,6 +190,19 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
     setEmployees(es => es.filter(e => e.id !== id))
     setConfirmDelete(null)
     showToast('Employee deleted')
+  }
+
+  async function handleGeofence(id: string, days: number) {
+    setBusy(true)
+    try {
+      await setGeofenceOverride(id, days)
+      showToast(days > 0 ? `Travel access granted for ${days} days` : 'Travel access cleared')
+      startTransition(() => router.refresh())
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update travel access')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function runInvites(ids: string[]) {
@@ -444,6 +459,13 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                       <button onClick={() => runInvites([e.id])} disabled={busy} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#02ACC0] text-[#028a9e] hover:bg-[#e0f5f8] disabled:opacity-40">
                         {e.invite_status === 'invited' ? 'Resend Invite' : 'Send Invite'}
                       </button>
+                    )}
+                    {isSuperAdmin && e.status === 'active' && !e.login_geofence_regions?.includes('*') && (
+                      e.geofence_override_until && Date.parse(e.geofence_override_until) > Date.now() ? (
+                        <button onClick={() => handleGeofence(e.id, 0)} disabled={busy} title={`Signing in from anywhere until ${fmtDate(e.geofence_override_until)}`} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-sky-300 text-sky-700 bg-sky-50 hover:bg-sky-100 disabled:opacity-40">Travel access until {fmtDate(e.geofence_override_until)} · Clear</button>
+                      ) : (
+                        <button onClick={() => handleGeofence(e.id, 7)} disabled={busy} title="Let this person sign in from outside the allowed states for 7 days" className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-gray-600 hover:bg-[#f0f7f8] disabled:opacity-40">Travel access (7 days)</button>
+                      )
                     )}
                     {e.user_id && (
                       <button onClick={() => handleResetPassword(e)} className="text-[12px] font-semibold px-2.5 py-1 rounded border border-[#d4eef2] text-[#028a9e] hover:bg-[#f0f7f8]">Reset Password</button>
