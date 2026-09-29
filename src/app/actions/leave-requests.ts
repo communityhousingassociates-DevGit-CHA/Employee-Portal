@@ -406,12 +406,18 @@ export async function getPendingLeaveApprovals() {
   return results
 }
 
-async function reviewedRows(statuses: string[], limit: number) {
+async function reviewedRows(actor: { is_test_account?: boolean }, statuses: string[], limit: number) {
   const admin = createAdminClient()
-  const { data, error } = await admin
+  let query = admin
     .from('leave_requests')
     .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), approver:employees!leave_requests_approver_id_fkey(name)')
     .in('status', statuses)
+  // Same rule as the pending queue: test-account requests stay out of real approvers' lists (unless the viewer is themselves testing).
+  if (!actor.is_test_account) {
+    const testIds = await getTestAccountIds(admin)
+    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
+  }
+  const { data, error } = await query
     .order('approved_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -433,14 +439,14 @@ async function reviewedRows(statuses: string[], limit: number) {
 
 /** Approved and denied requests (the Approved and Denied tabs). */
 export async function getReviewedLeaveApprovals(limit = 100) {
-  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
-  return reviewedRows(['approved', 'denied'], limit)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  return reviewedRows(actor, ['approved', 'denied'], limit)
 }
 
 /** Requests employees withdrew, including ones a manager had already approved (the Cancelled tab). */
 export async function getCancelledLeaveRequests(limit = 100) {
-  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
-  return reviewedRows(['cancelled'], limit)
+  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  return reviewedRows(actor, ['cancelled'], limit)
 }
 
 export async function approveLeaveRequest(id: string) {
