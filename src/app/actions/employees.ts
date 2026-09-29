@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { calcTier } from '@/lib/constants/accrual'
 import { loadPolicy } from '@/lib/policy-server'
+import { getAuthUserInfo } from '@/lib/auth-users'
+import { inviteExpired } from '@/lib/constants/invites'
 import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
 import type { Role } from '@/types'
 
@@ -197,23 +199,6 @@ export async function setTemporaryPassword(id: string): Promise<string> {
 
 export type InviteStatus = 'not_invited' | 'invited' | 'active'
 
-/**
- * Every auth user's id → whether they have actually set up their account (chosen a password). NOT "has a sign-in
- * timestamp": opening the invite link stamps last_sign_in_at even when the visit was an email security scanner
- * prefetching it, which used to make Resend Invite skip people who had never set a password.
- */
-async function getSignInMap(): Promise<Map<string, boolean>> {
-  const admin = createAdminClient()
-  const map = new Map<string, boolean>()
-  for (let page = 1; ; page++) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
-    if (error) throw new Error(error.message)
-    for (const u of data.users) map.set(u.id, !!(u.user_metadata as { password_set_at?: string } | null)?.password_set_at)
-    if (data.users.length < 1000) break
-  }
-  return map
-}
-
 export async function getEmployees() {
   const actor = await requireRole(['admin'])
   const admin = createAdminClient()
@@ -226,14 +211,17 @@ export async function getEmployees() {
   if (!actor.is_super_admin) query = query.eq('is_test_account', false)
   const { data, error } = await query
   if (error) throw new Error(error.message)
-  const signedIn = await getSignInMap()
+  const authInfo = await getAuthUserInfo(admin)
   return (data ?? []).map(e => {
     const { tier, ptoRate } = calcTier(e.hire_date, Date.now(), policy)
     const grant = Array.isArray(e.grant) ? e.grant[0] : e.grant
     // Active = set a password through the portal (flag), or has signed in with one before (login_count covers accounts created earlier).
-    const invite_status: InviteStatus = !e.user_id ? 'not_invited' : (signedIn.get(e.user_id) || (e.login_count ?? 0) > 0) ? 'active' : 'invited'
+    const info = e.user_id ? authInfo.get(e.user_id) : undefined
+    const invite_status: InviteStatus = !e.user_id ? 'not_invited' : (info?.passwordSet || (e.login_count ?? 0) > 0) ? 'active' : 'invited'
+    const invite_sent_at = e.user_id ? info?.invitedAt ?? null : null
+    const invite_expired = invite_status === 'invited' && !!invite_sent_at && inviteExpired(invite_sent_at)
     const status = e.is_test_account ? 'test' : e.is_active ? 'active' : 'archived'
-    return { ...e, tier, accrual: ptoRate, status, grant_name: grant?.name ?? null, invite_status }
+    return { ...e, tier, accrual: ptoRate, status, grant_name: grant?.name ?? null, invite_status, invite_sent_at, invite_expired }
   })
 }
 

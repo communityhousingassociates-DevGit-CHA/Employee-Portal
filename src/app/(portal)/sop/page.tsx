@@ -230,8 +230,8 @@ export default async function StaffSopPage() {
 
           <Section id="security" title="9. Account Security">
             <Bullets items={[
-              <>Invite links are valid for <strong>24 hours</strong> from the time the invite is sent.</>,
-              <>Password reset links are valid for <strong>24 hours</strong>.</>,
+              <>Invite links are valid for <strong>48 hours</strong> from the time the invite is sent.</>,
+              <>Password reset links are valid for <strong>48 hours</strong>.</>,
               <>Passwords must be at least <strong>8 characters</strong>.</>,
               'Credentials are personal and must not be shared; you’re individually responsible for the accuracy of entries and e-signatures made under your own login.',
             ]} />

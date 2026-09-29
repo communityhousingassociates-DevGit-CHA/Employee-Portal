@@ -274,8 +274,8 @@ export default async function AdminSopPage() {
 
           <Section id="security" title="10. Account Security">
             <Bullets items={[
-              <>Invite links are valid for <strong>24 hours</strong> from the time the invite is sent.</>,
-              <>Password reset links are valid for <strong>24 hours</strong>.</>,
+              <>Invite links are valid for <strong>48 hours</strong> from the time the invite is sent.</>,
+              <>Password reset links are valid for <strong>48 hours</strong>.</>,
               <>Passwords must be at least <strong>8 characters</strong>.</>,
               'Salary information and the team Timesheets report are restricted to the President/CEO, the Accounting Manager, and the system super administrator only (not to other admins); every other employee sees only their own timesheets, history, and gross wages. Salary amounts are masked by default; each can be clicked individually to be shown, or the Salary page&apos;s <strong>Show all amounts</strong> button reveals them together (and hides them again on a second click or after 60 seconds). Do not leave salary figures on screen or share your screen while they show. A wrong entry can be corrected with <strong>Edit</strong> (the change is recorded with who made it, when, and the previous amount); a raise is recorded as a new <strong>+ Salary Change</strong>. Credentials are personal and must not be shared; each employee is individually responsible for the accuracy of entries and e-signatures made under their own login.',
             ]} />

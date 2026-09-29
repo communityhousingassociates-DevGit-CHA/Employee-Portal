@@ -93,7 +93,7 @@ export default async function GuidePage() {
 
         <div className="space-y-5">
           <Section id="getting-started" title="1. Getting Started">
-            <p><strong className="text-[#0b2b35]">Your invite email.</strong> You&apos;ll receive an email inviting you to set up your portal account. The link is valid for <strong>24 hours</strong> — open it and set a password as soon as you can. If it expires, ask your administrator to resend the invite.</p>
+            <p><strong className="text-[#0b2b35]">Your invite email.</strong> You&apos;ll receive an email inviting you to set up your portal account. The link is valid for <strong>48 hours</strong> — open it and set a password as soon as you can. If it expires, ask your administrator to resend the invite.</p>
             <p className="font-semibold text-[#0b2b35]">Setting your password</p>
             <Steps items={[
               'Click the link in the invite email.',
@@ -105,7 +105,7 @@ export default async function GuidePage() {
             <Steps items={[
               <>On the sign-in screen, click <strong>Forgot password?</strong></>,
               <>Enter your CHA email address and click <strong>Send Reset Link</strong>.</>,
-              <>Check your email — the reset link is valid for <strong>24 hours</strong>. If it expires, just request a new one.</>,
+              <>Check your email — the reset link is valid for <strong>48 hours</strong>. If it expires, just request a new one.</>,
             ]} />
             <p><strong className="text-[#0b2b35]">Trouble signing in?</strong> Contact your administrator — see <a href="#help" className="text-[#02ACC0] hover:underline">Getting Help</a> below.</p>
           </Section>

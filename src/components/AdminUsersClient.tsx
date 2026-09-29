@@ -30,6 +30,8 @@ type Employee = {
   grant_name: string | null
   user_id: string | null
   invite_status: 'not_invited' | 'invited' | 'active'
+  invite_sent_at: string | null
+  invite_expired: boolean
   is_super_admin: boolean
   pto_uncapped: boolean
   is_exempt: boolean
@@ -295,12 +297,12 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
   const exportRows = selectedEmployees.length > 0 ? selectedEmployees : visible
 
   function exportCsv() {
-    const headers = ['Employee ID', 'First Name', 'Last Name', 'Email', 'Role', 'Type', 'Category', 'Department', 'Job Title', 'Grant', 'Hire Date', 'End Date', 'Accrual Tier', 'Invite Status', 'Status']
+    const headers = ['Employee ID', 'First Name', 'Last Name', 'Email', 'Role', 'Type', 'Category', 'Department', 'Job Title', 'Grant', 'Hire Date', 'End Date', 'Accrual Tier', 'Invite Status', 'Invite Sent', 'Status']
     const rows = exportRows.map(e => [
       formatEmployeeId(e.employee_number), e.first_name, e.last_name, e.email, e.role.replace('_', ' '), e.employee_type,
       e.staff_category === 'resident_advocate' ? 'Resident Advocate' : 'CHA Employee', e.department ?? '', e.job_title ?? '',
       e.grant_name ?? '', fmtDate(e.hire_date), e.end_date ? fmtDate(e.end_date) : '', e.tier,
-      inviteBadge[e.invite_status].label, e.status === 'archived' ? 'Inactive' : e.status,
+      inviteBadge[e.invite_status].label, e.invite_sent_at ? fmtDate(e.invite_sent_at) : '', e.status === 'archived' ? 'Inactive' : e.status,
     ])
     const escape = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
     const csv = [headers, ...rows].map(r => r.map(v => escape(String(v))).join(',')).join('\r\n')
@@ -424,6 +426,11 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${inviteBadge[e.invite_status].cls}`}>{inviteBadge[e.invite_status].label}</span>
+                  {e.invite_sent_at && e.invite_status !== 'not_invited' && (
+                    <span className="block text-[10px] text-gray-400 mt-1" title="When the invite email was last sent">
+                      Sent {fmtDate(e.invite_sent_at)}{e.invite_expired && <span className="ml-1 font-semibold text-red-500">· link expired</span>}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${e.status === 'active' ? 'bg-emerald-100 text-emerald-700' : e.status === 'test' ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-500'}`}>
