@@ -64,6 +64,7 @@ export default function RequestClient({
   balance,
   yearEnd,
   closedRanges,
+  bookedDays,
   outlook,
   initialDate,
 }: {
@@ -73,6 +74,8 @@ export default function RequestClient({
   yearEnd?: YearEndChoice | null
   initialDate?: string
   closedRanges: ClosedRange[]
+  /** Days the employee already has pending/approved leave on: date -> hours and what it is. */
+  bookedDays: Record<string, { hours: number; labels: string[] }>
   outlook: { policy?: PolicySettings; hireDate: string; ptoUncapped: boolean; accrualsOn: boolean; reserved: ReservedLeave[] }
 }) {
   const [leaveType, setLeaveType] = useState<LeaveType>('PTO')
@@ -117,10 +120,10 @@ export default function RequestClient({
     const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
     if (ready.length === 0) { setDayOverage(null); return }
     let cancelled = false
-    checkMyLeaveDays(ready).then(m => { if (!cancelled) setDayOverage(m) }).catch(() => {})
+    checkMyLeaveDays(leaveType, ready).then(m => { if (!cancelled) setDayOverage(m) }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayKey])
+  }, [dayKey, leaveType])
 
   function toggleDay(date: string) {
     setPicked(p => {
@@ -176,6 +179,8 @@ export default function RequestClient({
     if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
     if (date > latest) return 'Too far ahead'
     if (closedRangeOverlapping(date, date, closedRanges)) return 'Period closed'
+    const booked = bookedDays[date]
+    if (booked && booked.hours >= 8) return `Already requested: ${booked.labels.join(', ')} (${booked.hours} hrs)`
     return null
   }
 
@@ -336,7 +341,7 @@ export default function RequestClient({
                           <input type="checkbox" checked={on} disabled={!!reason} onChange={() => toggleDay(date)} onClick={e => e.stopPropagation()} className="accent-[#02ACC0] w-4 h-4" />
                           <div className="w-[124px] flex-shrink-0 whitespace-nowrap text-[13px] text-[#0b2b35]"><span className="inline-block w-9 text-gray-400">{label}</span>{fmtDate(date)}</div>
                           {reason ? (
-                            <span className="text-[11px] text-gray-400">{reason}</span>
+                            <span className={`text-[11px] ${reason.startsWith('Already requested') ? 'font-semibold text-amber-600' : 'text-gray-400'}`}>{reason}</span>
                           ) : on ? (
                             <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                               <div className="relative">
@@ -351,6 +356,9 @@ export default function RequestClient({
                               {(Number(picked[date]) > maxDayHours || !(Number(picked[date]) > 0)) && <span className="text-[11px] text-red-500">Enter 0.5–{maxDayHours} hrs</span>}
                             </div>
                           ) : <span className="text-[11px] text-gray-300">Click to add</span>}
+                          {!reason && bookedDays[date] && (
+                            <span className="ml-auto text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{bookedDays[date].hours} hrs already requested: {bookedDays[date].labels.join(', ')}</span>
+                          )}
                         </div>
                       )
                     })}

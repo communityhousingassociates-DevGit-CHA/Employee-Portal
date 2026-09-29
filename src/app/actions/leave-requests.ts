@@ -233,13 +233,48 @@ export async function createLeaveRequest(data: {
   return { autoApproved: autoApprove }
 }
 
-/** Live check for the request form: null when the days fit, otherwise why not. */
-export async function checkMyLeaveDays(days: LeaveDay[]) {
+/**
+ * Live check for the request form: null when the days fit, otherwise why not. Runs the same rules the submit runs
+ * (waiting period, date window, closed periods, daily hours, days already requested) and RETURNS the reason — production
+ * hides the message of a thrown error, so the form would otherwise only ever show a generic "React error #441".
+ */
+export async function checkMyLeaveDays(leaveType: LeaveType, days: LeaveDay[]) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
   const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
   if (ready.length === 0) return null
-  return dailyLeaveOverage(createAdminClient(), employee.id, ready)
+  try {
+    await checkLeaveDays(createAdminClient(), employee.id, leaveType, ready)
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : 'These days can’t be requested.'
+  }
+}
+
+/** The signed-in employee's pending and approved leave by day, so the form can show days that are already taken. */
+export async function getMyBookedLeaveDays() {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new Error('Forbidden')
+  const admin = createAdminClient()
+  const since = new Date(); since.setDate(since.getDate() - 60)
+  const { data, error } = await admin
+    .from('leave_requests')
+    .select('id, leave_type, status, start_date, end_date, hours')
+    .eq('employee_id', employee.id)
+    .in('status', ['pending', 'approved'])
+    .gte('end_date', since.toISOString().slice(0, 10))
+  if (error) throw new Error(error.message)
+  const daysByRequest = await loadRequestDays(admin, data ?? [])
+  const booked: Record<string, { hours: number; labels: string[] }> = {}
+  for (const r of data ?? []) {
+    for (const d of daysByRequest.get(r.id) ?? []) {
+      const cur = booked[d.date] ?? { hours: 0, labels: [] }
+      cur.hours += d.hours
+      cur.labels.push(`${r.leave_type === 'Personal' ? 'Personal Days' : r.leave_type} ${r.status}`)
+      booked[d.date] = cur
+    }
+  }
+  return booked
 }
 
 export async function getLeaveAttachmentUploadUrl(fileName: string) {
