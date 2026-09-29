@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUnseenIssueCount, getOpenIssueCount } from '@/app/actions/report-issue'
 import { getMyNotifications } from '@/app/actions/notifications'
+import { getPendingApprovalCount } from '@/app/actions/approvals'
 import Image from 'next/image'
 import Link from 'next/link'
 import IdleLogout from '@/components/IdleLogout'
@@ -35,6 +36,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const unseenIssueCount = await getUnseenIssueCount().catch(() => 0)
   const openIssueCount = await getOpenIssueCount().catch(() => 0)
+  const pendingApprovalCount = await getPendingApprovalCount().catch(() => 0)
   const notifications = await getMyNotifications().catch(() => ({ items: [], unreadCount: 0 }))
 
   return (
@@ -63,7 +65,7 @@ export default async function PortalLayout({ children }: { children: React.React
         </Link>
         </>
       }
-      sidebar={<Sidebar role={role} openIssueCount={openIssueCount} />}
+      sidebar={<Sidebar role={role} openIssueCount={openIssueCount} pendingApprovalCount={pendingApprovalCount} />}
     >
       <IdleLogout />
       {children}

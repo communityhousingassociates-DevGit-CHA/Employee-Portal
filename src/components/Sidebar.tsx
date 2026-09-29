@@ -24,7 +24,7 @@ const comingSoonItems = [
 type AdminItem = { href: string; icon: string; label: string; badge?: number; roles: Role[] }
 
 const adminItems: AdminItem[] = [
-  { href: '/approvals',     icon: '✅', label: 'Approvals',      badge: 2, roles: ['accounting_manager', 'ceo', 'admin'] },
+  { href: '/approvals',     icon: '✅', label: 'Approvals',      roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/close-period',  icon: '🔒', label: 'Close Period',             roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/issues',        icon: '🎫', label: 'Issue Reports',            roles: ['accounting_manager', 'ceo', 'admin'] },
   { href: '/reports',       icon: '📊', label: 'Reports',                  roles: ['accounting_manager', 'ceo', 'admin'] },
@@ -32,13 +32,13 @@ const adminItems: AdminItem[] = [
   { href: '/admin',         icon: '🛡️', label: 'Admin Console',            roles: ['admin', 'ceo', 'accounting_manager'] },
 ]
 
-export default function Sidebar({ role = 'employee', openIssueCount = 0 }: { role?: Role; openIssueCount?: number }) {
+export default function Sidebar({ role = 'employee', openIssueCount = 0, pendingApprovalCount = 0 }: { role?: Role; openIssueCount?: number; pendingApprovalCount?: number }) {
   const pathname = usePathname()
   const router = useRouter()
 
   const visibleAdminItems = adminItems
     .filter(item => item.roles.includes(role))
-    .map(item => item.href === '/issues' ? { ...item, badge: openIssueCount || undefined } : item)
+    .map(item => item.href === '/issues' ? { ...item, badge: openIssueCount || undefined } : item.href === '/approvals' ? { ...item, badge: pendingApprovalCount || undefined } : item)
 
   async function signOut() {
     await fetch('/api/demo-logout', { method: 'POST' })
