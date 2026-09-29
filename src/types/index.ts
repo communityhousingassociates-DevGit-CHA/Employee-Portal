@@ -198,7 +198,7 @@ export interface AccrualLogEntry {
   created_at: string
 }
 
-export type NotificationKind = 'approval_needed' | 'approved' | 'denied' | 'returned'
+export type NotificationKind = 'approval_needed' | 'approved' | 'denied' | 'returned' | 'cancelled'
 
 export interface PortalNotification {
   id: string

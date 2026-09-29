@@ -406,16 +406,14 @@ export async function getPendingLeaveApprovals() {
   return results
 }
 
-export async function getReviewedLeaveApprovals(limit = 50) {
-  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+async function reviewedRows(statuses: string[], limit: number) {
   const admin = createAdminClient()
-  // Reviewed = a manager approved or denied it. Cancelled requests stay listed when a manager had approved them first,
-  // so an approval never silently drops out of the record.
   const { data, error } = await admin
     .from('leave_requests')
     .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), approver:employees!leave_requests_approver_id_fkey(name)')
-    .or('status.in.(approved,denied),and(status.eq.cancelled,approver_id.not.is.null)')
+    .in('status', statuses)
     .order('approved_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw new Error(error.message)
   const daysByRequest = await loadRequestDays(admin, data ?? [])
@@ -431,6 +429,18 @@ export async function getReviewedLeaveApprovals(limit = 50) {
       events: eventsByRequest.get(r.id) ?? [],
     }
   })
+}
+
+/** Approved and denied requests (the Approved and Denied tabs). */
+export async function getReviewedLeaveApprovals(limit = 100) {
+  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  return reviewedRows(['approved', 'denied'], limit)
+}
+
+/** Requests employees withdrew, including ones a manager had already approved (the Cancelled tab). */
+export async function getCancelledLeaveRequests(limit = 100) {
+  await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  return reviewedRows(['cancelled'], limit)
 }
 
 export async function approveLeaveRequest(id: string) {
@@ -569,7 +579,7 @@ export async function cancelMyLeaveRequest(id: string) {
     .eq('id', id).eq('status', request.status).select('id').maybeSingle()
   if (claimError) throw new Error(claimError.message)
   if (!claimed) throw new Error('This request was just changed — refresh and try again.')
-  await logLeaveEvent(admin, { requestId: id, action: 'cancelled', actor: employee, note: 'Cancelled by employee' })
+  await logLeaveEvent(admin, { requestId: id, action: 'cancelled', actor: employee, note: `Cancelled by employee (was ${request.status})` })
 
   const col = balanceColumnFor(request.leave_type)
   let newBalance: number | null = null
@@ -593,6 +603,18 @@ export async function cancelMyLeaveRequest(id: string) {
     body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nCancelled by you.${newBalance !== null ? ` The ${request.hours} hrs went back to your balance.` : ''}`,
     link: '/history',
     cta: 'View My Requests',
+  })
+
+  // Tell the approvers (bell + email) so a withdrawn request never just disappears from their queue.
+  const priorApprover = request.approver_id ? (await getRecipient(admin, request.approver_id))?.name : null
+  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+    kind: 'cancelled',
+    title: `${employee.name} cancelled a ${request.leave_type} request`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\n` +
+      `Status when cancelled: ${request.status}${request.status === 'approved' ? (priorApprover ? ` (approved by ${priorApprover})` : ' (auto-approved)') : ''}.\n` +
+      `${newBalance !== null ? `The ${request.hours} hrs were returned to the employee’s balance.` : 'No balance had been deducted.'}` +
+      `${request.status === 'approved' ? ' The days were removed from their timesheet.' : ''}`,
+    cta: 'View Cancelled Requests',
   })
 
   revalidatePath('/request')

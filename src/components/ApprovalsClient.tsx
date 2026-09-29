@@ -210,6 +210,8 @@ function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
   const dateRange = item.start_date === item.end_date ? fmtDate(item.start_date) : `${fmtDate(item.start_date)} – ${fmtDate(item.end_date)}`
   const cancelled = item.status === 'cancelled'
   const decision = item.events?.find(e => e.action === 'approved' || e.action === 'denied')
+  const cancelEvent = item.events?.find(e => e.action === 'cancelled')
+  const autoApproved = !!item.events?.some(e => e.action === 'auto_approved')
   const decidedAs = decision ? decision.action : item.status === 'denied' ? 'denied' : 'approved'
   const manager = decision?.actor_name ?? item.approver_name ?? null
   const decidedAt = decision?.created_at ?? item.approved_at
@@ -224,15 +226,22 @@ function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
             <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs{item.days && item.days.length > 1 ? ` · ${item.days.length} days` : ''}</p>
             {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-2 max-w-xs" />}
             {decidedAs === 'denied' && item.deny_reason && <p className="text-[12px] text-red-500 mt-1">&ldquo;{item.deny_reason}&rdquo;</p>}
-            <p className="text-[12px] text-gray-500 mt-1.5">
-              {decidedAs === 'denied' ? 'Denied' : 'Approved'} by <span className="font-semibold text-[#0b2b35]">{manager ?? 'a manager'}</span>
-              {decidedAt && <> · {fmtDate(decidedAt)}</>}
-              {cancelled && <span className="ml-2 text-[11px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">Later cancelled by employee</span>}
-            </p>
+            {cancelled ? (
+              <p className="text-[12px] text-gray-500 mt-1.5">
+                Cancelled by <span className="font-semibold text-[#0b2b35]">{item.employee_name}</span>
+                {cancelEvent && !cancelEvent.backfilled && <> · {fmtDate(cancelEvent.created_at)}</>}
+                {' '}· Was {decision ? <>approved by <span className="font-semibold text-[#0b2b35]">{manager ?? 'a manager'}</span></> : autoApproved ? 'auto-approved' : 'pending'}
+              </p>
+            ) : (
+              <p className="text-[12px] text-gray-500 mt-1.5">
+                {decidedAs === 'denied' ? 'Denied' : 'Approved'} by <span className="font-semibold text-[#0b2b35]">{manager ?? 'a manager'}</span>
+                {decidedAt && <> · {fmtDate(decidedAt)}</>}
+              </p>
+            )}
           </div>
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 ${decidedAs === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-            <span>{decidedAs === 'approved' ? '✓' : '✕'}</span>
-            <span>Reviewed · {decidedAs === 'approved' ? 'Approved' : 'Denied'}</span>
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 ${cancelled ? 'bg-gray-100 text-gray-600' : decidedAs === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+            <span>{cancelled ? '⊘' : decidedAs === 'approved' ? '✓' : '✕'}</span>
+            <span>{cancelled ? 'Cancelled by employee' : `Reviewed · ${decidedAs === 'approved' ? 'Approved' : 'Denied'}`}</span>
           </div>
         </div>
         <p className="mt-3 text-[11px] font-semibold text-[#028a9e]">{open ? 'Hide request record ▴' : 'View request record — signatures & history ▾'}</p>
@@ -504,6 +513,7 @@ export default function ApprovalsClient({
   approverName,
   initialPendingLeave,
   initialReviewedLeave,
+  initialCancelledLeave,
   initialPendingExpenses,
   initialPendingTimesheets,
   initialApprovedTimesheets,
@@ -513,6 +523,7 @@ export default function ApprovalsClient({
   approverName: string
   initialPendingLeave: LeaveApproval[]
   initialReviewedLeave: LeaveApproval[]
+  initialCancelledLeave: LeaveApproval[]
   initialPendingExpenses: ExpenseApproval[]
   initialPendingTimesheets: TimesheetForReview[]
   initialApprovedTimesheets: TimesheetForReview[]
@@ -521,10 +532,12 @@ export default function ApprovalsClient({
 }) {
   const router = useRouter()
   const [category, setCategory] = useState<'leave' | 'expenses' | 'timesheets'>('leave')
-  const [tab, setTab] = useState<'pending' | 'reviewed'>('pending')
+  const [tab, setTab] = useState<'pending' | 'approved' | 'denied' | 'cancelled'>('pending')
 
   const pendingLeave = initialPendingLeave
-  const reviewedLeave = initialReviewedLeave
+  const approvedLeave = initialReviewedLeave.filter(r => r.status === 'approved')
+  const deniedLeave = initialReviewedLeave.filter(r => r.status === 'denied')
+  const cancelledLeave = initialCancelledLeave
   const pendingExpenses = initialPendingExpenses
   const pendingTimesheets = initialPendingTimesheets
   const approvedTimesheets = initialApprovedTimesheets
@@ -577,7 +590,7 @@ export default function ApprovalsClient({
       {category === 'leave' && (
         <>
           <div className="flex gap-1 bg-white border border-[#d4eef2] rounded-lg p-1 w-fit mb-6">
-            {([['pending', `Pending (${pendingLeave.length})`], ['reviewed', `Reviewed (${reviewedLeave.length})`]] as const).map(([key, label]) => (
+            {([['pending', `Pending (${pendingLeave.length})`], ['approved', `Approved (${approvedLeave.length})`], ['denied', `Denied (${deniedLeave.length})`], ['cancelled', `Cancelled (${cancelledLeave.length})`]] as const).map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
                 className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${tab === key ? 'bg-[#02ACC0] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
                 {label}
@@ -599,17 +612,18 @@ export default function ApprovalsClient({
             )
           )}
 
-          {tab === 'reviewed' && (
-            reviewedLeave.length === 0 ? (
-              <div className="bg-white rounded-xl border border-[#d4eef2] p-14 text-center">
-                <p className="text-[13px] text-gray-400">No decisions made yet.</p>
+          {tab !== 'pending' && (() => {
+            const list = tab === 'approved' ? approvedLeave : tab === 'denied' ? deniedLeave : cancelledLeave
+            return list.length === 0 ? (
+              <div className="bg-white rounded-xl border border-[#d4eef2] p-10 text-center">
+                <p className="text-[13px] text-gray-400">No {tab} leave requests yet.</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {reviewedLeave.map(a => <ReviewedLeaveCard key={a.id} item={a} />)}
+              <div className="space-y-3">
+                {list.map(a => <ReviewedLeaveCard key={a.id} item={a} />)}
               </div>
             )
-          )}
+          })()}
         </>
       )}
 

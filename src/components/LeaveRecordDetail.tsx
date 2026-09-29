@@ -36,11 +36,18 @@ export default function LeaveRecordDetail({ events }: { events: LeaveEvent[] }) 
   const submitted = events.find(e => e.action === 'submitted')
   const decision = [...events].reverse().find(e => e.action === 'approved' || e.action === 'denied')
   const auto = events.find(e => e.action === 'auto_approved')
+  const cancelled = events.find(e => e.action === 'cancelled')
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <SignatureBlock title="Requested by — employee signature" tone="neutral" event={submitted} empty="No signature on file for this request." />
-        {auto && !decision ? (
+        {cancelled && !decision && !auto ? (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Review</p>
+            <p className="text-[13px] font-semibold text-gray-600">Not reviewed — cancelled by the employee</p>
+            <p className="text-[11px] text-gray-500 mt-1">{cancelled.backfilled ? 'Time not recorded' : stamp(cancelled.created_at)}</p>
+          </div>
+        ) : auto && !decision ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Approval</p>
             <p className="text-[13px] font-semibold text-emerald-700">Auto-approved by the system</p>

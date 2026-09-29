@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
-import { getPendingLeaveApprovals, getReviewedLeaveApprovals } from '@/app/actions/leave-requests'
+import { getPendingLeaveApprovals, getReviewedLeaveApprovals, getCancelledLeaveRequests } from '@/app/actions/leave-requests'
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
 import { getPendingTimesheetApprovals, getApprovedTimesheets } from '@/app/actions/timesheets'
 import { getTagList } from '@/app/actions/tags'
@@ -14,9 +14,10 @@ export default async function ApprovalsPage() {
   const employee = await getCurrentEmployee()
   if (!employee || !MANAGER_ROLES.includes(employee.role)) redirect('/dashboard')
 
-  const [pendingLeave, reviewedLeave, pendingExpenses, pendingTimesheets, approvedTimesheets, customTags] = await Promise.all([
+  const [pendingLeave, reviewedLeave, cancelledLeave, pendingExpenses, pendingTimesheets, approvedTimesheets, customTags] = await Promise.all([
     getPendingLeaveApprovals(),
     getReviewedLeaveApprovals(),
+    getCancelledLeaveRequests(),
     getPendingExpenseApprovals(),
     getPendingTimesheetApprovals(),
     getApprovedTimesheets(),
@@ -28,6 +29,7 @@ export default async function ApprovalsPage() {
       approverName={employee.name}
       initialPendingLeave={pendingLeave}
       initialReviewedLeave={reviewedLeave}
+      initialCancelledLeave={cancelledLeave}
       initialPendingExpenses={pendingExpenses}
       initialPendingTimesheets={pendingTimesheets}
       initialApprovedTimesheets={approvedTimesheets}

@@ -10,6 +10,7 @@ const KIND_STYLE: Record<NotificationKind, { icon: string; cls: string }> = {
   approved: { icon: '✓', cls: 'bg-emerald-100 text-emerald-700' },
   denied: { icon: '✕', cls: 'bg-red-100 text-red-700' },
   returned: { icon: '↩', cls: 'bg-amber-100 text-amber-700' },
+  cancelled: { icon: '⊘', cls: 'bg-gray-100 text-gray-600' },
 }
 
 function timeAgo(iso: string) {

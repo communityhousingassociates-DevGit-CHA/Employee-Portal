@@ -20,6 +20,7 @@ const ACCENT: Record<NotificationKind, string> = {
   approved: '#059669',
   denied: '#dc2626',
   returned: '#d97706',
+  cancelled: '#6b7280',
 }
 
 function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string; testNote?: string; copyNote?: string }) {
@@ -153,10 +154,13 @@ export async function getRecipient(admin: SupabaseClient, employeeId: string): P
 
 type Payload = { kind: NotificationKind; title: string; body: string; link: string; cta?: string }
 
-/** Tells every approver holding one of `roles` (except the submitter) that something is waiting in their Approvals queue. Never throws. */
-export async function notifyApprovers(admin: SupabaseClient, submitterId: string, roles: Role[], payload: Omit<Payload, 'kind' | 'link'>) {
+/**
+ * Tells every approver holding one of `roles` (except the submitter) that something happened in their Approvals area:
+ * by default a request is waiting ('approval_needed'); pass `kind: 'cancelled'` when an employee withdrew one. Never throws.
+ */
+export async function notifyApprovers(admin: SupabaseClient, submitterId: string, roles: Role[], payload: Omit<Payload, 'kind' | 'link'> & { kind?: NotificationKind }) {
   try {
-    const n = { ...payload, kind: 'approval_needed' as const, link: '/approvals', cta: payload.cta ?? 'Review in Portal' }
+    const n = { ...payload, kind: payload.kind ?? ('approval_needed' as NotificationKind), link: '/approvals', cta: payload.cta ?? 'Review in Portal' }
 
     // A test account's submission only ever reaches the test recipients (bell and email) — never the real approvers.
     const { data: who } = await admin.from('employees').select('is_test_account').eq('id', submitterId).maybeSingle()
