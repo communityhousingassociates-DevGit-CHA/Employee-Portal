@@ -159,9 +159,9 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       const middle_initial = form.middle_initial || null
       const address = { address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, postal_code: form.postal_code }
       if (editId) {
-        await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_exempt: form.is_exempt, is_director: form.is_director, is_active: form.is_active, ...address })
+        const editResult = await editEmployee(editId, { first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_exempt: form.is_exempt, is_director: form.is_director, is_active: form.is_active, ...address })
         if (editId !== currentEmployeeId) setEmployees(es => es.map(e => e.id === editId ? { ...e, status: form.is_active ? 'active' : 'archived' } : e))
-        showToast('Employee updated')
+        showToast(editResult?.emailNote ?? 'Employee updated')
       } else {
         await addEmployee({ first_name: form.first_name, last_name: form.last_name, middle_initial, email: form.email, employee_type: form.type, role: form.role, staff_category: form.staff_category, department: form.department, job_title: form.job_title, hire_date: form.hire_date, end_date: form.end_date, grant_id, pto_uncapped: form.pto_uncapped, is_exempt: form.is_exempt, is_director: form.is_director, is_active: form.is_active, ...address })
         showToast('Employee added')

@@ -90,6 +90,7 @@ export async function editEmployee(id: string, data: {
 }) {
   const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  const { data: before } = await admin.from('employees').select('email, user_id, login_count').eq('id', id).single()
   const { error } = await admin.from('employees').update({
     first_name: data.first_name,
     last_name: data.last_name,
@@ -115,7 +116,22 @@ export async function editEmployee(id: string, data: {
     postal_code: data.postal_code || null,
   }).eq('id', id)
   if (error) throw new Error(error.message)
+
+  // The sign-in account has its own copy of the email. Keep it in step so the person can still log in and gets mail at the right
+  // address. Someone who never finished setup has nothing to keep — their unused account (and its invite link, which was sent to
+  // the OLD address) is replaced by "Resend Invite", so we just tell the admin to do that.
+  let emailNote: string | undefined
+  if (before?.user_id && before.email && before.email.toLowerCase() !== data.email.toLowerCase()) {
+    const info = (await getAuthUserInfo(admin)).get(before.user_id as string)
+    if (info?.passwordSet || (before.login_count ?? 0) > 0) {
+      const { error: authError } = await admin.auth.admin.updateUserById(before.user_id as string, { email: data.email, email_confirm: true })
+      if (authError) emailNote = `The employee record was updated, but their sign-in email could not be changed (${authError.message}). They still sign in with ${before.email}.`
+    } else {
+      emailNote = 'Email updated. This person has not finished setup, and their invite went to the old address — click Resend Invite so a new one goes to the new address.'
+    }
+  }
   revalidatePath('/admin/users')
+  return { emailNote }
 }
 
 export async function archiveEmployee(id: string) {
