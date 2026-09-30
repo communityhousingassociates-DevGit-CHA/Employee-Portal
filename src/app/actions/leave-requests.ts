@@ -12,7 +12,7 @@ import { firstEligibleDate } from '@/lib/constants/accrual'
 import { loadPolicy } from '@/lib/policy-server'
 import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/leave-window'
 import { loadClosedRanges } from '@/lib/period-lock'
-import { closedRangeOverlapping, todayET, deductThroughDate } from '@/lib/pay-periods'
+import { closedRangeOverlapping, todayET, deductThroughDate, shiftDate } from '@/lib/pay-periods'
 import { denyReasonProblem } from '@/lib/deny-reason'
 import { logLeaveEvent, loadLeaveEvents } from '@/lib/leave-events'
 import { EMPLOYEE_ATTESTATION, APPROVER_APPROVE_ATTESTATION, APPROVER_DENY_ATTESTATION } from '@/lib/constants/leave-signature'
@@ -256,13 +256,12 @@ export async function getMyBookedLeaveDays() {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
   const admin = createAdminClient()
-  const since = new Date(); since.setDate(since.getDate() - 60)
   const { data, error } = await admin
     .from('leave_requests')
     .select('id, leave_type, status, start_date, end_date, hours')
     .eq('employee_id', employee.id)
     .in('status', ['pending', 'approved'])
-    .gte('end_date', since.toISOString().slice(0, 10))
+    .gte('end_date', shiftDate(todayET(), -60))
   if (error) throw new Error(error.message)
   const daysByRequest = await loadRequestDays(admin, data ?? [])
   const booked: Record<string, { hours: number; labels: string[] }> = {}
@@ -377,7 +376,7 @@ export async function getNextApprovedLeave() {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
   const admin = createAdminClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayET()
   const { data, error } = await admin
     .from('leave_requests')
     .select('*')

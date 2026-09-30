@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
 import { setMileageRate } from '@/app/actions/mileage-rates'
 import { fmtDate } from '@/lib/format-date'
 
 type Rate = { id: string; year: number; rate_per_mile: number; updated_at: string }
 
-const currentYear = new Date().getFullYear()
+const currentYear = Number(todayET().slice(0, 4))
 
 export default function MileageRateClient({ initialRates, canEdit }: { initialRates: Rate[]; canEdit: boolean }) {
   const router = useRouter()

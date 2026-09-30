@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { todayET } from '@/lib/pay-periods'
 import { revalidatePath } from 'next/cache'
 import { requireRole } from '@/lib/auth/session'
 
@@ -16,7 +17,7 @@ export async function getMileageRates() {
 
 export async function getCurrentYearRate(): Promise<number | null> {
   const admin = createAdminClient()
-  const year = new Date().getFullYear()
+  const year = Number(todayET().slice(0, 4))
   const { data, error } = await admin.from('mileage_rates').select('rate_per_mile').eq('year', year).maybeSingle()
   if (error) throw new Error(error.message)
   return data?.rate_per_mile ?? null

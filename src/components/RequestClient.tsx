@@ -444,7 +444,7 @@ export default function RequestClient({
               {signed ? (
                 <div>
                   <p className="font-[cursive] text-[22px] text-[#0b2b35]">{employeeName}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel} · {fmtDate(new Date())}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel} · {fmtDate(todayET())}</p>
                 </div>
               ) : <p className="text-gray-300 text-[13px]">Click here to sign</p>}
             </div>

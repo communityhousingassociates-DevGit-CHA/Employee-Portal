@@ -11,7 +11,7 @@ import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetRow as TimesheetRowType, Expense, TimesheetTag } from '@/types'
-import { getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod } from '@/lib/pay-periods'
+import { getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod, todayET } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 const AUTOSAVE_DELAY_MS = 1500
@@ -329,7 +329,7 @@ export default function TimesheetClient({
         <img src="/cha-logo.png" alt="CHA" style={{ height: 28, marginBottom: 8 }} />
         <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>Timesheet — {formatPeriodLabel(period)}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
-          {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {fmtDate(new Date())}
+          {employeeName} · Employee ID {employeeIdLabel} · Community Housing Associates · Generated {fmtDate(todayET())}
         </p>
       </div>
 
@@ -508,7 +508,7 @@ export default function TimesheetClient({
           {signed ? (
             <div>
               <p className="font-[cursive] text-[22px] text-[#0b2b35] mb-1">{employeeName}</p>
-              <p className="text-[11px] text-gray-400">{employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(new Date())}</p>
+              <p className="text-[11px] text-gray-400">{employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(todayET())}</p>
             </div>
           ) : (
             <p className="text-gray-300 text-[13px]">Click here to sign</p>

@@ -2,6 +2,7 @@
 // callers are the (already authorised) server actions.
 
 import { randomUUID } from 'crypto'
+import { todayET } from '@/lib/pay-periods'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const BUCKET = 'balance-files'
@@ -9,7 +10,7 @@ const BUCKET = 'balance-files'
 /** Saves the uploaded file and returns its storage path. (A file uploaded but never committed is still kept — it's evidence too.) */
 export async function storeBalanceFile(admin: SupabaseClient, file: File, folder: 'import' | 'override' | 'compare'): Promise<string> {
   const safe = file.name.replace(/[^\w.\- ()]+/g, '_')
-  const path = `${folder}/${new Date().toISOString().slice(0, 10)}-${randomUUID().slice(0, 8)}-${safe}`
+  const path = `${folder}/${todayET()}-${randomUUID().slice(0, 8)}-${safe}`
   const { error } = await admin.storage.from(BUCKET).upload(path, await file.arrayBuffer(), {
     contentType: file.type || 'application/octet-stream',
     upsert: false,

@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { todayET } from '@/lib/pay-periods'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { loadRequestDays } from '@/lib/leave-timesheet'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -45,7 +46,7 @@ export async function getUpcomingLeave(limit = 10) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new Error('Forbidden')
   const admin = createAdminClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayET()
   let query = admin
     .from('leave_requests')
     .select('id, employee_id, leave_type, start_date, end_date, hours, status, employee:employees!leave_requests_employee_id_fkey(name)')

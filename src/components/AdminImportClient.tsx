@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import {
   parseEmployeeFile, parseBalanceFile, parseSalaryFile, validateImport, commitImport, inviteEmployees,
   submitImportForReview, getPendingImportBatch, discardImportBatch, readBalanceFileAsOf, storeBalanceFileForImport,
@@ -324,7 +325,7 @@ export default function AdminImportClient({
                 }} />
               <div className="flex flex-col gap-1 mt-1">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Balances as of <span className="normal-case font-normal text-red-500">(required)</span></label>
-                <input type="date" value={balancesAsOf} max={new Date().toISOString().slice(0, 10)} onChange={e => setBalancesAsOf(e.target.value)}
+                <input type="date" value={balancesAsOf} max={todayET()} onChange={e => setBalancesAsOf(e.target.value)}
                   className="px-3 py-2 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white" />
                 <span className="text-[10px] text-gray-400">The date the balances in this file describe — recorded with the load as an audit trail.</span>
               </div>

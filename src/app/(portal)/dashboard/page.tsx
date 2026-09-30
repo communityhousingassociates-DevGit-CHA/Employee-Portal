@@ -8,7 +8,7 @@ import TimesheetAlertBell from '@/components/TimesheetAlertBell'
 import { getMyBalance, getMyRecentRequests, getNextApprovedLeave, getPendingLeaveApprovals, getMyLeaveOutlook } from '@/app/actions/leave-requests'
 import { getOrCreateTimesheet, getTimesheetReminderStatus, getPendingTimesheetApprovals } from '@/app/actions/timesheets'
 import { getPendingExpenseApprovals } from '@/app/actions/expenses'
-import { getCurrentPeriod } from '@/lib/pay-periods'
+import { getCurrentPeriod, todayET } from '@/lib/pay-periods'
 import { fmtDateShort as fmtDate, fmtDaySet } from '@/lib/format-date'
 import { getBaltimoreWeather } from '@/lib/weather'
 import { fmtHrs } from '@/lib/format-hours'
@@ -76,11 +76,10 @@ export default async function DashboardPage() {
   ]
   const oldestPending = pendingDates.reduce<string | null>((min, d) => (!min || d < min ? d : min), null)
 
-  const now = new Date()
   const periodStart = new Date(`${period.start}T00:00:00`)
   const periodEnd = new Date(`${period.end}T00:00:00`)
   const periodDays = Math.round((periodEnd.getTime() - periodStart.getTime()) / 86400000) + 1
-  const daysPast = Math.min(Math.max(Math.round((now.getTime() - periodStart.getTime()) / 86400000) + 1, 1), periodDays)
+  const daysPast = Math.min(Math.max(Math.round((new Date(`${todayET()}T00:00:00`).getTime() - periodStart.getTime()) / 86400000) + 1, 1), periodDays)
   const periodPct = Math.round((daysPast / periodDays) * 100)
 
   const ptoHours = balance ? Number(balance.pto_hours) : 0

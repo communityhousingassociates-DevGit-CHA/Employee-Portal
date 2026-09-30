@@ -49,7 +49,7 @@ export async function setBulkOverrideLock(locked: boolean, reason: string) {
     .from('accrual_settings')
     .update(locked
       ? { bulk_override_locked: true, bulk_override_locked_at: new Date().toISOString(), bulk_override_locked_by: actor.id }
-      : { bulk_override_locked: false, bulk_override_unlock_reason: `${reason.trim()} (${actor.name}, ${new Date().toISOString().slice(0, 10)})` })
+      : { bulk_override_locked: false, bulk_override_unlock_reason: `${reason.trim()} (${actor.name}, ${todayET()})` })
     .eq('id', true)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/balances')

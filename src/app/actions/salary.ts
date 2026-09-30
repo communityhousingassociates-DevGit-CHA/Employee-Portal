@@ -1,6 +1,7 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { todayET } from '@/lib/pay-periods'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { canViewSalaries } from '@/lib/constants/salary-access'
@@ -94,7 +95,7 @@ export async function getSalaryHistory(employeeId: string) {
 export async function getCurrentSalaryEntry(employeeId: string) {
   await requireSalaryViewer()
   const admin = createAdminClient()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayET()
   const { data, error } = await admin
     .from('employee_salaries')
     .select('id, annual_salary, effective_date, note')

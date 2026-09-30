@@ -164,6 +164,11 @@ export function getPayCalendar(count = 6, asOf: Date = new Date()): PayCalendarE
   })
 }
 
+/** A YYYY-MM-DD date moved by `days` (negative = earlier). Pure calendar arithmetic — no timezone involved. */
+export function shiftDate(date: string, days: number): string {
+  return toDateOnly(addDays(new Date(`${date}T00:00:00Z`), days))
+}
+
 /** Today's date in CHA's timezone (America/New_York), as YYYY-MM-DD. */
 export function todayET(now: Date = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })

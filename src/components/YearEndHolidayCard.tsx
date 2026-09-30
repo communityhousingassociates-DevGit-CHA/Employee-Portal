@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { setYearEndHoliday } from '@/app/actions/profile'
 import { yearEndDate, type YearEndChoice } from '@/lib/holidays'
 import { fmtDate } from '@/lib/format-date'
@@ -15,7 +16,7 @@ export default function YearEndHolidayCard({ initial }: { initial: YearEndChoice
   const [saved, setSaved] = useState(initial)
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
-  const year = new Date().getFullYear()
+  const year = Number(todayET().slice(0, 4))
 
   function save() {
     if (!choice) return

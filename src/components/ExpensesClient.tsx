@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
 import { submitExpense, getReceiptUploadUrl, getReceiptViewUrl } from '@/app/actions/expenses'
 import { fmtDate } from '@/lib/format-date'
@@ -31,7 +32,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const currency = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
-const emptyForm = { category: 'mileage' as ExpenseCategory, expense_date: new Date().toISOString().slice(0, 10), description: '', miles: '', amount: '' }
+const emptyForm = { category: 'mileage' as ExpenseCategory, expense_date: todayET(), description: '', miles: '', amount: '' }
 
 export default function ExpensesClient({ initialExpenses, currentMileageRate }: { initialExpenses: Expense[]; currentMileageRate: number | null }) {
   const router = useRouter()

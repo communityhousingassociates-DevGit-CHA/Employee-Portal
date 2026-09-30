@@ -78,7 +78,7 @@ export default function CalendarClient({
   const [events, setEvents] = useState<LeaveEvent[]>(initialEvents)
   const [loading, setLoading] = useState(false)
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayET()
   const cells = useMemo(() => buildCalendarGrid(year, month), [year, month])
   // Paydays are computed from CHA's fixed bi-weekly schedule, so they need no fetch — they appear for any month browsed.
   const payDates = useMemo(() => {

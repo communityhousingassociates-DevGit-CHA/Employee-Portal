@@ -1,16 +1,13 @@
 'use client'
 
-// Client component so the greeting reflects the viewer's own local time and
-// timezone, not the server's — a Server Component would compute this from
-// the Vercel function's clock (UTC), which is frequently wrong for the
-// person actually looking at the page. suppressHydrationWarning is the
-// documented React pattern for exactly this case: server and client will
-// legitimately render different text, and that's expected, not a bug.
+// Client component (the greeting follows the clock). Always Eastern Time — CHA's timezone — whatever the viewer's device
+// or the Vercel function's clock (UTC) says. suppressHydrationWarning is the documented React pattern for text that
+// legitimately differs between server render and client (the time keeps moving), so it is expected, not a bug.
 export default function DashboardGreeting({ firstName }: { firstName: string }) {
   const now = new Date()
-  const hour = now.getHours()
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: 'numeric' }).format(now))
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const dayLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const dayLabel = now.toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
   return (
     <div suppressHydrationWarning>

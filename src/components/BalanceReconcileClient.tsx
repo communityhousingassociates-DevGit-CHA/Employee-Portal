@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
 import {
   parseBalanceFileForUpdate, compareBalancesToSage, postBalanceAdjustments,
@@ -32,7 +33,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
   const [reason, setReason] = useState('')
 
   // ---- manual adjustment
-  const [adj, setAdj] = useState({ employeeId: '', pto: '', sick: '', vacation: '', date: new Date().toISOString().slice(0, 10), reason: '' })
+  const [adj, setAdj] = useState({ employeeId: '', pto: '', sick: '', vacation: '', date: todayET(), reason: '' })
 
   function showToast(m: string) { setToast(m); setTimeout(() => setToast(''), 4000) }
 

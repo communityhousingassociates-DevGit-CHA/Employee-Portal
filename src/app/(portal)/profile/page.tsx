@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { todayET } from '@/lib/pay-periods'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import ProfileForm from '@/components/ProfileForm'
@@ -32,7 +33,7 @@ export default async function ProfilePage() {
     employee_type: 'full-time',
     department: null,
     job_title: null,
-    hire_date: new Date().toISOString().split('T')[0],
+    hire_date: todayET(),
     avatar_url: null,
   }
 

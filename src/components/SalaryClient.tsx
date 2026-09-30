@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useRef, useState, useTransition } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
 import { setSalary, getSalaryHistory, bulkSetSalary, revealSalary, revealSalaryEntry, revealAllSalaries, getCurrentSalaryEntry, editSalaryEntry } from '@/app/actions/salary'
 import MaskedAmount from '@/components/MaskedAmount'
@@ -99,7 +100,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [showBulk, setShowBulk] = useState(false)
-  const [bulkForm, setBulkForm] = useState({ mode: 'percent' as BulkMode, value: '', effective_date: new Date().toISOString().slice(0, 10), note: '' })
+  const [bulkForm, setBulkForm] = useState({ mode: 'percent' as BulkMode, value: '', effective_date: todayET(), note: '' })
   const [bulkSaving, setBulkSaving] = useState(false)
   const [bulkError, setBulkError] = useState('')
 
@@ -159,7 +160,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
 
   function openEdit(row: SalaryRow) {
     setEditTarget(row)
-    setForm({ annual_salary: '', effective_date: new Date().toISOString().slice(0, 10), note: '' })
+    setForm({ annual_salary: '', effective_date: todayET(), note: '' })
     setError('')
   }
 

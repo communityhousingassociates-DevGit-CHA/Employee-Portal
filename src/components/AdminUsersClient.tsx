@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
+import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
 import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, setGeofenceOverride, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
@@ -369,7 +370,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `cha-employees-${filter}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `cha-employees-${filter}-${todayET()}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -593,7 +594,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       <div className="hidden print:block">
         <h1 className="text-[16px] font-bold text-[#0b2b35] mb-1">CHA Employee Portal — User Management</h1>
         <p className="text-[11px] text-gray-500 mb-4">
-          {filter === 'archived' ? 'Inactive' : filter === 'test' ? 'Test' : 'Active'} employees · {exportRows.length} of {employees.filter(e => e.status === filter).length} · Exported {fmtDate(new Date())}
+          {filter === 'archived' ? 'Inactive' : filter === 'test' ? 'Test' : 'Active'} employees · {exportRows.length} of {employees.filter(e => e.status === filter).length} · Exported {fmtDate(todayET())}
         </p>
         <table className="w-full text-[10px] border-collapse">
           <thead>

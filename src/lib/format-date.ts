@@ -10,13 +10,22 @@ function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-/** Parses a date-only string ('YYYY-MM-DD') as local time, not UTC — avoids the
- *  classic off-by-one where `new Date('2026-09-22')` parsed as UTC midnight
- *  reads back as the 21st in a negative-UTC-offset timezone. Full timestamps
- *  (with a time component) pass through untouched. */
+const ET = 'America/New_York'
+
+/** The wall-clock reading in Eastern Time for an instant, as a Date whose local fields (getMonth, getHours…) hold those values. */
+function easternWallClock(instant: Date): Date {
+  const p: Record<string, string> = {}
+  for (const part of new Intl.DateTimeFormat('en-US', { timeZone: ET, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(instant)) p[part.type] = part.value
+  return new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second))
+}
+
+/** Parses a date-only string ('YYYY-MM-DD') as a calendar date (no timezone) — avoids the classic off-by-one where
+ *  `new Date('2026-09-22')` parsed as UTC midnight reads back as the 21st. A full timestamp (with a time component) is
+ *  an instant, so it is shown as CHA's Eastern Time — never the server's UTC or the viewer's own timezone. A Date
+ *  object passes through as-is (it is treated as a calendar date). */
 function toLocalDate(value: string | Date): Date {
   if (value instanceof Date) return value
-  return new Date(value.length <= 10 ? `${value}T00:00:00` : value)
+  return value.length <= 10 ? new Date(`${value}T00:00:00`) : easternWallClock(new Date(value))
 }
 
 /** "09-22-2026" */

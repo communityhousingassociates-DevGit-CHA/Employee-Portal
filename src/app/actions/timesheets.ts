@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
-import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
+import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, todayET, shiftDate } from '@/lib/pay-periods'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
@@ -249,7 +249,7 @@ export async function getPendingTimesheetApprovals() {
 export async function getApprovedTimesheets() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
-  const since = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)
+  const since = shiftDate(todayET(), -90)
   let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'approved').gte('period_end', since)
   if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
   const { data, error } = await query.order('period_end', { ascending: false }).limit(60)
@@ -426,8 +426,9 @@ export async function getTimesheetReminderStatus(): Promise<TimesheetReminder> {
   const employee = await getCurrentEmployee()
   if (!employee) return null
 
-  const todayStr = new Date().toISOString().slice(0, 10)
-  if (employee.timesheet_reminder_dismissed_at?.slice(0, 10) === todayStr) return null
+  const todayStr = todayET()
+  // The dismissal is stored as an instant (UTC); compare it as an Eastern calendar day.
+  if (employee.timesheet_reminder_dismissed_at && todayET(new Date(employee.timesheet_reminder_dismissed_at)) === todayStr) return null
 
   const period = getCurrentPeriod()
   const previousPeriod = getPreviousPeriod()

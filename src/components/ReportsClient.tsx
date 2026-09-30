@@ -6,7 +6,7 @@ import { getReportSummary } from '@/app/actions/reports'
 import { revealSalary, revealWeeklyPayroll } from '@/app/actions/salary'
 import MaskedAmount from '@/components/MaskedAmount'
 import { fmtDate, fmtDateRange, fmtDateShort } from '@/lib/format-date'
-import { getPayDate, type PayPeriod } from '@/lib/pay-periods'
+import { getPayDate, type PayPeriod, todayET } from '@/lib/pay-periods'
 import { tagColor } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
 
@@ -144,7 +144,7 @@ export default function ReportsClient({
         <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0b2b35', margin: 0 }}>{tabLabel} — {formatPeriodLabel(selectedPeriod)}</h1>
         <p style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
           {!isManager && filteredRows[0] ? `${filteredRows[0].name} · Employee ID ${filteredRows[0].id} · ` : ''}
-          Community Housing Associates · Generated {fmtDate(new Date())}
+          Community Housing Associates · Generated {fmtDate(todayET())}
         </p>
       </div>
 
