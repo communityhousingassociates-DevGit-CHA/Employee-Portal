@@ -437,38 +437,41 @@ export default function TimesheetClient({
         </span>
       </div>
 
-      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 max-w-[900px]">
+      <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 max-w-[1010px]">
         <div className="overflow-x-auto">
-        <div className="min-w-[820px]">
-        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px] gap-2 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
+        <div className="min-w-[930px]">
+        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2.5 bg-[#f9fefe] border-b border-[#d4eef2]">
           {['Date', 'Description / Project', 'Tags', 'Regular', 'Leave', 'Holiday', 'Total'].map((h, i) => (
             <span key={h} className={`uppercase text-gray-400 font-semibold ${i >= 3 ? 'text-center text-[9px] tracking-wider' : 'text-[10px] tracking-widest'}`}>{h}</span>
           ))}
+          <span />
         </div>
 
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
         {week1.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
-        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px] gap-2 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
+        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week1Total} hrs</span>
+          <span />
         </div>
 
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
         {week2.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
-        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px] gap-2 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
+        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
           </span>
           <span className="text-center font-bold text-[#0b2b35]">{week2Total} hrs</span>
+          <span />
         </div>
 
-        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px] gap-2 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
+        <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-3.5 bg-[#f0f7f8] border-t-2 border-[#d4eef2] text-[13px]">
           <span className="font-bold text-[#0b2b35]">Totals</span>
           <span />
           <span />
@@ -476,6 +479,7 @@ export default function TimesheetClient({
           <span className="text-center font-bold text-violet-600">{totalLeave}</span>
           <span className="text-center font-bold text-rose-500">{totalHoliday}</span>
           <span className="text-center font-bold text-[#0b2b35]">{total} / {TARGET_HOURS}</span>
+          <span />
         </div>
         </div>
         </div>
@@ -532,15 +536,12 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
   const dayShort = fmtDateShort(d)
 
   return (
-    <div className={`grid grid-cols-[90px_260px_180px_56px_56px_56px_60px] gap-2 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
+    <div className={`grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
       isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
     }`}>
       <div>
         <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}</p>
         <p className="text-[10px] text-gray-400">{dayShort}</p>
-        {!locked && !isHoliday && (
-          <Link href={`/request?date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column" className="text-[10px] font-semibold text-[#028a9e] hover:underline">+ Leave</Link>
-        )}
       </div>
       <div className="flex flex-col gap-1">
         <input
@@ -581,6 +582,15 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
       </div>
       <div className={`text-center font-bold ${rowTotal === 8 ? 'text-emerald-600' : rowTotal === 0 ? 'text-gray-300' : 'text-amber-600'}`}>
         {rowTotal > 0 ? rowTotal : '—'}
+      </div>
+      <div className="flex justify-end">
+        {!locked && !isHoliday && (
+          <Link href={`/request?date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column"
+            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-[#028a9e] border border-[#d4eef2] rounded-full pl-2.5 pr-1 py-0.5 hover:bg-[#e0f5f8] transition-colors">
+            Add Leave
+            <span aria-hidden className="w-[18px] h-[18px] rounded-full bg-[#02ACC0] text-white flex items-center justify-center text-[13px] leading-none">+</span>
+          </Link>
+        )}
       </div>
     </div>
   )
