@@ -138,7 +138,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <WeatherBadge weather={weather} />
-          <TimesheetAlertBell active={!!timesheetReminder} />
+          <TimesheetAlertBell active={!!timesheetReminder} reminder={timesheetReminder ? { due: timesheetReminder.due, daysUntil: timesheetReminder.daysUntil } : null} />
           <Link href="/calendar" className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8] transition-colors">Calendar</Link>
           <Link href="/request" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">+ Request/Use Leave</Link>
         </div>
