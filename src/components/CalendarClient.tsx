@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { getLeaveEventsInRange } from '@/app/actions/calendar'
 import { buildCalendarGrid, calendarGridRange } from '@/lib/calendar-grid'
 import { holidayOn } from '@/lib/holidays'
-import { fmtDaySet } from '@/lib/format-date'
+import { payDatesInRange, todayET } from '@/lib/pay-periods'
+import { fmtDaySet, fmtDateRange } from '@/lib/format-date'
 
 type LeaveEvent = {
   id: string
@@ -34,6 +35,7 @@ const TYPE_STYLE: Record<string, { cell: string; dot: string; label: string }> =
   unpaid: { cell: 'bg-gray-100 text-gray-600', dot: 'bg-gray-400', label: 'Unpaid' },
   'flex time': { cell: 'bg-teal-100 text-teal-700', dot: 'bg-teal-400', label: 'Flex Time' },
   holiday: { cell: 'bg-rose-100 text-rose-700', dot: 'bg-rose-400', label: 'Holiday' },
+  payday: { cell: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500', label: 'Pay date' },
   mine: { cell: 'bg-[#0b2b35] text-white', dot: 'bg-[#0b2b35]', label: 'My Leave' },
 }
 
@@ -78,6 +80,17 @@ export default function CalendarClient({
 
   const today = new Date().toISOString().slice(0, 10)
   const cells = useMemo(() => buildCalendarGrid(year, month), [year, month])
+  // Paydays are computed from CHA's fixed bi-weekly schedule, so they need no fetch — they appear for any month browsed.
+  const payDates = useMemo(() => {
+    const range = calendarGridRange(year, month)
+    return new Map(payDatesInRange(range.start, range.end).map(p => [p.date, p]))
+  }, [year, month])
+  const nextPayDates = useMemo(() => {
+    const t = todayET()
+    const later = new Date(`${t}T00:00:00Z`)
+    later.setUTCDate(later.getUTCDate() + 45)
+    return payDatesInRange(t, later.toISOString().slice(0, 10)).slice(0, 3)
+  }, [])
 
   async function goTo(newYear: number, newMonth: number) {
     setYear(newYear)
@@ -130,8 +143,9 @@ export default function CalendarClient({
               {cells.map((cell, i) => {
                 const dayEvents = eventsForDay(events, cell.iso)
                 const holiday = holidayOn(cell.iso)
+                const payDate = payDates.get(cell.iso)
                 const isToday = cell.iso === today
-                const hasEvents = dayEvents.length > 0 || !!holiday
+                const hasEvents = dayEvents.length > 0 || !!holiday || !!payDate
                 const hasMine = dayEvents.some(e => e.mine)
 
                 return (
@@ -147,6 +161,10 @@ export default function CalendarClient({
                     </div>
                     <div className="space-y-0.5">
                       {holiday && <div className={`text-[9px] px-1 py-0.5 rounded font-semibold truncate ${TYPE_STYLE.holiday.cell}`}>🇺🇸 {holiday}</div>}
+                      {payDate && (
+                        <div title={payDate.confirmed ? `Pay date for ${fmtDateRange(payDate.period.start, payDate.period.end)}` : `Projected pay date for ${fmtDateRange(payDate.period.start, payDate.period.end)} — may shift for a bank holiday`}
+                          className={`text-[9px] px-1 py-0.5 rounded font-semibold truncate ${TYPE_STYLE.payday.cell}`}>💵 Pay date{payDate.confirmed ? '' : ' (proj.)'}</div>
+                      )}
                       {dayEvents.slice(0, 2).map(ev => {
                         const s = ev.mine ? TYPE_STYLE.mine : TYPE_STYLE[ev.leave_type.toLowerCase()] || TYPE_STYLE.pto
                         return <div key={ev.id} className={`text-[9px] px-1 py-0.5 rounded font-semibold truncate ${s.cell}`}>{short(ev.employee_name, ev.mine)}</div>
@@ -170,6 +188,22 @@ export default function CalendarClient({
         </div>
 
         <div className="space-y-4">
+          <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
+            <div className="px-4 py-3.5 border-b border-[#d4eef2]">
+              <h3 className="text-[13px] font-bold text-[#0b2b35]">Upcoming Pay Dates</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Direct deposit</p>
+            </div>
+            <div className="divide-y divide-[#f0f7f8]">
+              {nextPayDates.map(p => (
+                <div key={p.date} className="px-4 py-3">
+                  <p className="text-[12px] font-semibold text-emerald-700">💵 {fmtDaySet([p.date], true)}{p.confirmed ? '' : ' (projected)'}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Pay period {fmtDateRange(p.period.start, p.period.end)}</p>
+                  <p className="text-[11px] text-gray-400">Timesheet due {fmtDaySet([p.timesheetDue], true)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden">
             <div className="px-4 py-3.5 border-b border-[#d4eef2]">
               <h3 className="text-[13px] font-bold text-[#0b2b35]">Upcoming Leave</h3>

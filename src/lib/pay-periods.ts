@@ -119,6 +119,35 @@ export function getPayDate(period: { end: string }): string {
   return toDateOnly(addDays(end, PAY_DATE_DAYS_AFTER_PERIOD_END))
 }
 
+export interface PayDateInfo {
+  /** Direct-deposit pay date (YYYY-MM-DD). */
+  date: string
+  /** The pay period this pays for. */
+  period: PayPeriod
+  timesheetDue: string
+  /** True if the pay date is on CHA's published schedule; false if projected from the same cycle. */
+  confirmed: boolean
+}
+
+/** Every pay date from `start` to `end` inclusive (YYYY-MM-DD), for drawing paydays on a calendar. Works for any range, past or future. */
+export function payDatesInRange(start: string, end: string): PayDateInfo[] {
+  const DAY = 86400000
+  const anchor = new Date(`${PAY_PERIOD_ANCHOR}T00:00:00Z`).getTime()
+  const from = new Date(`${start}T00:00:00Z`).getTime()
+  const to = new Date(`${end}T00:00:00Z`).getTime()
+  // The pay date for the period starting on anchor + 14k days is anchor + 14k + 13 + 17 days.
+  const offset = PERIOD_DAYS - 1 + PAY_DATE_DAYS_AFTER_PERIOD_END
+  const out: PayDateInfo[] = []
+  for (let k = Math.ceil((from - anchor - offset * DAY) / (PERIOD_DAYS * DAY)); ; k++) {
+    const periodStart = new Date(anchor + k * PERIOD_DAYS * DAY)
+    const period = { start: toDateOnly(periodStart), end: toDateOnly(addDays(periodStart, PERIOD_DAYS - 1)) }
+    const date = getPayDate(period)
+    if (new Date(`${date}T00:00:00Z`).getTime() > to) break
+    out.push({ date, period, timesheetDue: getTimesheetDueDate(period), confirmed: date <= CONFIRMED_PAY_DATES_THROUGH })
+  }
+  return out
+}
+
 export interface PayCalendarEntry extends PayPeriod {
   timesheetDue: string
   payDate: string
