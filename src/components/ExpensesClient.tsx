@@ -1,7 +1,8 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
-import { todayET } from '@/lib/pay-periods'
+import { useMemo, useRef, useState, useTransition } from 'react'
+import { todayET, getCurrentPeriod, getPreviousPeriod } from '@/lib/pay-periods'
+import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
 import { useRouter } from 'next/navigation'
 import { submitExpense, getReceiptUploadUrl, getReceiptViewUrl } from '@/app/actions/expenses'
 import { fmtDate } from '@/lib/format-date'
@@ -34,6 +35,29 @@ const currency = (n: number) => n.toLocaleString('en-US', { style: 'currency', c
 
 const emptyForm = { category: 'mileage' as ExpenseCategory, expense_date: todayET(), description: '', miles: '', amount: '' }
 
+type PeriodKey = 'current' | 'previous' | 'month' | 'year' | 'all'
+const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
+  { key: 'current', label: 'Current pay period' },
+  { key: 'previous', label: 'Previous pay period' },
+  { key: 'month', label: 'This month' },
+  { key: 'year', label: 'This year' },
+  { key: 'all', label: 'All time' },
+]
+
+/** Date range (inclusive, YYYY-MM-DD, Eastern Time) for a period choice; null = no limit. */
+function periodRange(key: PeriodKey): { start: string; end: string } | null {
+  const today = todayET()
+  const asOf = new Date(`${today}T00:00:00Z`)
+  if (key === 'current') return getCurrentPeriod(undefined, asOf)
+  if (key === 'previous') return getPreviousPeriod(undefined, asOf)
+  const [y, m] = today.split('-').map(Number)
+  if (key === 'month') return { start: `${y}-${String(m).padStart(2, '0')}-01`, end: `${y}-${String(m).padStart(2, '0')}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}` }
+  if (key === 'year') return { start: `${y}-01-01`, end: `${y}-12-31` }
+  return null
+}
+
+const fmtMiles = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 1 })
+
 export default function ExpensesClient({ initialExpenses, currentMileageRate }: { initialExpenses: Expense[]; currentMileageRate: number | null }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -45,6 +69,23 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
+  const [period, setPeriod] = useState<PeriodKey>('current')
+
+  // Total miles entered in the chosen period (by the date of the trip), with where those miles stand.
+  const mileage = useMemo(() => {
+    const range = periodRange(period)
+    const inRange = expenses.filter(e => e.category === 'mileage' && (!range || (e.expense_date >= range.start && e.expense_date <= range.end)))
+    const sum = (status?: string) => inRange.filter(e => !status || e.status === status).reduce((t, e) => t + Number(e.miles ?? 0), 0)
+    return {
+      range,
+      trips: inRange.length,
+      total: sum(),
+      approved: sum('approved'),
+      pending: sum('pending'),
+      denied: sum('denied'),
+      amount: inRange.filter(e => e.status !== 'denied').reduce((t, e) => t + Number(e.amount), 0),
+    }
+  }, [expenses, period])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -101,7 +142,11 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
   }
 
   const inputCls = 'px-3 py-2.5 border border-[#d4eef2] rounded-lg text-[14px] focus:outline-none focus:border-[#02ACC0]'
-  const canSubmit = form.category === 'mileage' ? Boolean(form.miles) : Boolean(form.amount)
+  const needsDescription = descriptionRequired(form.category)
+  const missingDescription = needsDescription && !form.description.trim()
+  const needsReceipt = receiptRequired(form.category, Number(form.amount))
+  const missingReceipt = needsReceipt && !receiptFile
+  const canSubmit = (form.category === 'mileage' ? Boolean(form.miles) : Boolean(form.amount)) && !missingDescription && !missingReceipt
 
   return (
     <div>
@@ -123,6 +168,30 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
       {error && !showForm && (
         <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>
       )}
+
+      <div className="bg-white rounded-xl border border-[#d4eef2] p-5 mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide font-semibold text-gray-400">Total miles entered</p>
+            <p className="text-[28px] font-bold text-[#0b2b35] leading-tight">{fmtMiles(mileage.total)} <span className="text-[14px] font-semibold text-gray-400">mi</span></p>
+            <p className="text-[12px] text-gray-400 mt-0.5">
+              {mileage.range ? `${fmtDate(mileage.range.start)} – ${fmtDate(mileage.range.end)}` : 'All dates'} · {mileage.trips} {mileage.trips === 1 ? 'entry' : 'entries'}
+              {mileage.trips > 0 && currentMileageRate !== null && <> · {currency(mileage.amount)} reimbursable (excludes denied)</>}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <select value={period} onChange={e => setPeriod(e.target.value as PeriodKey)} aria-label="Mileage period"
+              className="px-3 py-2 border border-[#d4eef2] rounded-lg text-[13px] focus:outline-none focus:border-[#02ACC0] bg-white">
+              {PERIOD_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+            {mileage.trips > 0 && (
+              <p className="text-[11px] text-gray-400">
+                <span className="text-emerald-600 font-semibold">{fmtMiles(mileage.approved)} approved</span> · <span className="text-amber-600 font-semibold">{fmtMiles(mileage.pending)} pending</span>{mileage.denied > 0 && <> · <span className="text-red-500 font-semibold">{fmtMiles(mileage.denied)} denied</span></>}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
@@ -200,18 +269,21 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
               )}
 
               <div className="sm:col-span-2 flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Description</label>
-                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Site visit to partner agency" className={inputCls} />
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Description{needsDescription && <span className="text-red-500"> *</span>}</label>
+                <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder={needsDescription ? 'Where you drove and why, e.g. Office to partner agency site visit' : 'e.g. Site visit to partner agency'} className={inputCls} />
+                {needsDescription && <span className={`text-[11px] ${missingDescription ? 'text-red-500' : 'text-gray-400'}`}>Required for mileage — include where you drove and the business purpose.</span>}
               </div>
 
               <div className="sm:col-span-2 flex flex-col gap-1.5">
-                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Receipt (optional)</label>
+                <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Receipt{form.category === 'mileage' ? ' (not needed for mileage)' : needsReceipt ? <span className="text-red-500"> * required</span> : ` (required over $${RECEIPT_REQUIRED_OVER})`}</label>
                 <button type="button" onClick={() => fileRef.current?.click()}
                   className="text-[13px] font-semibold px-3 py-2 rounded-lg border border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors w-fit">
                   {receiptFile ? receiptFile.name : 'Attach Receipt'}
                 </button>
                 <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden"
                   onChange={e => setReceiptFile(e.target.files?.[0] ?? null)} />
+                {missingReceipt && <span className="text-[11px] text-red-500">Expenses over ${RECEIPT_REQUIRED_OVER} need a receipt — attach an image or PDF.</span>}
               </div>
             </div>
             <div className="flex gap-3 px-6 pb-6">

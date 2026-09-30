@@ -7,6 +7,7 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
 import { fmtDate } from '@/lib/format-date'
+import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
 import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import type { ExpenseCategory, Role } from '@/types'
@@ -58,9 +59,11 @@ export async function submitExpense(data: {
   let rate_per_mile: number | null = null
   let miles: number | null = null
 
+  if (descriptionRequired(data.category) && !data.description?.trim()) throw new Error('Mileage needs a description — say where you drove and the business purpose.')
+
   if (data.category === 'mileage') {
     if (!data.miles || data.miles <= 0) throw new Error('Miles must be greater than 0')
-    const year = new Date(data.expense_date).getFullYear()
+    const year = Number(data.expense_date.slice(0, 4))
     const { data: rateRow, error: rateError } = await admin
       .from('mileage_rates')
       .select('rate_per_mile')
@@ -74,6 +77,7 @@ export async function submitExpense(data: {
   } else {
     if (!data.amount || data.amount <= 0) throw new Error('Amount must be greater than 0')
     amount = data.amount
+    if (receiptRequired(data.category, amount) && !data.receipt_path) throw new Error(`A receipt is required for expenses over $${RECEIPT_REQUIRED_OVER}.`)
   }
 
   const { error } = await admin.from('expenses').insert({
