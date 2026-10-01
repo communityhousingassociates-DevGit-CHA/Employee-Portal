@@ -16,7 +16,7 @@ import { creditHolidayFlex } from '@/lib/holiday-work'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getTestAccountIds } from '@/lib/test-accounts'
-import type { Role, Timesheet, TimesheetEventAction, TimesheetForReview } from '@/types'
+import type { Role, Timesheet, TimesheetAudit, TimesheetEventAction, TimesheetForReview } from '@/types'
 
 
 async function requireOwnTimesheet(timesheetId: string) {
@@ -40,10 +40,35 @@ async function requireTimesheetAccess(timesheetId: string, onBehalf?: OnBehalf |
   return resolveActor(admin, { employeeId: timesheet.employee_id, onBehalf })
 }
 
+/** Who signed this timesheet, who approved it, and its history (oldest first) — shown under a submitted timesheet. */
+async function loadTimesheetAudit(admin: ReturnType<typeof createAdminClient>, timesheet: { id: string; submitted_by?: string | null; approver_id: string | null }): Promise<TimesheetAudit> {
+  const people = [timesheet.submitted_by, timesheet.approver_id].filter((x): x is string => !!x)
+  const [{ data: ppl }, { data: events, error }] = await Promise.all([
+    people.length ? admin.from('employees').select('id, name, role').in('id', people) : Promise.resolve({ data: [] as { id: string; name: string; role: string }[] }),
+    admin.from('timesheet_events').select('id, action, reason_code, note, created_at, actor:employees(name, role)').eq('timesheet_id', timesheet.id).order('created_at'),
+  ])
+  if (error) throw new Error(error.message)
+  const byId = new Map((ppl ?? []).map(p => [p.id, p]))
+  const submitter = timesheet.submitted_by ? byId.get(timesheet.submitted_by) : undefined
+  const approver = timesheet.approver_id ? byId.get(timesheet.approver_id) : undefined
+  return {
+    submitted_by_name: submitter?.name ?? null,
+    submitted_by_role: submitter?.role ?? null,
+    approver_name: approver?.name ?? null,
+    approver_role: approver?.role ?? null,
+    events: (events ?? []).map(e => {
+      const a = e.actor as unknown as { name: string; role: string } | { name: string; role: string }[] | null
+      const actor = Array.isArray(a) ? a[0] : a
+      return { id: e.id, action: e.action as TimesheetEventAction, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: actor?.name ?? null, actor_role: actor?.role ?? null }
+    }),
+  }
+}
+
 export async function getOrCreateTimesheet(periodStart: string, periodEnd: string, forEmployeeId?: string) {
   const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
-  return getOrCreateTimesheetForEmployee(admin, subjectId, periodStart, periodEnd)
+  const result = await getOrCreateTimesheetForEmployee(admin, subjectId, periodStart, periodEnd)
+  return { ...result, audit: await loadTimesheetAudit(admin, result.timesheet) }
 }
 
 /**

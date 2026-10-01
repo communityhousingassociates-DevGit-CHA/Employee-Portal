@@ -255,6 +255,16 @@ export interface TimesheetEvent {
   created_at: string
 }
 
+/** Who signed a timesheet and what happened to it — for the signatures section at the bottom of a submitted timesheet. */
+export interface TimesheetAudit {
+  /** Name and role of the administrator who completed it for the employee (an exception); null when the employee submitted it. */
+  submitted_by_name: string | null
+  submitted_by_role: string | null
+  approver_name: string | null
+  approver_role: string | null
+  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null; actor_role: string | null }[]
+}
+
 /** A timesheet as shown to an approver: with its daily rows, audit history, and lock state. */
 export interface TimesheetForReview extends Timesheet {
   employee_name: string

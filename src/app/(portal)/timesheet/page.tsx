@@ -32,7 +32,7 @@ export default async function TimesheetPage({ searchParams }: { searchParams: Pr
 
   const periods = getPeriodsSince(subject.hire_date)
   const current = periods[0]
-  const [{ timesheet, rows }, expenses, salary, closedRanges, customTags] = await Promise.all([
+  const [{ timesheet, rows, audit }, expenses, salary, closedRanges, customTags] = await Promise.all([
     getOrCreateTimesheet(current.start, current.end, onBehalf?.employeeId),
     getExpensesForPeriod(subject.id, current.start, current.end),
     onBehalf ? Promise.resolve(null) : getMySalary(), // on behalf of someone: never load their pay
@@ -51,6 +51,7 @@ export default async function TimesheetPage({ searchParams }: { searchParams: Pr
       periods={periods}
       initialTimesheet={timesheet}
       initialRows={rows}
+      initialAudit={audit}
       initialExpenses={expenses}
       salary={salary}
       closedRanges={closedRanges}
