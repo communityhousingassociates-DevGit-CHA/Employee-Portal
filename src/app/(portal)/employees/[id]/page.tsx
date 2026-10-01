@@ -54,6 +54,19 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
+      {employee.is_active && employee.id !== me.id && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[13px] font-bold text-amber-900">Complete something on {employee.name.split(' ')[0]}&rsquo;s behalf</p>
+            <p className="text-[12px] text-amber-800 mt-0.5">An exception to the employee submitting directly. You&rsquo;ll give a reason code and notes, it&rsquo;s logged for the audit trail, and {employee.name.split(' ')[0]} is notified.</p>
+          </div>
+          <div className="flex gap-2">
+            <Link href={`/request?for=${id}`} className="text-[12px] font-semibold px-3.5 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Request leave for {employee.name.split(' ')[0]}</Link>
+            <Link href={`/timesheet?for=${id}`} className="text-[12px] font-semibold px-3.5 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Complete timesheet</Link>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4">
           <div className="flex items-center gap-1.5 mb-1">

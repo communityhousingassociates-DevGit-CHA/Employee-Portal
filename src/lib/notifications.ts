@@ -22,6 +22,7 @@ const ACCENT: Record<NotificationKind, string> = {
   denied: '#dc2626',
   returned: '#d97706',
   cancelled: '#6b7280',
+  on_behalf: '#d97706',
 }
 
 function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: NotificationKind; title: string; body: string; link: string; cta: string; testNote?: string; copyNote?: string }) {

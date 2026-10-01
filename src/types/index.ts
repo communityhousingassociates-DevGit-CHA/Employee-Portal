@@ -118,7 +118,7 @@ export interface LeaveBalance {
   updated_at: string
 }
 
-export type LeaveEventAction = 'submitted' | 'auto_approved' | 'approved' | 'denied' | 'cancelled'
+export type LeaveEventAction = 'submitted' | 'submitted_on_behalf' | 'auto_approved' | 'approved' | 'denied' | 'cancelled'
 
 export interface LeaveEvent {
   id: string
@@ -134,6 +134,8 @@ export interface LeaveEvent {
   signature_name: string | null
   signer_employee_number: number | null
   attestation: string | null
+  /** For submitted_on_behalf: why the admin completed it for the employee. */
+  reason_code: string | null
 }
 
 export interface LeaveRequest {
@@ -156,6 +158,11 @@ export interface LeaveRequest {
   events?: LeaveEvent[]
   /** Name of the manager who approved/denied it (present on results from the approvals actions). */
   approver_name?: string | null
+  /** Set when an admin completed this for the employee (an exception to submitting directly). */
+  submitted_by?: string | null
+  submitted_by_name?: string | null
+  on_behalf_reason_code?: string | null
+  on_behalf_note?: string | null
   /** Day-by-day hours (present on results from the leave actions). */
   days?: { date: string; hours: number }[]
   created_at: string
@@ -173,6 +180,9 @@ export interface Timesheet {
   return_reason: string | null
   correction_requested_at: string | null
   correction_note: string | null
+  submitted_by?: string | null
+  on_behalf_reason_code?: string | null
+  on_behalf_note?: string | null
   created_at: string
 }
 
@@ -198,7 +208,7 @@ export interface AccrualLogEntry {
   created_at: string
 }
 
-export type NotificationKind = 'approval_needed' | 'approved' | 'denied' | 'returned' | 'cancelled'
+export type NotificationKind = 'approval_needed' | 'approved' | 'denied' | 'returned' | 'cancelled' | 'on_behalf'
 
 export interface PortalNotification {
   id: string
@@ -211,7 +221,7 @@ export interface PortalNotification {
   read_at: string | null
 }
 
-export type TimesheetEventAction = 'submitted' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held' | 'tags_changed'
+export type TimesheetEventAction = 'submitted' | 'submitted_on_behalf' | 'edited_on_behalf' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held' | 'tags_changed'
 
 export interface TimesheetEvent {
   id: string
@@ -226,6 +236,8 @@ export interface TimesheetEvent {
 /** A timesheet as shown to an approver: with its daily rows, audit history, and lock state. */
 export interface TimesheetForReview extends Timesheet {
   employee_name: string
+  /** Name of the admin who completed it for the employee (an exception), when it was not submitted by the employee. */
+  submitted_by_name?: string | null
   employee_type: string
   year_end_holiday: YearEndHoliday | null
   timesheet_rows: { id: string; work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number; tag_ids: string[]; leave_type: LeaveType | null; description: string | null }[]

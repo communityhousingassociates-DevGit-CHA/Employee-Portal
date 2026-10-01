@@ -3,6 +3,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
+import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
+import { onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, todayET, shiftDate } from '@/lib/pay-periods'
@@ -27,11 +29,21 @@ async function requireOwnTimesheet(timesheetId: string) {
   return employee
 }
 
-export async function getOrCreateTimesheet(periodStart: string, periodEnd: string) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+/**
+ * Who may touch a timesheet: its owner, or an admin acting on the employee's behalf (an exception — a reason code and
+ * notes are required and are re-validated here). Returns the actor, the timesheet's owner, and the on-behalf details.
+ */
+async function requireTimesheetAccess(timesheetId: string, onBehalf?: OnBehalf | null) {
   const admin = createAdminClient()
-  return getOrCreateTimesheetForEmployee(admin, employee.id, periodStart, periodEnd)
+  const { data: timesheet, error } = await admin.from('timesheets').select('employee_id').eq('id', timesheetId).single()
+  if (error) throw new Error(error.message)
+  return resolveActor(admin, { employeeId: timesheet.employee_id, onBehalf })
+}
+
+export async function getOrCreateTimesheet(periodStart: string, periodEnd: string, forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
+  const admin = createAdminClient()
+  return getOrCreateTimesheetForEmployee(admin, subjectId, periodStart, periodEnd)
 }
 
 /**
@@ -131,9 +143,10 @@ async function assertNotClosed(admin: ReturnType<typeof createAdminClient>, ts: 
 
 export async function saveTimesheetDraft(
   timesheetId: string,
-  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number; holiday_worked_hours?: number; tag_ids?: string[] }[]
+  rows: { id: string; description: string | null; regular_hours: number; leave_hours: number; holiday_worked_hours?: number; tag_ids?: string[] }[],
+  onBehalf?: OnBehalf,
 ) {
-  await requireOwnTimesheet(timesheetId)
+  const { actor, onBehalf: behalf } = await requireTimesheetAccess(timesheetId, onBehalf)
   const admin = createAdminClient()
   // Once submitted (or approved) the sheet is locked — the reviewer must be looking at what the employee signed.
   const { data: current, error: statusError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
@@ -150,11 +163,17 @@ export async function saveTimesheetDraft(
       .eq('timesheet_id', timesheetId)
     if (error) throw new Error(error.message)
   }
+  // An admin editing the employee's draft is logged — once per sitting (autosave fires often), so the trail isn't buried in noise.
+  if (behalf) {
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { data: recent } = await admin.from('timesheet_events').select('id').eq('timesheet_id', timesheetId).eq('actor_id', actor.id).eq('action', 'edited_on_behalf').gte('created_at', since).limit(1)
+    if (!recent || recent.length === 0) await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'edited_on_behalf', reasonCode: behalf.reasonCode, note: behalf.note })
+  }
   revalidatePath('/timesheet')
 }
 
-export async function submitTimesheet(timesheetId: string) {
-  const employee = await requireOwnTimesheet(timesheetId)
+export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) {
+  const { actor, subject: employee, onBehalf: behalf } = await requireTimesheetAccess(timesheetId, onBehalf)
   const admin = createAdminClient()
 
   const { data: current, error: currentError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
@@ -176,35 +195,54 @@ export async function submitTimesheet(timesheetId: string) {
     const first = pendingLeave[0]
     const range = first.start_date === first.end_date ? fmtDate(first.start_date) : `${fmtDate(first.start_date)} – ${fmtDate(first.end_date)}`
     throw new Error(
-      `You have ${pendingLeave.length === 1 ? 'a pending leave request' : `${pendingLeave.length} pending leave requests`} in this pay period (${first.leave_type}, ${range}). ` +
+      `${behalf ? `${employee.name} has` : 'You have'} ${pendingLeave.length === 1 ? 'a pending leave request' : `${pendingLeave.length} pending leave requests`} in this pay period (${first.leave_type}, ${range}). ` +
       `Ask your approver to decide ${pendingLeave.length === 1 ? 'it' : 'them'} first so the leave appears on this timesheet, then submit.`,
     )
   }
 
   const { data: timesheet, error } = await admin
     .from('timesheets')
-    .update({ status: 'submitted', employee_signed_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null })
+    // employee_signed_at is the submission time (it orders the approval queue and drives the reminders); on behalf of the
+    // employee it is NOT their signature — submitted_by / on_behalf_* record who completed it and why. A resubmission by
+    // the employee themselves clears those.
+    .update({
+      status: 'submitted', employee_signed_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null,
+      submitted_by: behalf ? actor.id : null, on_behalf_reason_code: behalf?.reasonCode ?? null, on_behalf_note: behalf?.note ?? null,
+    })
     .eq('id', timesheetId)
     .select('period_start, period_end')
     .single()
   if (error) throw new Error(error.message)
-  await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted' })
+  const period = fmtDateRange(timesheet.period_start, timesheet.period_end)
+  if (behalf) {
+    await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'submitted_on_behalf', reasonCode: behalf.reasonCode, note: behalf.note })
+    await notifyEmployee(admin, employee.id, {
+      kind: 'on_behalf',
+      title: `${actor.name} submitted your timesheet on your behalf`,
+      body: `Pay period ${period}\nReason: ${onBehalfReasonLabel(behalf.reasonCode)}\nNotes: ${behalf.note}`,
+      link: '/timesheet',
+      cta: 'View Timesheet',
+    })
+  } else {
+    await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted' })
+  }
 
   await notifyApprovers(admin, employee.id, TIMESHEET_APPROVER_ROLES, {
-    title: `Timesheet from ${employee.name}`,
-    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)} was submitted and is waiting for your review.`,
+    title: `Timesheet from ${employee.name}${behalf ? ' — submitted on their behalf' : ''}`,
+    body: `Pay period ${period} was submitted and is waiting for your review.${behalf ? `\nException: completed by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(behalf.reasonCode)} — ${behalf.note}` : ''}`,
   })
 
   revalidatePath('/timesheet')
   revalidatePath('/approvals')
 }
 
-const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number, employee_type, year_end_holiday), timesheet_rows(*), events:timesheet_events(*, actor:employees(name))'
+const PENDING_SELECT = '*, employee:employees!timesheets_employee_id_fkey(name, employee_number, employee_type, year_end_holiday), timesheet_rows(*), events:timesheet_events(*, actor:employees(name)), submitter:employees!timesheets_submitted_by_fkey(name)'
 
 type RawReviewRow = Timesheet & {
   employee: { name: string; employee_type: string; year_end_holiday: string | null } | { name: string; employee_type: string; year_end_holiday: string | null }[]
   timesheet_rows: TimesheetForReview['timesheet_rows'] | null
   events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor: { name: string } | { name: string }[] | null }[] | null
+  submitter?: { name: string } | { name: string }[] | null
 }
 
 function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): TimesheetForReview {
@@ -213,9 +251,10 @@ function shapeTimesheet(t: RawReviewRow, closedRanges: ClosedRange[]): Timesheet
     .slice()
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .map(e => ({ id: e.id, action: e.action, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: (Array.isArray(e.actor) ? e.actor[0]?.name : e.actor?.name) ?? null }))
-  const { employee, ...rest } = t
+  const { employee, submitter, ...rest } = t
   return {
     ...rest,
+    submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null,
     timesheet_rows: rows,
     events,
     employee_name: (Array.isArray(employee) ? employee[0]?.name : employee?.name) ?? 'Unknown',
@@ -230,7 +269,7 @@ export async function getPendingTimesheetApprovals() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
   let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'submitted')
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you completed on the employee's behalf
   // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
   if (!actor.is_test_account) {
     const testIds = await getTestAccountIds(admin)
@@ -260,9 +299,10 @@ export async function getApprovedTimesheets() {
 }
 
 async function getReviewableTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }, expected: 'submitted' | 'approved') {
-  const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end').eq('id', id).single()
+  const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end, submitted_by').eq('id', id).single()
   if (error) throw new Error(error.message)
   if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't review your own timesheet — another approver needs to.")
+  if (data.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this timesheet on the employee's behalf, so another approver needs to review it.")
   if (data.status !== expected) throw new Error(expected === 'submitted' ? 'This timesheet is no longer awaiting review' : 'Only an approved timesheet can be reopened this way')
   return data
 }

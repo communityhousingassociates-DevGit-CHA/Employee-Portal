@@ -15,6 +15,8 @@ import { loadClosedRanges } from '@/lib/period-lock'
 import { closedRangeOverlapping, todayET, deductThroughDate, shiftDate } from '@/lib/pay-periods'
 import { denyReasonProblem } from '@/lib/deny-reason'
 import { logLeaveEvent, loadLeaveEvents } from '@/lib/leave-events'
+import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
+import { onBehalfAttestation, onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
 import { EMPLOYEE_ATTESTATION, APPROVER_APPROVE_ATTESTATION, APPROVER_DENY_ATTESTATION } from '@/lib/constants/leave-signature'
 import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -119,9 +121,10 @@ export async function createLeaveRequest(data: {
   days: LeaveDay[]
   note: string
   attachment_path?: string
-}) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+}, forEmployee?: { employeeId: string; onBehalf: OnBehalf }) {
+  const admin = createAdminClient()
+  // `forEmployee` = an admin completing this for someone else (an exception, with a reason code and notes). Validated here.
+  const { actor, subject: employee, onBehalf } = await resolveActor(admin, { employeeId: forEmployee?.employeeId, onBehalf: forEmployee?.onBehalf })
   if (data.leave_type === 'Jury Duty' && !data.attachment_path) {
     throw new Error('Jury Duty requests require the summons attached.')
   }
@@ -129,7 +132,6 @@ export async function createLeaveRequest(data: {
   if (days.length === 0) throw new Error('Select at least one day.')
   if (days.length > 45) throw new Error('A single request can cover up to 45 days.')
   if (new Set(days.map(d => d.date)).size !== days.length) throw new Error('Each date can only appear once in a request.')
-  const admin = createAdminClient()
 
   // Per-type limits (SOP §4). Voting: 4 hrs standard, up to 6 with the approver's OK; it is flagged in the note so the approver
   // sees that the extra time needs a decision against the policy. Workers' comp covers only the first 3 days.
@@ -185,7 +187,11 @@ export async function createLeaveRequest(data: {
     approved_at: autoApprove ? now : null,
     // Auto-approved leave that starts soon comes off the balance right away; leave further out stays reserved until the daily job deducts it.
     balance_deducted_at: autoApprove && !startsLater ? now : null,
-    employee_signed_at: now,
+    // On behalf of the employee: they have not signed it. Who completed it and why is recorded instead.
+    employee_signed_at: onBehalf ? null : now,
+    submitted_by: onBehalf ? actor.id : null,
+    on_behalf_reason_code: onBehalf?.reasonCode ?? null,
+    on_behalf_note: onBehalf?.note ?? null,
   }).select('id').single()
   if (error) throw new Error(error.message)
 
@@ -195,7 +201,18 @@ export async function createLeaveRequest(data: {
     throw new Error(daysError.message)
   }
 
-  await logLeaveEvent(admin, { requestId: created.id, action: 'submitted', actor: employee, note: requestNote || null, attestation: EMPLOYEE_ATTESTATION })
+  if (onBehalf) {
+    await logLeaveEvent(admin, { requestId: created.id, action: 'submitted_on_behalf', actor, note: onBehalf.note, reasonCode: onBehalf.reasonCode, attestation: onBehalfAttestation(employee.name) })
+    await notifyEmployee(admin, employee.id, {
+      kind: 'on_behalf',
+      title: `${actor.name} submitted ${data.leave_type} leave on your behalf`,
+      body: `${data.leave_type}\n${daysLabel(days)}\nReason: ${onBehalfReasonLabel(onBehalf.reasonCode)}\nNotes: ${onBehalf.note}\nIf this isn't right, you can cancel it from My Requests.`,
+      link: '/history',
+      cta: 'View My Requests',
+    })
+  } else {
+    await logLeaveEvent(admin, { requestId: created.id, action: 'submitted', actor: employee, note: requestNote || null, attestation: EMPLOYEE_ATTESTATION })
+  }
   if (autoApprove) await logLeaveEvent(admin, { requestId: created.id, action: 'auto_approved', actor: null, note: 'Approved automatically: the employee’s balance covered the request.' })
 
   if (autoApprove && col) {
@@ -221,8 +238,8 @@ export async function createLeaveRequest(data: {
   } else {
     const overBalance = col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)
     await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
-      title: `Leave request from ${employee.name}${days.length > 1 ? ` (${days.length} days)` : ''}`,
-      body: `${data.leave_type}\n${daysLabel(days)}${days.length > 1 ? `\nTotal: ${totalHours} hrs` : ''}${overBalance ? ` (exceeds available balance of ${balanceBefore} hrs — needs approval)` : ''}${data.note ? `\nNote: ${data.note}` : ''}`,
+      title: `Leave request from ${employee.name}${days.length > 1 ? ` (${days.length} days)` : ''}${onBehalf ? ' — submitted on their behalf' : ''}`,
+      body: `${data.leave_type}\n${daysLabel(days)}${days.length > 1 ? `\nTotal: ${totalHours} hrs` : ''}${overBalance ? ` (exceeds available balance of ${balanceBefore} hrs — needs approval)` : ''}${data.note ? `\nNote: ${data.note}` : ''}${onBehalf ? `\nException: completed by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note}` : ''}`,
     })
   }
 
@@ -238,13 +255,12 @@ export async function createLeaveRequest(data: {
  * (waiting period, date window, closed periods, daily hours, days already requested) and RETURNS the reason — production
  * hides the message of a thrown error, so the form would otherwise only ever show a generic "React error #441".
  */
-export async function checkMyLeaveDays(leaveType: LeaveType, days: LeaveDay[]) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function checkMyLeaveDays(leaveType: LeaveType, days: LeaveDay[], forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
   if (ready.length === 0) return null
   try {
-    await checkLeaveDays(createAdminClient(), employee.id, leaveType, ready)
+    await checkLeaveDays(createAdminClient(), subjectId, leaveType, ready)
     return null
   } catch (e) {
     return e instanceof Error ? e.message : 'These days can’t be requested.'
@@ -252,14 +268,13 @@ export async function checkMyLeaveDays(leaveType: LeaveType, days: LeaveDay[]) {
 }
 
 /** The signed-in employee's pending and approved leave by day, so the form can show days that are already taken. */
-export async function getMyBookedLeaveDays() {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function getMyBookedLeaveDays(forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
     .select('id, leave_type, status, start_date, end_date, hours')
-    .eq('employee_id', employee.id)
+    .eq('employee_id', subjectId)
     .in('status', ['pending', 'approved'])
     .gte('end_date', shiftDate(todayET(), -60))
   if (error) throw new Error(error.message)
@@ -308,7 +323,7 @@ export async function getLeaveHistory(employeeId?: string) {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
-    .select('*, approver:employees!leave_requests_approver_id_fkey(name)')
+    .select('*, approver:employees!leave_requests_approver_id_fkey(name), submitter:employees!leave_requests_submitted_by_fkey(name)')
     .eq('employee_id', targetId)
     .order('start_date', { ascending: false })
   if (error) throw new Error(error.message)
@@ -317,7 +332,8 @@ export async function getLeaveHistory(employeeId?: string) {
   return (data ?? []).map(r => {
     const approver = r.approver as unknown as { name: string } | { name: string }[] | null
     const approver_name = Array.isArray(approver) ? approver[0]?.name : approver?.name
-    return { ...r, approver_name: approver_name ?? null, days: daysByRequest.get(r.id) ?? [], events: eventsByRequest.get(r.id) ?? [] }
+    const submitter = r.submitter as unknown as { name: string } | { name: string }[] | null
+    return { ...r, approver_name: approver_name ?? null, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null, days: daysByRequest.get(r.id) ?? [], events: eventsByRequest.get(r.id) ?? [] }
   })
 }
 
@@ -348,11 +364,10 @@ export async function getTeamConflicts(dates: string[]) {
   return out
 }
 
-export async function getMyBalance() {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function getMyBalance(forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
-  const { data, error } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+  const { data, error } = await admin.from('leave_balances').select('*').eq('employee_id', subjectId).maybeSingle()
   if (error) throw new Error(error.message)
   return data
 }
@@ -396,10 +411,10 @@ export async function getPendingLeaveApprovals() {
   const admin = createAdminClient()
   let query = admin
     .from('leave_requests')
-    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url)')
+    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), submitter:employees!leave_requests_submitted_by_fkey(name)')
     .eq('status', 'pending')
   // Your own request only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor anything you completed on someone's behalf
   // Test-account submissions stay out of real approvers' queues (same reasoning as the approver digest) — unless the approver is themselves testing.
   if (!actor.is_test_account) {
     const testIds = await getTestAccountIds(admin)
@@ -426,8 +441,10 @@ export async function getPendingLeaveApprovals() {
       const proj = projectedAvailable({ type: balanceType, onDate: r.start_date, current, reserved: ctx.reserved.filter(x => x.id !== r.id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
       projectedAfter = proj.projected - Number(r.hours)
     }
+    const submitter = r.submitter as unknown as { name: string } | { name: string }[] | null
     results.push({
       ...r,
+      submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null,
       employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name,
       balance_current: current,
       balance_after: current !== null ? current - Number(r.hours) : null,
@@ -444,7 +461,7 @@ async function reviewedRows(actor: { is_test_account?: boolean }, statuses: stri
   const admin = createAdminClient()
   let query = admin
     .from('leave_requests')
-    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), approver:employees!leave_requests_approver_id_fkey(name)')
+    .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), approver:employees!leave_requests_approver_id_fkey(name), submitter:employees!leave_requests_submitted_by_fkey(name)')
     .in('status', statuses)
   // Same rule as the pending queue: test-account requests stay out of real approvers' lists (unless the viewer is themselves testing).
   if (!actor.is_test_account) {
@@ -461,10 +478,12 @@ async function reviewedRows(actor: { is_test_account?: boolean }, statuses: stri
   return (data ?? []).map(r => {
     const emp = r.employee as unknown as { name: string } | { name: string }[]
     const approver = r.approver as unknown as { name: string } | { name: string }[] | null
+    const submitter = r.submitter as unknown as { name: string } | { name: string }[] | null
     return {
       ...r,
       employee_name: Array.isArray(emp) ? emp[0]?.name : emp?.name,
       approver_name: (Array.isArray(approver) ? approver[0]?.name : approver?.name) ?? null,
+      submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null,
       days: daysByRequest.get(r.id) ?? [],
       events: eventsByRequest.get(r.id) ?? [],
     }
@@ -491,6 +510,7 @@ export async function approveLeaveRequest(id: string) {
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
   if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't approve your own request — it needs another approver.")
+  if (request.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this request on the employee's behalf, so it needs another approver.")
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
   if (closedHit) {
     throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
@@ -564,10 +584,11 @@ export async function denyLeaveRequest(id: string, reason: string) {
   const reasonProblem = denyReasonProblem(reason)
   if (reasonProblem) throw new Error(reasonProblem)
   const admin = createAdminClient()
-  const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours').eq('id', id).single()
+  const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours, submitted_by').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
   if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't deny your own request — it needs another approver.")
+  if (request.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this request on the employee's behalf, so it needs another approver.")
 
   const { error } = await admin.from('leave_requests').update({
     status: 'denied',
@@ -669,12 +690,11 @@ export async function cancelMyLeaveRequest(id: string) {
  * whether each reservation is covered by the balance projected for its start date. Feeds the dashboard note and the
  * projection on the request form.
  */
-export async function getMyLeaveOutlook() {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function getMyLeaveOutlook(forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
-  const ctx = await loadProjectionContext(admin, employee.id)
-  const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+  const ctx = await loadProjectionContext(admin, subjectId)
+  const { data: balance } = await admin.from('leave_balances').select('*').eq('employee_id', subjectId).maybeSingle()
   const current = { pto: Number(balance?.pto_hours ?? 0), sick: Number(balance?.sick_hours ?? 0), vacation: Number(balance?.personal_hours ?? 0), flex: Number(balance?.flex_hours ?? 0) }
 
   const reservedDays = await loadRequestDays(admin, ctx.reserved.map(r => ({ id: r.id, start_date: r.start_date, end_date: r.end_date ?? r.start_date, hours: r.hours })))

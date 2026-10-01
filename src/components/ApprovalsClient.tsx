@@ -7,6 +7,7 @@ import { approveLeaveRequest, denyLeaveRequest, getLeaveAttachmentViewUrl } from
 import { approveExpense, denyExpense } from '@/app/actions/expenses'
 import { approveTimesheet, returnTimesheet, reopenTimesheet, adjustRowTags } from '@/app/actions/timesheets'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
+import { onBehalfReasonLabel } from '@/lib/constants/on-behalf'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import type { LeaveRequest, Expense, Role, TimesheetForReview, TimesheetTag } from '@/types'
 import RowTags from '@/components/RowTags'
@@ -113,6 +114,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
               <div className="flex items-center gap-2 mt-0.5">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${tc.badge}`}>{item.leave_type}</span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Pending review</span>
+                {item.submitted_by_name && <span title={item.on_behalf_note ?? undefined} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">Exception: submitted by {item.submitted_by_name} on the employee’s behalf</span>}
                 <span className="text-[11px] text-gray-400">Submitted {daysAgo(item.created_at)}</span>
                 {until && <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.5 rounded-full">Starts {until}</span>}
               </div>
@@ -226,6 +228,7 @@ function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
             <p className="text-[12px] text-gray-400 mt-0.5">{dateRange} · {item.hours} hrs{item.days && item.days.length > 1 ? ` · ${item.days.length} days` : ''}</p>
             {item.days && item.days.length > 1 && <LeaveDaysList days={item.days} className="mt-2 max-w-xs" />}
             {decidedAs === 'denied' && item.deny_reason && <p className="text-[12px] text-red-500 mt-1">&ldquo;{item.deny_reason}&rdquo;</p>}
+            {item.submitted_by_name && <p className="text-[11px] font-semibold text-amber-700 mt-1" title={item.on_behalf_note ?? undefined}>Exception: submitted by {item.submitted_by_name} on the employee’s behalf</p>}
             {cancelled ? (
               <p className="text-[12px] text-gray-500 mt-1.5">
                 Cancelled by <span className="font-semibold text-[#0b2b35]">{item.employee_name}</span>
@@ -307,6 +310,8 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
 
 const EVENT_LABELS: Record<string, string> = {
   submitted: 'Submitted',
+  submitted_on_behalf: 'Submitted on the employee’s behalf (exception)',
+  edited_on_behalf: 'Edited on the employee’s behalf (exception)',
   approved: 'Approved',
   returned: 'Returned for correction',
   reopened: 'Reopened',
@@ -367,6 +372,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
         <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
           <div>
             <p className="font-bold text-[15px] text-[#0b2b35]">{item.employee_name}</p>
+            {item.submitted_by_name && <p className="mt-1"><span title={item.on_behalf_note ?? undefined} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">Exception: submitted by {item.submitted_by_name} on the employee’s behalf{item.on_behalf_reason_code ? ` — ${onBehalfReasonLabel(item.on_behalf_reason_code)}` : ''}</span></p>}
             <p className="text-[12px] text-gray-400 mt-0.5">
               Pay period {fmtDateRange(item.period_start, item.period_end)}
               {mode === 'pending' && item.employee_signed_at && <> · Submitted {daysAgo(item.employee_signed_at)}</>}
@@ -462,7 +468,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
               <li key={e.id} className="text-[12px] border-l-2 border-[#d4eef2] pl-3">
                 <p className="font-semibold text-[#0b2b35]">{EVENT_LABELS[e.action] ?? e.action} <span className="font-normal text-gray-400">· {fmtDate(e.created_at)}{e.actor_name ? ` · ${e.actor_name}` : ''}</span></p>
                 {(e.reason_code || e.note) && (
-                  <p className="text-gray-500 mt-0.5 whitespace-pre-line">{e.reason_code ? `${reopenReasonLabel(e.reason_code)}${e.note ? ' — ' : ''}` : ''}{e.note}</p>
+                  <p className="text-gray-500 mt-0.5 whitespace-pre-line">{e.reason_code ? `${e.action.endsWith('_on_behalf') ? onBehalfReasonLabel(e.reason_code) : reopenReasonLabel(e.reason_code)}${e.note ? ' — ' : ''}` : ''}{e.note}</p>
                 )}
               </li>
             ))}

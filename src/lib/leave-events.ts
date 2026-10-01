@@ -12,7 +12,7 @@ import type { LeaveEvent, LeaveEventAction } from '@/types'
  */
 export async function logLeaveEvent(
   admin: SupabaseClient,
-  e: { requestId: string; action: LeaveEventAction; actor: { id: string; name: string; role: string; employee_number?: number } | null; note?: string | null; attestation?: string },
+  e: { requestId: string; action: LeaveEventAction; actor: { id: string; name: string; role: string; employee_number?: number } | null; note?: string | null; attestation?: string; reasonCode?: string },
 ) {
   // A signature carries where it came from. Best-effort: outside a request (cron/scripts) there are no headers.
   let ip: string | null = null
@@ -26,6 +26,7 @@ export async function logLeaveEvent(
     actor_name: e.actor?.name ?? 'System (balance covered the request)',
     actor_role: e.actor?.role ?? null,
     note: e.note ?? null,
+    reason_code: e.reasonCode ?? null,
     ...(e.attestation && e.actor ? { signature_name: e.actor.name, signer_employee_number: e.actor.employee_number ?? null, attestation: e.attestation, signed_ip: ip } : {}),
   })
   if (error) console.error('logLeaveEvent failed', e.action, error.message)
@@ -37,7 +38,7 @@ export async function loadLeaveEvents(admin: SupabaseClient, requestIds: string[
   if (requestIds.length === 0) return out
   const { data, error } = await admin
     .from('leave_request_events')
-    .select('id, request_id, action, actor_id, actor_name, actor_role, note, backfilled, created_at, signature_name, signer_employee_number, attestation')
+    .select('id, request_id, action, actor_id, actor_name, actor_role, note, backfilled, created_at, signature_name, signer_employee_number, attestation, reason_code')
     .in('request_id', requestIds)
     .order('created_at')
   if (error) throw new Error(error.message)

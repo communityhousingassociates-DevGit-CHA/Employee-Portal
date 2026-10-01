@@ -12,6 +12,8 @@ import { earliestLeaveDate, LEAVE_BACKDATE_DAYS, latestLeaveDate } from '@/lib/l
 import { todayET, deductThroughDate, getCurrentPeriod, closedRangeOverlapping, type ClosedRange } from '@/lib/pay-periods'
 import { ADVANCE_NOTICE_DAYS, firstEligibleDate } from '@/lib/constants/accrual'
 import { fmtHrs, halfHour } from '@/lib/format-hours'
+import OnBehalfPanel from '@/components/OnBehalfPanel'
+import { onBehalfProblem, onBehalfAttestation } from '@/lib/constants/on-behalf'
 
 type DayRow = { id: string; date: string; hours: string }
 type Conflict = { start_date: string; end_date: string; employee_name?: string; dates: string[] }
@@ -67,12 +69,15 @@ export default function RequestClient({
   bookedDays,
   outlook,
   initialDate,
+  onBehalf,
 }: {
   employeeName: string
   employeeIdLabel: string
   balance: LeaveBalance | null
   yearEnd?: YearEndChoice | null
   initialDate?: string
+  /** Set when an admin is completing this for another employee (an exception — see OnBehalfPanel). employeeName / ID above are then the employee's. */
+  onBehalf?: { employeeId: string; actorName: string }
   closedRanges: ClosedRange[]
   /** Days the employee already has pending/approved leave on: date -> hours and what it is. */
   bookedDays: Record<string, { hours: number; labels: string[] }>
@@ -95,6 +100,8 @@ export default function RequestClient({
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<Conflict[]>([])
   const [dayOverage, setDayOverage] = useState<string | null>(null)
+  const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
+  const onBehalfIssue = onBehalf ? onBehalfProblem(behalf) : null
 
   const selectedType = LEAVE_TYPES.find(t => t.key === leaveType)!
   const selectedBalance = selectedType.balanceKey ? Number(balance?.[selectedType.balanceKey] ?? 0) : null
@@ -120,7 +127,7 @@ export default function RequestClient({
     const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
     if (ready.length === 0) { setDayOverage(null); return }
     let cancelled = false
-    checkMyLeaveDays(leaveType, ready).then(m => { if (!cancelled) setDayOverage(m) }).catch(() => {})
+    checkMyLeaveDays(leaveType, ready, onBehalf?.employeeId).then(m => { if (!cancelled) setDayOverage(m) }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayKey, leaveType])
@@ -204,7 +211,7 @@ export default function RequestClient({
   }
   const badRows = days.some(d => !d.date || !isWorkday(d.date, yearEnd) || !(Number(d.hours) > 0) || Number(d.hours) > maxDayHours)
   const limitProblem = leaveType === 'Voting' ? (dayCount > 1 ? 'Election voting leave is for a single day.' : null) : leaveType === 'Workers Comp' && hoursNum > WORKERS_COMP_MAX_HOURS ? `Workers’ compensation leave covers the first 3 days (${WORKERS_COMP_MAX_HOURS} hrs).` : null
-  const canSubmit = !limitProblem && !closedHit && !dayOverage && !beyondLatest && !badRows && signed && !submitting && (!attachmentRequired || !!attachment)
+  const canSubmit = !limitProblem && !closedHit && !dayOverage && !beyondLatest && !badRows && signed && !onBehalfIssue && !submitting && (!attachmentRequired || !!attachment)
 
   async function handleSubmit() {
     setSubmitting(true)
@@ -217,7 +224,10 @@ export default function RequestClient({
         if (!res.ok) throw new Error('Attachment upload failed — please try again')
         attachment_path = path
       }
-      const result = await createLeaveRequest({ leave_type: leaveType, days: days.map(d => ({ date: d.date, hours: Number(d.hours) })), note, attachment_path })
+      const result = await createLeaveRequest(
+        { leave_type: leaveType, days: days.map(d => ({ date: d.date, hours: Number(d.hours) })), note, attachment_path },
+        onBehalf ? { employeeId: onBehalf.employeeId, onBehalf: behalf } : undefined,
+      )
       setAutoApproved(result.autoApproved)
       setSubmitted(true)
     } catch (e: unknown) {
@@ -238,14 +248,15 @@ export default function RequestClient({
           </p>
           <p className="text-[12px] text-gray-400 mb-1">{employeeName} · Employee ID {employeeIdLabel}</p>
           <p className="text-[13px] text-gray-500 mb-6">
-            {autoApproved
+            {onBehalf ? `Submitted on ${employeeName}\u2019s behalf and recorded as an exception with your reason. ${employeeName} has been notified${autoApproved ? '; it was approved automatically because their balance covers it.' : ', and the approvers will review it in the portal.'}`
+              : autoApproved
               ? 'Approved automatically — your balance covers it. Your balance is updated and the days are on your timesheet.'
               : dayCount > 1 ? 'Your approvers have been notified and will review all the days together in the portal. You\u2019ll be notified of the decision.'
               : 'Your approvers have been notified by email and will review it in the portal. You\u2019ll be notified of the decision.'}
           </p>
           <div className="flex flex-col gap-2">
-            <Link href="/history" className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">View My Requests</Link>
-            <button onClick={() => { setSubmitted(false); setSigned(false); setPicked({}); setNote(''); setAttachment(null) }}
+            <Link href={onBehalf ? `/employees/${onBehalf.employeeId}` : '/history'} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors">{onBehalf ? `Back to ${employeeName}` : 'View My Requests'}</Link>
+            <button onClick={() => { setSubmitted(false); setSigned(false); setPicked({}); setNote(''); setAttachment(null); setBehalf({ reasonCode: '', note: '' }) }}
               className="text-[13px] text-[#02ACC0] font-semibold hover:underline">Submit another request</button>
           </div>
         </div>
@@ -257,7 +268,7 @@ export default function RequestClient({
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Request / Use Leave</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">Request / Use Leave{onBehalf ? ` — for ${employeeName}` : ''}</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Sent to a manager for approval</p>
           <p className="text-[12px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel}</p>
         </div>
@@ -265,6 +276,8 @@ export default function RequestClient({
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>}
+
+      {onBehalf && <OnBehalfPanel employeeName={employeeName} actorName={onBehalf.actorName} what="leave request" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
         <div className="space-y-5">
@@ -437,14 +450,14 @@ export default function RequestClient({
           </div>
 
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
-            <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">Employee Signature</p>
-            <p className="text-[12px] text-gray-400 mb-4">By signing, you confirm this request is accurate and that leave requires approval before it is taken.</p>
+            <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">{onBehalf ? `Administrator Signature (on behalf of ${employeeName})` : 'Employee Signature'}</p>
+            <p className="text-[12px] text-gray-400 mb-4">{onBehalf ? onBehalfAttestation(employeeName) : 'By signing, you confirm this request is accurate and that leave requires approval before it is taken.'}</p>
             <div onClick={() => setSigned(true)}
               className={`rounded-xl border-2 border-dashed px-6 py-4 text-center cursor-pointer transition-all ${signed ? 'border-emerald-400 bg-emerald-50' : 'border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f8fcfd]'}`}>
               {signed ? (
                 <div>
-                  <p className="font-[cursive] text-[22px] text-[#0b2b35]">{employeeName}</p>
-                  <p className="text-[11px] text-gray-400 mt-1">{employeeName} · Employee ID {employeeIdLabel} · {fmtDate(todayET())}</p>
+                  <p className="font-[cursive] text-[22px] text-[#0b2b35]">{onBehalf ? onBehalf.actorName : employeeName}</p>
+                  <p className="text-[11px] text-gray-400 mt-1">{onBehalf ? `${onBehalf.actorName} on behalf of ${employeeName} · Employee ID ${employeeIdLabel}` : `${employeeName} · Employee ID ${employeeIdLabel}`} · {fmtDate(todayET())}</p>
                 </div>
               ) : <p className="text-gray-300 text-[13px]">Click here to sign</p>}
             </div>

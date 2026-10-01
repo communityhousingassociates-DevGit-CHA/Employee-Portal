@@ -18,7 +18,11 @@ export async function getPendingApprovalCount(): Promise<number> {
 
   async function count(table: 'leave_requests' | 'expenses' | 'timesheets', status: string) {
     let query = admin.from(table).select('id', { count: 'exact', head: true }).eq('status', status)
-    if (!canSelfApprove(actor!.role)) query = query.neq('employee_id', actor!.id)
+    if (!canSelfApprove(actor!.role)) {
+      query = query.neq('employee_id', actor!.id)
+      // …nor anything you completed on someone's behalf (leave and timesheets record who submitted).
+      if (table !== 'expenses') query = query.or(`submitted_by.is.null,submitted_by.neq.${actor!.id}`)
+    }
     if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
     const { count: n, error } = await query
     if (error) throw new Error(error.message)

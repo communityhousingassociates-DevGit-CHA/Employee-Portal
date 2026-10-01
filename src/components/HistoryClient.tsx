@@ -97,6 +97,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
           </div>
           <p className="text-[11px] text-gray-400">
             {r.hours} hrs{multiDay ? ` · ${r.days!.length} days` : ''} · Submitted {daysAgo(r.created_at)}
+            {r.submitted_by_name && <> · <span className="font-semibold text-amber-700">Submitted on the employee’s behalf by {r.submitted_by_name}</span></>}
             {r.approver_name && r.status !== 'denied' && <> · Reviewed · Approved by {r.approver_name}</>}
             {r.status === 'denied' && r.approver_name && <> · Reviewed · Denied by {r.approver_name}</>}
           </p>

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
+import OnBehalfPanel from '@/components/OnBehalfPanel'
+import { onBehalfProblem, onBehalfAttestation } from '@/lib/constants/on-behalf'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
@@ -63,6 +65,8 @@ export default function TimesheetClient({
   initialRows,
   initialExpenses,
   salary,
+  salaried,
+  onBehalf,
   closedRanges,
   customTags,
 }: {
@@ -75,10 +79,14 @@ export default function TimesheetClient({
   initialRows: TimesheetRowType[]
   initialExpenses: Expense[]
   salary: Salary
+  /** Whether this employee is salaried (hours auto-fill to 8/day). Separate from `salary` so an admin acting for them never receives the amount. */
+  salaried: boolean
+  /** Set when an admin is completing this for another employee (an exception — see OnBehalfPanel). */
+  onBehalf?: { employeeId: string; actorName: string }
   closedRanges: ClosedRange[]
   customTags: TimesheetTag[]
 }) {
-  const isSalaried = salary !== null
+  const isSalaried = salaried
 
   const [periodIdx, setPeriodIdx] = useState(0)
   const [timesheet, setTimesheet] = useState<Timesheet>(initialTimesheet)
@@ -94,6 +102,9 @@ export default function TimesheetClient({
   const [correctionError, setCorrectionError] = useState('')
   const [error, setError] = useState('')
   const savingRef = useRef(false)
+  const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
+  // On behalf of an employee the sheet stays read-only until a reason code and notes are given (the server re-checks).
+  const behalfIssue = onBehalf ? onBehalfProblem(behalf) : null
 
   const period = periods[periodIdx]
   const dueDate = getTimesheetDueDate(period)
@@ -128,7 +139,7 @@ export default function TimesheetClient({
         leave_hours: Number(r.leave_hours),
         holiday_worked_hours: Number(r.holiday_worked_hours ?? 0),
         tag_ids: r.tag_ids ?? [],
-      })))
+      })), onBehalf ? behalf : undefined)
       setRows(rs => rs.map(r => ({ ...r, dirty: false })))
       setSaveStatus('idle')
     } catch (e: unknown) {
@@ -176,7 +187,7 @@ export default function TimesheetClient({
 
       const p = periods[newIdx]
       const [{ timesheet: ts, rows: r }, exp] = await Promise.all([
-        getOrCreateTimesheet(p.start, p.end),
+        getOrCreateTimesheet(p.start, p.end, onBehalf?.employeeId),
         getExpensesForPeriod(timesheet.employee_id, p.start, p.end).catch(() => []),
       ])
       setPeriodIdx(newIdx)
@@ -208,7 +219,7 @@ export default function TimesheetClient({
     setError('')
     try {
       await persist(rows)
-      await submitTimesheet(timesheet.id)
+      await submitTimesheet(timesheet.id, onBehalf ? behalf : undefined)
       setTimesheet(t => ({ ...t, status: 'submitted', return_reason: null }))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to submit timesheet')
@@ -258,7 +269,9 @@ export default function TimesheetClient({
           <h2 className="text-[20px] font-bold text-[#0b2b35] mb-2">{timesheet.status === 'approved' ? 'Timesheet Approved' : 'Timesheet Submitted'}</h2>
           <p className="text-[13px] text-gray-500 mb-1">{formatPeriodLabel(period)}</p>
           <p className="text-[13px] text-gray-500 mb-5">
-            {timesheet.status === 'approved'
+            {onBehalf
+              ? `Submitted on ${employeeName}\u2019s behalf and recorded as an exception with your reason. ${employeeName} has been notified, and the approvers will review it.`
+              : timesheet.status === 'approved'
               ? 'Your approver has reviewed and approved this timesheet.'
               : 'Sent for approval. You\u2019ll get an email and a portal notification when it\u2019s reviewed.'}
           </p>
@@ -271,7 +284,7 @@ export default function TimesheetClient({
               <div className="flex justify-between"><span>Pay period gross wages</span><strong className="text-[#0b2b35]">{currency(periodGross)}</strong></div>
             )}
           </div>
-          {timesheet.correction_requested_at ? (
+          {onBehalf ? null : timesheet.correction_requested_at ? (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left text-[12px] text-amber-800 mb-5">
               <p className="font-semibold">Correction requested {fmtDate(timesheet.correction_requested_at)}</p>
               <p className="mt-1 whitespace-pre-line">{timesheet.correction_note}</p>
@@ -297,7 +310,9 @@ export default function TimesheetClient({
           ) : (
             <button onClick={() => setShowCorrection(true)} className="text-[13px] font-semibold text-[#02ACC0] hover:underline mb-4 block mx-auto">Request a correction</button>
           )}
-          <Link href="/dashboard" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">← Back to Dashboard</Link>
+          {onBehalf
+            ? <Link href={`/employees/${onBehalf.employeeId}`} className="text-[#02ACC0] text-[13px] font-semibold hover:underline">← Back to {employeeName}</Link>
+            : <Link href="/dashboard" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">← Back to Dashboard</Link>}
         </div>
       </div>
     )
@@ -333,6 +348,10 @@ export default function TimesheetClient({
         </p>
       </div>
 
+      {onBehalf && !submitted && (
+        <div className="no-print"><OnBehalfPanel employeeName={employeeName} actorName={onBehalf.actorName} what="timesheet" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} /></div>
+      )}
+
       {closedForEdit && closedHit && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-5 py-4 no-print">
           <p className="text-[13px] font-semibold text-red-800">This pay period is closed</p>
@@ -352,7 +371,7 @@ export default function TimesheetClient({
 
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6 no-print">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet{onBehalf ? ` — for ${employeeName}` : ''}</h1>
           <p className="text-[12px] text-gray-400 mt-0.5">{employeeName} · Employee ID {employeeIdLabel}</p>
           <div className="flex items-center gap-2 mt-1">
             <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading}
@@ -394,7 +413,7 @@ export default function TimesheetClient({
             {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Retry Save' : hasUnsaved ? 'Save Now' : '✓ All changes saved'}
           </button>
           <button
-            disabled={!signed || submitting || closedForEdit}
+            disabled={!signed || submitting || closedForEdit || !!behalfIssue}
             onClick={handleSubmit}
             className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {submitting ? 'Submitting…' : 'Submit & Sign'}
@@ -450,7 +469,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
-        {week1.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
+        {week1.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit || !!behalfIssue} leaveForEmployeeId={onBehalf?.employeeId} />)}
         <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -462,7 +481,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
-        {week2.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit} />)}
+        {week2.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit || !!behalfIssue} leaveForEmployeeId={onBehalf?.employeeId} />)}
         <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -491,13 +510,13 @@ export default function TimesheetClient({
           <p className="text-[13px] font-bold text-[#0b2b35]">Expenses this period</p>
           <p className="text-[12px] text-gray-400">{expenses.length} submitted · ${expenseTotal.toFixed(2)} total</p>
         </div>
-        <Link href="/expenses" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">+ Add Expense</Link>
+        {!onBehalf && <Link href="/expenses" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">+ Add Expense</Link>}
       </div>
 
       <div className="bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-2xl">
-        <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">Employee Certification &amp; Signature</p>
+        <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">{onBehalf ? `Administrator Certification & Signature (on behalf of ${employeeName})` : 'Employee Certification & Signature'}</p>
         <p className="text-[12px] text-gray-400 mb-5">
-          By signing, I certify that the hours above are accurate and complete. This timesheet will be sent for approval.
+          {onBehalf ? `${onBehalfAttestation(employeeName)} This timesheet will be sent for approval.` : 'By signing, I certify that the hours above are accurate and complete. This timesheet will be sent for approval.'}
         </p>
 
         <div
@@ -507,8 +526,8 @@ export default function TimesheetClient({
           }`}>
           {signed ? (
             <div>
-              <p className="font-[cursive] text-[22px] text-[#0b2b35] mb-1">{employeeName}</p>
-              <p className="text-[11px] text-gray-400">{employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(todayET())}</p>
+              <p className="font-[cursive] text-[22px] text-[#0b2b35] mb-1">{onBehalf ? onBehalf.actorName : employeeName}</p>
+              <p className="text-[11px] text-gray-400">{onBehalf ? `${onBehalf.actorName} on behalf of ${employeeName}` : employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(todayET())}</p>
             </div>
           ) : (
             <p className="text-gray-300 text-[13px]">Click here to sign</p>
@@ -526,7 +545,7 @@ export default function TimesheetClient({
   )
 }
 
-function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean }) {
+function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, leaveForEmployeeId }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean; leaveForEmployeeId?: string }) {
   const isLeave = Number(row.leave_hours) > 0
   const isHoliday = tags.some(t => t.key === 'holiday')
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
@@ -585,7 +604,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked }: 
       </div>
       <div className="flex justify-end">
         {!locked && !isHoliday && (
-          <Link href={`/request?date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column"
+          <Link href={`/request?${leaveForEmployeeId ? `for=${leaveForEmployeeId}&` : ''}date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column"
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-[#028a9e] border border-[#d4eef2] rounded-full pl-2.5 pr-1 py-0.5 hover:bg-[#e0f5f8] transition-colors">
             Add Leave
             <span aria-hidden className="w-[18px] h-[18px] rounded-full bg-[#02ACC0] text-white flex items-center justify-center text-[13px] leading-none">+</span>
