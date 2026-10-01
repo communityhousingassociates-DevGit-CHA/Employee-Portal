@@ -537,9 +537,22 @@ export default function TimesheetClient({
         {signed && (
           <div className="flex items-center gap-2 text-[12px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
             <span>✓</span>
-            <span>Signature applied — click <strong>Submit &amp; Sign</strong> above to send for approval.</span>
+            <span>Signature applied — submit below to send for approval.</span>
           </div>
         )}
+
+        {/* Submit lives here as well as at the top of the page, so it's right where you've just signed. */}
+        <div className="mt-4 flex flex-wrap items-center gap-3 no-print">
+          <button
+            disabled={!signed || submitting || closedForEdit || !!behalfIssue}
+            onClick={handleSubmit}
+            className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            {submitting ? 'Submitting…' : onBehalf ? `Submit on behalf of ${employeeName.split(' ')[0]}` : 'Submit & Sign'}
+          </button>
+          {!signed && <span className="text-[12px] text-gray-400">Sign above to enable.</span>}
+          {signed && behalfIssue && <span className="text-[12px] text-red-600">{behalfIssue}</span>}
+        </div>
+        {error && <p className="mt-3 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
       </div>
     </div>
   )
