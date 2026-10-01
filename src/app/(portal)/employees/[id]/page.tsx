@@ -7,6 +7,7 @@ import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
 import { getTagList } from '@/app/actions/tags'
 import { getPeriodsSince } from '@/lib/pay-periods'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
+import { canActOnBehalf } from '@/lib/constants/on-behalf'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import HistoryClient from '@/components/HistoryClient'
 import EmployeeTimesheetView from '@/components/EmployeeTimesheetView'
@@ -54,7 +55,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         )}
       </div>
 
-      {employee.is_active && employee.id !== me.id && (
+      {canActOnBehalf(me) && employee.is_active && employee.id !== me.id && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-[13px] font-bold text-amber-900">Complete something on {employee.name.split(' ')[0]}&rsquo;s behalf</p>

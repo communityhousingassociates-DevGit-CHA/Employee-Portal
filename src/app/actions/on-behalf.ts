@@ -2,13 +2,13 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
-import { ON_BEHALF_ROLES } from '@/lib/constants/on-behalf'
+import { canActOnBehalf } from '@/lib/constants/on-behalf'
 import type { YearEndChoice } from '@/lib/holidays'
 
-/** The employee an admin is about to complete something for. Throws unless the caller holds an on-behalf role. */
+/** The employee an admin is about to complete something for. Throws unless the caller is one of the people allowed to act on behalf. */
 export async function getOnBehalfTarget(employeeId: string) {
   const actor = await getCurrentEmployee()
-  if (!actor || !ON_BEHALF_ROLES.includes(actor.role)) throw new Error('Forbidden')
+  if (!actor || !canActOnBehalf(actor)) throw new Error('Forbidden')
   const { data, error } = await createAdminClient()
     .from('employees')
     .select('id, name, employee_number, employee_type, year_end_holiday, hire_date, is_active')

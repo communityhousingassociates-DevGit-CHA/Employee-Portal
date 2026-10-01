@@ -1,6 +1,6 @@
 -- CHA Employee Portal — Migration 036: submitting leave requests and timesheets on an employee's behalf
 --
--- An admin (admin / CEO / accounting manager) may complete another employee's leave request or timesheet as an EXCEPTION to
+-- A named administrator (the President/CEO, the Accounting Manager, or the system super admin) may complete another employee's leave request or timesheet as an EXCEPTION to
 -- the employee submitting directly. Every such submission records who did it (`submitted_by`) and why (a reason code plus
 -- notes), and writes its own audit event. A NULL `submitted_by` means the employee submitted it themselves.
 --

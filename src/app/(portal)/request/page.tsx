@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { getMyBalance, getMyLeaveOutlook, getMyBookedLeaveDays } from '@/app/actions/leave-requests'
 import { getOnBehalfTarget } from '@/app/actions/on-behalf'
-import { ON_BEHALF_ROLES } from '@/lib/constants/on-behalf'
+import { canActOnBehalf } from '@/lib/constants/on-behalf'
 import { getActiveClosedRanges } from '@/app/actions/close-period'
 import RequestClient from '@/components/RequestClient'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
@@ -18,7 +18,7 @@ export default async function RequestPage({ searchParams }: { searchParams: Prom
   let subject: { id: string; name: string; employee_number: number; year_end_holiday: typeof employee.year_end_holiday } = employee
   let onBehalf: { employeeId: string; actorName: string } | undefined
   if (forId && forId !== employee.id) {
-    if (!ON_BEHALF_ROLES.includes(employee.role)) redirect('/dashboard')
+    if (!canActOnBehalf(employee)) redirect('/dashboard')
     const target = await getOnBehalfTarget(forId).catch(() => null)
     if (!target || !target.is_active) redirect('/employees')
     subject = target

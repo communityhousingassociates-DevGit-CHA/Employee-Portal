@@ -3,7 +3,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getCurrentEmployee } from '@/lib/auth/session'
-import { ON_BEHALF_ROLES, onBehalfProblem, type OnBehalf } from '@/lib/constants/on-behalf'
+import { canActOnBehalf, onBehalfProblem, type OnBehalf } from '@/lib/constants/on-behalf'
 import type { Employee } from '@/types'
 
 /**
@@ -19,7 +19,7 @@ export async function resolveActor(
   if (!actor) throw new Error('Forbidden')
   if (!target.employeeId || target.employeeId === actor.id) return { actor, subject: actor, onBehalf: null }
 
-  if (!ON_BEHALF_ROLES.includes(actor.role)) throw new Error('Forbidden')
+  if (!canActOnBehalf(actor)) throw new Error('Forbidden')
   const problem = target.onBehalf ? onBehalfProblem(target.onBehalf) : 'Choose a reason for completing this on the employee’s behalf.'
   if (problem) throw new Error(problem)
   const { data: subject, error } = await admin.from('employees').select('*').eq('id', target.employeeId).single()
@@ -28,11 +28,11 @@ export async function resolveActor(
   return { actor, subject: subject as Employee, onBehalf: { reasonCode: target.onBehalf!.reasonCode, note: target.onBehalf!.note.trim() } }
 }
 
-/** For read-only helpers that load an employee's own data (balances, booked days): self, or an on-behalf-capable role. */
+/** For read-only helpers that load an employee's own data (balances, booked days): self, or someone allowed to act on behalf. */
 export async function resolveSubjectId(employeeId?: string | null): Promise<string> {
   const actor = await getCurrentEmployee()
   if (!actor) throw new Error('Forbidden')
   if (!employeeId || employeeId === actor.id) return actor.id
-  if (!ON_BEHALF_ROLES.includes(actor.role)) throw new Error('Forbidden')
+  if (!canActOnBehalf(actor)) throw new Error('Forbidden')
   return employeeId
 }

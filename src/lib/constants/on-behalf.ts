@@ -1,8 +1,12 @@
-import type { Role } from '@/types'
+import { hasPayrollAccess } from '@/lib/constants/salary-access'
 
 // Completing a leave request or timesheet FOR another employee is an exception to the employee submitting it themselves,
-// so it always carries a reason code and notes and is logged (see migration 036). Roles allowed to do it:
-export const ON_BEHALF_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
+// so it always carries a reason code and notes and is logged (see migration 036).
+//
+// WHO may do it (CHA policy, 2026-09-30): only Nico Sanders (President/CEO), Carrileen Edwards (Accounting Manager) and the
+// system super admin — the same named people as payroll access, deliberately narrower than the admin/CEO/accounting roles.
+// It reuses that list (PAYROLL_ACCESS_EMAILS in salary-access.ts), so one edit changes both. Split it out if they ever need to differ.
+export const canActOnBehalf = hasPayrollAccess
 
 export const ON_BEHALF_REASONS = [
   { code: 'employee_request', label: 'Employee asked me to (phone, email or in person)' },

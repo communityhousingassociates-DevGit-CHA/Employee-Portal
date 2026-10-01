@@ -7,7 +7,7 @@ import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { getMySalary } from '@/app/actions/salary'
 import { getPeriodsSince } from '@/lib/pay-periods'
 import { getOnBehalfTarget } from '@/app/actions/on-behalf'
-import { ON_BEHALF_ROLES } from '@/lib/constants/on-behalf'
+import { canActOnBehalf } from '@/lib/constants/on-behalf'
 import TimesheetClient from '@/components/TimesheetClient'
 
 export const dynamic = 'force-dynamic'
@@ -22,7 +22,7 @@ export default async function TimesheetPage({ searchParams }: { searchParams: Pr
   let onBehalf: { employeeId: string; actorName: string } | undefined
   let targetSalaried: boolean | undefined
   if (forId && forId !== employee.id) {
-    if (!ON_BEHALF_ROLES.includes(employee.role)) redirect('/dashboard')
+    if (!canActOnBehalf(employee)) redirect('/dashboard')
     const target = await getOnBehalfTarget(forId).catch(() => null)
     if (!target || !target.is_active) redirect('/employees')
     subject = { ...target, employee_type: target.employee_type as typeof employee.employee_type }
