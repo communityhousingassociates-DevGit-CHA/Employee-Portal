@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useRef, useState, useTransition } from 'react'
+import { Fragment, useMemo, useRef, useState, useTransition } from 'react'
 import { todayET, getCurrentPeriod, getPreviousPeriod } from '@/lib/pay-periods'
 import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
 import OnBehalfPanel from '@/components/OnBehalfPanel'
+import ExpenseAuditLog from '@/components/ExpenseAuditLog'
 import { onBehalfProblem } from '@/lib/constants/on-behalf'
 import { useRouter } from 'next/navigation'
 import { submitExpense, getReceiptUploadUrl, getReceiptViewUrl } from '@/app/actions/expenses'
@@ -72,6 +73,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
   const [period, setPeriod] = useState<PeriodKey>('current')
+  const [openHistory, setOpenHistory] = useState<string | null>(null)
   const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
   const behalfIssue = onBehalf ? onBehalfProblem(behalf) : null
 
@@ -200,20 +202,21 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6">
         <div className="overflow-x-auto">
-        <table className="w-full text-[13px] min-w-[760px]">
+        <table className="w-full text-[13px] min-w-[820px]">
           <thead>
             <tr className="bg-[#f9fefe] border-b border-[#d4eef2]">
-              {['Date', 'Category', 'Description', 'Amount', 'Status', 'Receipt'].map(h => (
+              {['Date', 'Category', 'Description', 'Amount', 'Status', 'Receipt', ''].map((h, i) => (
                 <th key={h} className="text-left px-4 py-2.5 text-[11px] uppercase tracking-wide text-gray-400 font-semibold">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {expenses.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No expenses submitted yet</td></tr>
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">No expenses submitted yet</td></tr>
             )}
             {expenses.map(exp => (
-              <tr key={exp.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
+              <Fragment key={exp.id}>
+              <tr className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
                 <td className="px-4 py-3 text-gray-500">{fmtDate(exp.expense_date)}</td>
                 <td className="px-4 py-3 text-gray-500">{CATEGORY_LABELS[exp.category] ?? exp.category}{exp.category === 'mileage' && exp.miles ? ` (${exp.miles} mi)` : ''}</td>
                 <td className="px-4 py-3 text-gray-500">{exp.description || '—'}{exp.submitted_by_name && <div className="text-[11px] font-semibold text-amber-700 mt-0.5" title={exp.on_behalf_note ?? undefined}>Entered on the employee’s behalf by {exp.submitted_by_name}</div>}</td>
@@ -229,7 +232,17 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
                     <button onClick={() => handleViewReceipt(exp.id)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">View</button>
                   ) : '—'}
                 </td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => setOpenHistory(h => h === exp.id ? null : exp.id)} aria-expanded={openHistory === exp.id}
+                    className="text-[11px] font-semibold text-[#028a9e] hover:underline whitespace-nowrap">{openHistory === exp.id ? 'Hide history ▴' : 'History ▾'}</button>
+                </td>
               </tr>
+              {openHistory === exp.id && (
+                <tr className="bg-[#f8fcfd] border-b border-[#f0f7f8]">
+                  <td colSpan={7} className="px-5 py-4"><ExpenseAuditLog events={exp.events ?? []} /></td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>

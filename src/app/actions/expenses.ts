@@ -9,6 +9,7 @@ import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
 import { fmtDate } from '@/lib/format-date'
 import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
 import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
+import { logExpenseEvent, loadExpenseEvents } from '@/lib/expense-events'
 import { onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
 import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -25,9 +26,10 @@ export async function getMyExpenses(forEmployeeId?: string) {
     .eq('employee_id', subjectId)
     .order('expense_date', { ascending: false })
   if (error) throw new Error(error.message)
+  const eventsByExpense = await loadExpenseEvents(admin, (data ?? []).map(e => e.id))
   return (data ?? []).map(e => {
     const submitter = e.submitter as unknown as { name: string } | { name: string }[] | null
-    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null }
+    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null, events: eventsByExpense.get(e.id) ?? [] }
   })
 }
 
@@ -84,7 +86,7 @@ export async function submitExpense(data: {
     if (receiptRequired(data.category, amount) && !data.receipt_path) throw new Error(`A receipt is required for expenses over $${RECEIPT_REQUIRED_OVER}.`)
   }
 
-  const { error } = await admin.from('expenses').insert({
+  const { data: created, error } = await admin.from('expenses').insert({
     employee_id: employee.id,
     category: data.category,
     expense_date: data.expense_date,
@@ -97,8 +99,11 @@ export async function submitExpense(data: {
     submitted_by: onBehalf ? actor.id : null,
     on_behalf_reason_code: onBehalf?.reasonCode ?? null,
     on_behalf_note: onBehalf?.note ?? null,
-  })
+  }).select('id').single()
   if (error) throw new Error(error.message)
+  await logExpenseEvent(admin, onBehalf
+    ? { expenseId: created.id, action: 'submitted_on_behalf', actor, reasonCode: onBehalf.reasonCode, note: onBehalf.note }
+    : { expenseId: created.id, action: 'submitted', actor: employee })
 
   const label = EXPENSE_CATEGORY_LABELS[data.category] ?? data.category
   const summary = `${label}${miles ? ` (${miles} mi)` : ''} · $${amount.toFixed(2)} · ${fmtDate(data.expense_date)}${data.description ? `\n${data.description}` : ''}`
@@ -158,9 +163,10 @@ export async function getPendingExpenseApprovals() {
   }
   const { data, error } = await query.order('expense_date')
   if (error) throw new Error(error.message)
+  const eventsByExpense = await loadExpenseEvents(admin, (data ?? []).map(e => e.id))
   return (data ?? []).map(e => {
     const submitter = e.submitter as unknown as { name: string } | { name: string }[] | null
-    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null }
+    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null, events: eventsByExpense.get(e.id) ?? [] }
   })
 }
 
@@ -187,6 +193,7 @@ export async function approveExpense(id: string) {
     approved_at: new Date().toISOString(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+  await logExpenseEvent(admin, { expenseId: id, action: 'approved', actor })
 
   await notifyEmployee(admin, expense.employee_id, {
     kind: 'approved',
@@ -213,6 +220,7 @@ export async function denyExpense(id: string, reason: string) {
     deny_reason: reason.trim(),
   }).eq('id', id)
   if (error) throw new Error(error.message)
+  await logExpenseEvent(admin, { expenseId: id, action: 'denied', actor, note: reason.trim() })
 
   await notifyEmployee(admin, expense.employee_id, {
     kind: 'denied',

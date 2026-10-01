@@ -74,6 +74,21 @@ export interface MileageRate {
   updated_by: string | null
 }
 
+export type ExpenseEventAction = 'submitted' | 'submitted_on_behalf' | 'approved' | 'denied'
+
+export interface ExpenseEvent {
+  id: string
+  expense_id: string
+  action: ExpenseEventAction
+  actor_id: string | null
+  actor_name: string | null
+  actor_role: string | null
+  reason_code: string | null
+  note: string | null
+  backfilled: boolean
+  created_at: string
+}
+
 export interface Expense {
   id: string
   employee_id: string
@@ -94,6 +109,8 @@ export interface Expense {
   submitted_by_name?: string | null
   on_behalf_reason_code?: string | null
   on_behalf_note?: string | null
+  /** Audit trail, oldest first (present on results from the expense actions). */
+  events?: ExpenseEvent[]
   created_at: string
 }
 

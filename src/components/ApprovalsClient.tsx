@@ -16,6 +16,7 @@ import { tagRows, timesheetTags } from '@/lib/timesheet-tags'
 import { fmtHrs } from '@/lib/format-hours'
 import LeaveDaysList from '@/components/LeaveDaysList'
 import LeaveRecordDetail from '@/components/LeaveRecordDetail'
+import ExpenseAuditLog from '@/components/ExpenseAuditLog'
 
 type LeaveApproval = LeaveRequest & { employee_name: string; balance_current: number | null; balance_after: number | null; reserve_only?: boolean; projected_after?: number | null }
 type ExpenseApproval = Expense & { employee: { name: string; avatar_url: string | null } | { name: string; avatar_url: string | null }[] }
@@ -259,6 +260,7 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
   const [denyReason, setDenyReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
   const employeeName = Array.isArray(item.employee) ? item.employee[0]?.name : item.employee?.name
 
   async function submitApprove() {
@@ -285,6 +287,8 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
           </div>
         )}
       </div>
+      <button onClick={() => setShowHistory(v => !v)} className="text-[11px] font-semibold text-[#028a9e] hover:underline mb-2">{showHistory ? 'Hide history ▴' : 'View history ▾'}</button>
+      {showHistory && <div className="mb-3"><ExpenseAuditLog events={item.events ?? []} /></div>}
       {error && <div className="bg-red-50 border border-red-200 text-red-600 text-[12px] rounded-lg px-3 py-2 mb-3">{error}</div>}
       {confirming === 'approve' && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
