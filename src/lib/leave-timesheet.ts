@@ -72,7 +72,7 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
     const salaried = await isSalariedEmployee(admin, employeeId)
     const yearEnd = await getYearEndChoice(admin, employeeId)
 
-    // Hours are only populated up to today (Eastern Time): a day that hasn't arrived starts empty and is filled in when it does.
+    // Regular hours are only populated up to today (Eastern Time); a day that hasn't arrived starts empty (holidays excepted).
     const today = todayET()
     const rows = weekdaysBetween(periodStart, periodEnd).map(work_date => {
       const holiday = holidayOn(work_date, yearEnd)
@@ -147,8 +147,8 @@ export async function applyDayDefaults(admin: AdminClient, employeeId: string, r
 }
 
 /**
- * Daily job step: fill in each salaried employee's DRAFT timesheets through today, so a day's hours appear when its date
- * arrives even if nobody has opened the timesheet (a manager viewing it, or the pay-period totals, then see the real picture).
+ * Daily job step: bring each salaried employee's DRAFT timesheets to the standard defaults — regular hours through today, holidays
+ * and approved leave on their day — so a day's hours appear when its date arrives even if nobody has opened the timesheet (a manager viewing it, or the pay-period totals, then see the real picture).
  * Submitted and approved timesheets are never touched.
  */
 export async function populateDraftTimesheets(admin: AdminClient): Promise<{ timesheets: number }> {
@@ -156,7 +156,7 @@ export async function populateDraftTimesheets(admin: AdminClient): Promise<{ tim
   if (salError) throw new Error(salError.message)
   const ids = (salaried ?? []).map(s => s.employee_id as string)
   if (ids.length === 0) return { timesheets: 0 }
-  const { data: sheets, error } = await admin.from('timesheets').select('id, employee_id').eq('status', 'draft').lte('period_start', todayET()).in('employee_id', ids)
+  const { data: sheets, error } = await admin.from('timesheets').select('id, employee_id').eq('status', 'draft').in('employee_id', ids)
   if (error) throw new Error(error.message)
   for (const sheet of sheets ?? []) {
     const { data: rows, error: rowsError } = await admin.from('timesheet_rows').select('*').eq('timesheet_id', sheet.id).order('work_date')
