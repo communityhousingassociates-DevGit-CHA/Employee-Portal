@@ -52,7 +52,7 @@ function tenure(hire_date: string) {
 const TYPE_LABEL: Record<string, string> = { 'full-time': 'Full-time', 'part-time': 'Part-time', consultant: 'Consultant' }
 const TYPE_STYLE: Record<string, string> = { 'full-time': 'bg-emerald-50 text-emerald-700', 'part-time': 'bg-sky-50 text-sky-700', consultant: 'bg-gray-100 text-gray-600' }
 
-function EmployeeDetail({ e }: { e: Employee }) {
+function EmployeeDetail({ e, actOnBehalf }: { e: Employee; actOnBehalf: boolean }) {
   const capPct = Math.min(Math.round((e.pto_bal / 400) * 100), 100)
   const personalDays = Math.floor(e.personal_bal / 8)
 
@@ -108,11 +108,24 @@ function EmployeeDetail({ e }: { e: Employee }) {
       <Link href={`/employees/${e.id}`} className="inline-flex items-center gap-1 text-[#02ACC0] text-[12px] font-semibold hover:underline mt-4">
         View timesheets &amp; leave history →
       </Link>
+      {actOnBehalf && e.is_active && (
+        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[12px] font-bold text-amber-900">Complete something on {e.name.split(' ')[0]}&rsquo;s behalf</p>
+            <p className="text-[11px] text-amber-800">An exception — you&rsquo;ll give a reason code and notes, and it&rsquo;s logged.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/request?for=${e.id}`} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Request leave</Link>
+            <Link href={`/timesheet?for=${e.id}`} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Complete timesheet</Link>
+            <Link href={`/expenses?for=${e.id}`} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Add expense</Link>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export default function EmployeesClient({ employees }: { employees: Employee[] }) {
+export default function EmployeesClient({ employees, actOnBehalf = false, viewerId }: { employees: Employee[]; actOnBehalf?: boolean; viewerId?: string }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('All')
   const [showInactive, setShowInactive] = useState(false)
@@ -219,7 +232,7 @@ export default function EmployeesClient({ employees }: { employees: Employee[] }
                       <span className={`text-gray-300 text-[13px] transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}>›</span>
                     </div>
                   </div>
-                  {isExpanded && <EmployeeDetail e={e} />}
+                  {isExpanded && <EmployeeDetail e={e} actOnBehalf={actOnBehalf && e.id !== viewerId} />}
                 </div>
               )
             })}
