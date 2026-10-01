@@ -4,6 +4,7 @@ import { runAccruals } from '@/lib/accruals'
 import { runYearEndCarryover } from '@/lib/carryover'
 import { runPersonalDaysGrant } from '@/lib/personal-grants'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
+import { populateDraftTimesheets } from '@/lib/leave-timesheet'
 import { sendApprovalDigest } from '@/lib/approval-digest'
 import { sendTrackingDigest } from '@/lib/tracking-digest'
 import { sendInviteReminders } from '@/lib/invite-reminders'
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
     : { ran: false, reason: 'accruals are not switched on' }
 
   const deductions = await applyDueLeaveDeductions(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
+  // Timesheet days fill in as their date arrives (nothing is pre-populated for the future).
+  const timesheetFill = await populateDraftTimesheets(admin).catch(e => ({ timesheets: 0, error: e instanceof Error ? e.message : String(e) }))
   const digest = await sendApprovalDigest(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
   const inviteReminders = await sendInviteReminders(admin).catch(e => ({ reminded: [] as string[], failed: [{ name: 'Invite reminders', error: e instanceof Error ? e.message : String(e) }], skipped: 0 }))
   // Anything the daily job hit that needs a person to look at it goes into the tracking digest's "Needs attention" box.
@@ -48,7 +51,7 @@ export async function GET(request: NextRequest) {
     for (const m of e.errors ?? []) issues.push(`${label}: ${m}`)
     if (e.error) issues.push(`${label}: ${e.error}`)
   }
-  errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest)
+  errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest); errs('Timesheet fill', timesheetFill)
   // Sign-ins the location rule refused in the last 24 hours (someone traveling, a VPN, or a real attempt) — worth a look.
   const { data: blocks } = await admin.from('geofence_blocks').select('employee_id, region, country, city, employee:employees(name)').gte('created_at', new Date(Date.now() - 86400000).toISOString())
   const byPerson = new Map<string, { name: string; where: string; n: number }>()
@@ -61,5 +64,5 @@ export async function GET(request: NextRequest) {
   for (const f of inviteReminders.failed) issues.push(`Invite reminder for ${f.name}: ${f.error}`)
   if ((deductions as { shortfalls?: number }).shortfalls) issues.push(`${(deductions as { shortfalls?: number }).shortfalls} approved leave request(s) came due with an insufficient balance — see the notices to approvers.`)
   const tracking = await sendTrackingDigest(admin, issues).catch(e => ({ sent: false, reason: e instanceof Error ? e.message : String(e) }))
-  return NextResponse.json({ inviteReminders, tracking, carryover, personalGrant, accruals, deductions, digest })
+  return NextResponse.json({ inviteReminders, tracking, carryover, personalGrant, accruals, deductions, timesheetFill, digest })
 }

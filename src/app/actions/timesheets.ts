@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
 import { onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
+import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
 import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, todayET, shiftDate } from '@/lib/pay-periods'
@@ -45,7 +46,7 @@ async function loadTimesheetAudit(admin: ReturnType<typeof createAdminClient>, t
   const people = [timesheet.submitted_by, timesheet.approver_id].filter((x): x is string => !!x)
   const [{ data: ppl }, { data: events, error }] = await Promise.all([
     people.length ? admin.from('employees').select('id, name, role').in('id', people) : Promise.resolve({ data: [] as { id: string; name: string; role: string }[] }),
-    admin.from('timesheet_events').select('id, action, reason_code, note, created_at, actor:employees(name, role)').eq('timesheet_id', timesheet.id).order('created_at'),
+    admin.from('timesheet_events').select('id, action, reason_code, note, created_at, signature_name, attestation, actor:employees(name, role)').eq('timesheet_id', timesheet.id).order('created_at'),
   ])
   if (error) throw new Error(error.message)
   const byId = new Map((ppl ?? []).map(p => [p.id, p]))
@@ -59,7 +60,7 @@ async function loadTimesheetAudit(admin: ReturnType<typeof createAdminClient>, t
     events: (events ?? []).map(e => {
       const a = e.actor as unknown as { name: string; role: string } | { name: string; role: string }[] | null
       const actor = Array.isArray(a) ? a[0] : a
-      return { id: e.id, action: e.action as TimesheetEventAction, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: actor?.name ?? null, actor_role: actor?.role ?? null }
+      return { id: e.id, action: e.action as TimesheetEventAction, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: actor?.name ?? null, actor_role: actor?.role ?? null, signature_name: (e.signature_name as string | null) ?? null, attestation: (e.attestation as string | null) ?? null }
     }),
   }
 }
@@ -240,7 +241,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
   if (error) throw new Error(error.message)
   const period = fmtDateRange(timesheet.period_start, timesheet.period_end)
   if (behalf) {
-    await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'submitted_on_behalf', reasonCode: behalf.reasonCode, note: behalf.note })
+    await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'submitted_on_behalf', reasonCode: behalf.reasonCode, note: behalf.note, signature: { name: actor.name, employeeNumber: actor.employee_number, attestation: timesheetOnBehalfAttestation(employee.name) } })
     await notifyEmployee(admin, employee.id, {
       kind: 'on_behalf',
       title: `${actor.name} submitted your timesheet on your behalf`,
@@ -249,7 +250,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
       cta: 'View Timesheet',
     })
   } else {
-    await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted' })
+    await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted', signature: { name: employee.name, employeeNumber: employee.employee_number, attestation: TIMESHEET_ATTESTATION } })
   }
 
   await notifyApprovers(admin, employee.id, TIMESHEET_APPROVER_ROLES, {

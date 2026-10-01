@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
 import OnBehalfPanel from '@/components/OnBehalfPanel'
-import { onBehalfProblem, onBehalfAttestation } from '@/lib/constants/on-behalf'
+import { onBehalfProblem } from '@/lib/constants/on-behalf'
+import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
 import { getExpensesForPeriod } from '@/app/actions/expenses'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate, fmtDateShort, fmtDateRange } from '@/lib/format-date'
@@ -49,10 +50,13 @@ const SALARIED_DAILY_HOURS = 8
  */
 function normalizeRows(rows: TimesheetRowType[], salaried: boolean): EditableRow[] {
   if (!salaried) return rows
+  // Hours are only populated up to today (Eastern Time): a day that hasn't arrived carries none (approved leave aside).
+  const today = todayET()
   return rows.map(r => {
-    const holiday = Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.holiday_hours ?? 0)))
+    const future = r.work_date > today
+    const holiday = future ? 0 : Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.holiday_hours ?? 0)))
     const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS - holiday, Number(r.leave_hours)))
-    return { ...r, holiday_hours: holiday, leave_hours: leave, regular_hours: SALARIED_DAILY_HOURS - leave - holiday }
+    return { ...r, holiday_hours: holiday, leave_hours: leave, regular_hours: future ? 0 : SALARIED_DAILY_HOURS - leave - holiday }
   })
 }
 
@@ -431,7 +435,7 @@ export default function TimesheetClient({
 
       {isSalaried && (
         <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
-          Regular hours default to 8 on every workday; scheduled holidays are filled in automatically as <strong>Holiday</strong> hours instead, so this timesheet totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
+          Regular hours fill in as each workday arrives (8 a day, up to today — future days stay empty); scheduled holidays fill in as <strong>Holiday</strong> hours instead, so a complete pay period totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
         </div>
       )}
 
@@ -522,7 +526,7 @@ export default function TimesheetClient({
       {!submitted && <div className="bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-2xl">
         <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">{onBehalf ? `Administrator Certification & Signature (on behalf of ${employeeName})` : 'Employee Certification & Signature'}</p>
         <p className="text-[12px] text-gray-400 mb-5">
-          {onBehalf ? `${onBehalfAttestation(employeeName)} This timesheet will be sent for approval.` : 'By signing, I certify that the hours above are accurate and complete. This timesheet will be sent for approval.'}
+          {onBehalf ? timesheetOnBehalfAttestation(employeeName) : TIMESHEET_ATTESTATION}
         </p>
 
         <div

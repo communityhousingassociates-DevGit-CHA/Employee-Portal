@@ -7,7 +7,8 @@
 // never as its own public endpoint.
 
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCurrentPeriod, periodLockReason } from '@/lib/pay-periods'
+import { getCurrentPeriod, periodLockReason, todayET } from '@/lib/pay-periods'
+import { salariedDayHours } from '@/lib/timesheet-defaults'
 import { loadClosedRanges } from '@/lib/period-lock'
 import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
@@ -69,18 +70,20 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
 
     // Salaried employees get Regular hours on every workday and Holiday hours (instead of Regular) on scheduled holidays.
     const salaried = await isSalariedEmployee(admin, employeeId)
-    const defaultDailyHours = salaried ? SALARIED_DAILY_HOURS : 0
     const yearEnd = await getYearEndChoice(admin, employeeId)
 
+    // Hours are only populated up to today (Eastern Time): a day that hasn't arrived starts empty and is filled in when it does.
+    const today = todayET()
     const rows = weekdaysBetween(periodStart, periodEnd).map(work_date => {
       const holiday = holidayOn(work_date, yearEnd)
+      const day = salaried ? salariedDayHours({ date: work_date, today, scheduledHoliday: !!holiday, leaveHours: 0 }) : { regular: 0, holiday: 0 }
       return {
         timesheet_id: timesheet!.id,
         work_date,
         description: holiday ? HOLIDAY_DESCRIPTION : REGULAR_DESCRIPTION,
-        regular_hours: holiday ? 0 : defaultDailyHours,
+        regular_hours: day.regular,
         leave_hours: 0,
-        holiday_hours: holiday ? defaultDailyHours : 0,
+        holiday_hours: day.holiday,
         leave_type: null,
       }
     })
@@ -104,28 +107,35 @@ export async function getOrCreateTimesheetForEmployee(admin: AdminClient, employ
 }
 
 /**
- * Fills the standard defaults into an existing DRAFT timesheet's rows: an untouched (null) description becomes
- * "Regular Hours" / "Holiday Hours", and a scheduled holiday still carrying default Regular hours is converted
- * to Holiday hours (salaried only). A description the employee cleared on purpose ('') is left alone.
+ * Brings an existing DRAFT timesheet's rows to the standard defaults: an untouched (null) description becomes
+ * "Regular Hours" / "Holiday Hours", and — for salaried staff, whose Regular and Holiday hours are calculated, not typed —
+ * each day carries its hours only once its date has arrived (see salariedDayHours): future days are empty, today and earlier
+ * are 8 minus leave and holiday. A description the employee cleared on purpose ('') is left alone.
  */
-async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: TimesheetRow[]): Promise<TimesheetRow[]> {
+export async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: TimesheetRow[]): Promise<TimesheetRow[]> {
   const yearEnd = await getYearEndChoice(admin, employeeId)
+  const salaried = await isSalariedEmployee(admin, employeeId)
+  const today = todayET()
+  const wanted = (r: TimesheetRow) => salaried ? salariedDayHours({ date: r.work_date, today, scheduledHoliday: !!holidayOn(r.work_date, yearEnd), leaveHours: Number(r.leave_hours) }) : null
+
   const needs = rows.some(r => {
     const holiday = holidayOn(r.work_date, yearEnd)
-    return r.description === null || (holiday && r.description === holiday) ||
-      (!!holiday && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0)
+    if (r.description === null || (holiday && r.description === holiday)) return true
+    const want = wanted(r)
+    return !!want && (Number(r.regular_hours) !== want.regular || Number(r.holiday_hours ?? 0) !== want.holiday || Number(r.leave_hours) !== want.leave)
   })
   if (!needs) return rows
-  const salaried = await isSalariedEmployee(admin, employeeId)
 
   const out: TimesheetRow[] = []
   for (const r of rows) {
     const holiday = holidayOn(r.work_date, yearEnd)
     const patch: Partial<TimesheetRow> = {}
     if (r.description === null || (holiday && r.description === holiday)) patch.description = holiday ? HOLIDAY_DESCRIPTION : REGULAR_DESCRIPTION
-    if (holiday && salaried && Number(r.holiday_hours ?? 0) === 0 && Number(r.leave_hours) === 0 && Number(r.regular_hours) > 0) {
-      patch.regular_hours = 0
-      patch.holiday_hours = SALARIED_DAILY_HOURS
+    const want = wanted(r)
+    if (want) {
+      if (Number(r.regular_hours) !== want.regular) patch.regular_hours = want.regular
+      if (Number(r.holiday_hours ?? 0) !== want.holiday) patch.holiday_hours = want.holiday
+      if (Number(r.leave_hours) !== want.leave) patch.leave_hours = want.leave
     }
     if (Object.keys(patch).length > 0) {
       const { error } = await admin.from('timesheet_rows').update(patch).eq('id', r.id)
@@ -134,6 +144,26 @@ async function applyDayDefaults(admin: AdminClient, employeeId: string, rows: Ti
     } else out.push(r)
   }
   return out
+}
+
+/**
+ * Daily job step: fill in each salaried employee's DRAFT timesheets through today, so a day's hours appear when its date
+ * arrives even if nobody has opened the timesheet (a manager viewing it, or the pay-period totals, then see the real picture).
+ * Submitted and approved timesheets are never touched.
+ */
+export async function populateDraftTimesheets(admin: AdminClient): Promise<{ timesheets: number }> {
+  const { data: salaried, error: salError } = await admin.from('employee_current_salary').select('employee_id')
+  if (salError) throw new Error(salError.message)
+  const ids = (salaried ?? []).map(s => s.employee_id as string)
+  if (ids.length === 0) return { timesheets: 0 }
+  const { data: sheets, error } = await admin.from('timesheets').select('id, employee_id').eq('status', 'draft').lte('period_start', todayET()).in('employee_id', ids)
+  if (error) throw new Error(error.message)
+  for (const sheet of sheets ?? []) {
+    const { data: rows, error: rowsError } = await admin.from('timesheet_rows').select('*').eq('timesheet_id', sheet.id).order('work_date')
+    if (rowsError) throw new Error(rowsError.message)
+    await applyDayDefaults(admin, sheet.employee_id as string, (rows ?? []) as TimesheetRow[])
+  }
+  return { timesheets: (sheets ?? []).length }
 }
 
 export async function isSalariedEmployee(admin: AdminClient, employeeId: string): Promise<boolean> {
@@ -218,7 +248,8 @@ export async function applyLeaveToTimesheets(
     }
 
     const leave_hours = Math.min(SALARIED_DAILY_HOURS, hours)
-    const regular_hours = isSalaried ? SALARIED_DAILY_HOURS - leave_hours - Number(row.holiday_hours ?? 0) : row.regular_hours
+    // On a day that hasn't arrived yet only the leave itself is recorded — regular hours fill in when the day comes.
+    const regular_hours = isSalaried ? (row.work_date > todayET() ? 0 : SALARIED_DAILY_HOURS - leave_hours - Number(row.holiday_hours ?? 0)) : row.regular_hours
 
     // A full day of leave shouldn't still say "Regular Hours".
     const description = leave_hours >= SALARIED_DAILY_HOURS && (row.description === null || row.description === REGULAR_DESCRIPTION) ? leaveDescription(leaveType) : row.description
@@ -288,7 +319,7 @@ export async function removeLeaveFromTimesheets(
       }
     }
 
-    const regular_hours = isSalaried ? SALARIED_DAILY_HOURS - Number(row.holiday_hours ?? 0) : row.regular_hours
+    const regular_hours = isSalaried ? (row.work_date > todayET() ? 0 : SALARIED_DAILY_HOURS - Number(row.holiday_hours ?? 0)) : row.regular_hours
     const description = (row.description === leaveDescription(leaveType) || (leaveType === 'Personal' && row.description === 'Vacation')) ? REGULAR_DESCRIPTION : row.description
     const { error } = await admin
       .from('timesheet_rows')

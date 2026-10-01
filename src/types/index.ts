@@ -262,7 +262,7 @@ export interface TimesheetAudit {
   submitted_by_role: string | null
   approver_name: string | null
   approver_role: string | null
-  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null; actor_role: string | null }[]
+  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null; actor_role: string | null; signature_name: string | null; attestation: string | null }[]
 }
 
 /** A timesheet as shown to an approver: with its daily rows, audit history, and lock state. */

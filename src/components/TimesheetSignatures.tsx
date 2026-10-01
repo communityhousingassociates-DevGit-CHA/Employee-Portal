@@ -1,5 +1,6 @@
 import type { Timesheet, TimesheetAudit, TimesheetEventAction } from '@/types'
-import { onBehalfAttestation, onBehalfReasonLabel } from '@/lib/constants/on-behalf'
+import { onBehalfReasonLabel } from '@/lib/constants/on-behalf'
+import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
 import { reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 
 const ROLE_LABEL: Record<string, string> = { accounting_manager: 'Accounting Manager', ceo: 'President / CEO', admin: 'Administrator' }
@@ -46,6 +47,9 @@ export default function TimesheetSignatures({
   employeeIdLabel: string
 }) {
   const onBehalf = !!audit.submitted_by_name
+  // The wording exactly as it was signed (stored on the submit event); the current wording only for anything signed before it was kept.
+  const signedEvent = [...audit.events].reverse().find(e => e.action === 'submitted' || e.action === 'submitted_on_behalf')
+  const attestation = signedEvent?.attestation ?? (onBehalf ? timesheetOnBehalfAttestation(employeeName) : TIMESHEET_ATTESTATION)
   const approved = timesheet.status === 'approved' && !!audit.approver_name
   return (
     <section aria-label="Signatures and audit trail" className="mt-6 bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-4xl">
@@ -67,7 +71,7 @@ export default function TimesheetSignatures({
               </p>
               <p className="text-[11px] text-gray-500">Signed {stamp(timesheet.employee_signed_at)}</p>
               <p className="text-[11px] text-gray-400 italic mt-2">
-                &ldquo;{onBehalf ? onBehalfAttestation(employeeName) : 'By signing, I certify that the hours above are accurate and complete.'}&rdquo;
+                &ldquo;{attestation}&rdquo;
               </p>
               {onBehalf && (
                 <p className="text-[12px] text-amber-800 mt-2">
