@@ -275,6 +275,7 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
       <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
         <div>
           <p className="font-bold text-[15px] text-[#0b2b35]">{employeeName} — {CATEGORY_LABELS[item.category] ?? item.category}{item.miles ? ` (${item.miles} mi)` : ''}</p>
+          {item.submitted_by_name && <p className="mt-1"><span title={item.on_behalf_note ?? undefined} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">Exception: entered by {item.submitted_by_name} on the employee’s behalf{item.on_behalf_reason_code ? ` — ${onBehalfReasonLabel(item.on_behalf_reason_code)}` : ''}</span></p>}
           <p className="text-[12px] text-gray-400 mt-0.5">{item.expense_date} · ${Number(item.amount).toFixed(2)}{item.description ? ` · ${item.description}` : ''}</p>
         </div>
         {!confirming && (

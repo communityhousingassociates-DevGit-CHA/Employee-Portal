@@ -8,23 +8,27 @@ import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { EXPENSE_CATEGORY_LABELS } from '@/lib/constants/expense-categories'
 import { fmtDate } from '@/lib/format-date'
 import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
+import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
+import { onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
 import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import type { ExpenseCategory, Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
-export async function getMyExpenses() {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function getMyExpenses(forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('expenses')
-    .select('*')
-    .eq('employee_id', employee.id)
+    .select('*, submitter:employees!expenses_submitted_by_fkey(name)')
+    .eq('employee_id', subjectId)
     .order('expense_date', { ascending: false })
   if (error) throw new Error(error.message)
-  return data ?? []
+  return (data ?? []).map(e => {
+    const submitter = e.submitter as unknown as { name: string } | { name: string }[] | null
+    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null }
+  })
 }
 
 export async function getExpensesForPeriod(employeeId: string, periodStart: string, periodEnd: string) {
@@ -50,10 +54,10 @@ export async function submitExpense(data: {
   miles?: number
   amount?: number
   receipt_path?: string | null
-}) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+}, forEmployee?: { employeeId: string; onBehalf: OnBehalf }) {
   const admin = createAdminClient()
+  // `forEmployee` = a named administrator entering this for someone else (an exception, with a reason code and notes). Validated here.
+  const { actor, subject: employee, onBehalf } = await resolveActor(admin, { employeeId: forEmployee?.employeeId, onBehalf: forEmployee?.onBehalf })
 
   let amount: number
   let rate_per_mile: number | null = null
@@ -90,24 +94,36 @@ export async function submitExpense(data: {
     amount,
     receipt_url: data.receipt_path || null,
     status: 'pending',
+    submitted_by: onBehalf ? actor.id : null,
+    on_behalf_reason_code: onBehalf?.reasonCode ?? null,
+    on_behalf_note: onBehalf?.note ?? null,
   })
   if (error) throw new Error(error.message)
 
   const label = EXPENSE_CATEGORY_LABELS[data.category] ?? data.category
+  const summary = `${label}${miles ? ` (${miles} mi)` : ''} · $${amount.toFixed(2)} · ${fmtDate(data.expense_date)}${data.description ? `\n${data.description}` : ''}`
+  if (onBehalf) {
+    await notifyEmployee(admin, employee.id, {
+      kind: 'on_behalf',
+      title: `${actor.name} entered an expense on your behalf`,
+      body: `${summary}\nReason: ${onBehalfReasonLabel(onBehalf.reasonCode)}\nNotes: ${onBehalf.note}`,
+      link: '/expenses',
+      cta: 'View My Expenses',
+    })
+  }
   await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
-    title: `Expense from ${employee.name}`,
-    body: `${label}${miles ? ` (${miles} mi)` : ''} · $${amount.toFixed(2)} · ${fmtDate(data.expense_date)}${data.description ? `\n${data.description}` : ''}`,
+    title: `Expense from ${employee.name}${onBehalf ? ' — entered on their behalf' : ''}`,
+    body: `${summary}${onBehalf ? `\nException: entered by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note}` : ''}`,
   })
 
   revalidatePath('/expenses')
 }
 
-export async function getReceiptUploadUrl(fileName: string) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+export async function getReceiptUploadUrl(fileName: string, forEmployeeId?: string) {
+  const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
   const ext = fileName.split('.').pop()
-  const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
+  const path = `${subjectId}/${crypto.randomUUID()}.${ext}`
   const { data, error } = await admin.storage.from('receipts').createSignedUploadUrl(path)
   if (error) throw new Error(error.message)
   return { signedUrl: data.signedUrl, path, token: data.token }
@@ -131,10 +147,10 @@ export async function getPendingExpenseApprovals() {
   const admin = createAdminClient()
   let query = admin
     .from('expenses')
-    .select('*, employee:employees!expenses_employee_id_fkey(name, avatar_url)')
+    .select('*, employee:employees!expenses_employee_id_fkey(name, avatar_url), submitter:employees!expenses_submitted_by_fkey(name)')
     .eq('status', 'pending')
   // Your own expense only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you entered on someone's behalf
   // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
   if (!actor.is_test_account) {
     const testIds = await getTestAccountIds(admin)
@@ -142,14 +158,18 @@ export async function getPendingExpenseApprovals() {
   }
   const { data, error } = await query.order('expense_date')
   if (error) throw new Error(error.message)
-  return data ?? []
+  return (data ?? []).map(e => {
+    const submitter = e.submitter as unknown as { name: string } | { name: string }[] | null
+    return { ...e, submitted_by_name: (Array.isArray(submitter) ? submitter[0]?.name : submitter?.name) ?? null }
+  })
 }
 
 async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }) {
-  const { data, error } = await admin.from('expenses').select('status, employee_id, category, amount, expense_date').eq('id', id).single()
+  const { data, error } = await admin.from('expenses').select('status, employee_id, category, amount, expense_date, submitted_by').eq('id', id).single()
   if (error) throw new Error(error.message)
   if (data.status !== 'pending') throw new Error('This expense has already been decided')
   if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't decide your own expense — it needs another approver.")
+  if (data.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You entered this expense on the employee's behalf, so it needs another approver.")
   return data
 }
 

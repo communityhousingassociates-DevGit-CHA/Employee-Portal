@@ -64,6 +64,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           <div className="flex gap-2">
             <Link href={`/request?for=${id}`} className="text-[12px] font-semibold px-3.5 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Request leave for {employee.name.split(' ')[0]}</Link>
             <Link href={`/timesheet?for=${id}`} className="text-[12px] font-semibold px-3.5 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Complete timesheet</Link>
+            <Link href={`/expenses?for=${id}`} className="text-[12px] font-semibold px-3.5 py-2 rounded-lg border border-amber-300 bg-white text-amber-900 hover:bg-amber-100 transition-colors">Add expense</Link>
           </div>
         </div>
       )}

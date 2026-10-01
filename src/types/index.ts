@@ -89,6 +89,11 @@ export interface Expense {
   approver_id: string | null
   approved_at: string | null
   deny_reason: string | null
+  /** Set when a named administrator entered this for the employee (an exception to the employee entering it). */
+  submitted_by?: string | null
+  submitted_by_name?: string | null
+  on_behalf_reason_code?: string | null
+  on_behalf_note?: string | null
   created_at: string
 }
 

@@ -3,6 +3,8 @@
 import { useMemo, useRef, useState, useTransition } from 'react'
 import { todayET, getCurrentPeriod, getPreviousPeriod } from '@/lib/pay-periods'
 import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
+import OnBehalfPanel from '@/components/OnBehalfPanel'
+import { onBehalfProblem } from '@/lib/constants/on-behalf'
 import { useRouter } from 'next/navigation'
 import { submitExpense, getReceiptUploadUrl, getReceiptViewUrl } from '@/app/actions/expenses'
 import { fmtDate } from '@/lib/format-date'
@@ -58,7 +60,7 @@ function periodRange(key: PeriodKey): { start: string; end: string } | null {
 
 const fmtMiles = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 1 })
 
-export default function ExpensesClient({ initialExpenses, currentMileageRate }: { initialExpenses: Expense[]; currentMileageRate: number | null }) {
+export default function ExpensesClient({ initialExpenses, currentMileageRate, onBehalf }: { initialExpenses: Expense[]; currentMileageRate: number | null; /** Set when a named administrator is entering expenses for another employee (an exception). */ onBehalf?: { employeeId: string; employeeName: string; actorName: string } }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const expenses = initialExpenses
@@ -70,6 +72,8 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
   const [period, setPeriod] = useState<PeriodKey>('current')
+  const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
+  const behalfIssue = onBehalf ? onBehalfProblem(behalf) : null
 
   // Total miles entered in the chosen period (by the date of the trip), with where those miles stand.
   const mileage = useMemo(() => {
@@ -95,6 +99,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
   function openNew() {
     setForm(emptyForm)
     setReceiptFile(null)
+    setBehalf({ reasonCode: '', note: '' })
     setError('')
     setShowForm(true)
   }
@@ -109,7 +114,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
     try {
       let receipt_path: string | undefined
       if (receiptFile) {
-        const { signedUrl, path } = await getReceiptUploadUrl(receiptFile.name)
+        const { signedUrl, path } = await getReceiptUploadUrl(receiptFile.name, onBehalf?.employeeId)
         const res = await fetch(signedUrl, { method: 'PUT', body: receiptFile, headers: { 'Content-Type': receiptFile.type } })
         if (!res.ok) throw new Error('Receipt upload failed')
         receipt_path = path
@@ -121,7 +126,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
         miles: form.category === 'mileage' ? Number(form.miles) : undefined,
         amount: form.category !== 'mileage' ? Number(form.amount) : undefined,
         receipt_path,
-      })
+      }, onBehalf ? { employeeId: onBehalf.employeeId, onBehalf: behalf } : undefined)
       showToast('Expense submitted')
       setShowForm(false)
       startTransition(() => router.refresh())
@@ -146,13 +151,13 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
   const missingDescription = needsDescription && !form.description.trim()
   const needsReceipt = receiptRequired(form.category, Number(form.amount))
   const missingReceipt = needsReceipt && !receiptFile
-  const canSubmit = (form.category === 'mileage' ? Boolean(form.miles) : Boolean(form.amount)) && !missingDescription && !missingReceipt
+  const canSubmit = (form.category === 'mileage' ? Boolean(form.miles) : Boolean(form.amount)) && !missingDescription && !missingReceipt && !behalfIssue
 
   return (
     <div>
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-[22px] font-bold text-[#0b2b35]">Expenses</h1>
+          <h1 className="text-[22px] font-bold text-[#0b2b35]">Expenses{onBehalf ? ` — for ${onBehalf.employeeName}` : ''}</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">Mileage and travel reimbursement — hotel, airline, meals, entertainment</p>
         </div>
         <button onClick={openNew} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
@@ -211,7 +216,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
               <tr key={exp.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f9fefe] transition-colors">
                 <td className="px-4 py-3 text-gray-500">{fmtDate(exp.expense_date)}</td>
                 <td className="px-4 py-3 text-gray-500">{CATEGORY_LABELS[exp.category] ?? exp.category}{exp.category === 'mileage' && exp.miles ? ` (${exp.miles} mi)` : ''}</td>
-                <td className="px-4 py-3 text-gray-500">{exp.description || '—'}</td>
+                <td className="px-4 py-3 text-gray-500">{exp.description || '—'}{exp.submitted_by_name && <div className="text-[11px] font-semibold text-amber-700 mt-0.5" title={exp.on_behalf_note ?? undefined}>Entered on the employee’s behalf by {exp.submitted_by_name}</div>}</td>
                 <td className="px-4 py-3 font-medium text-[#0b2b35]">{currency(exp.amount)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold capitalize ${STATUS_STYLES[exp.status]}`}>{exp.status}</span>
@@ -240,6 +245,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate }: 
             </div>
             <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               {error && <div className="sm:col-span-2 bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-3 py-2">{error}</div>}
+              {onBehalf && <div className="sm:col-span-2"><OnBehalfPanel employeeName={onBehalf.employeeName} actorName={onBehalf.actorName} what="expense" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} /></div>}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[11px] uppercase tracking-wide font-semibold text-[#0b2b35]">Category</label>
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value as ExpenseCategory }))} className={inputCls}>

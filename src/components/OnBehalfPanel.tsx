@@ -16,7 +16,7 @@ export default function OnBehalfPanel({
 }: {
   employeeName: string
   actorName: string
-  what: 'leave request' | 'timesheet'
+  what: 'leave request' | 'timesheet' | 'expense'
   reasonCode: string
   note: string
   onChange: (v: { reasonCode: string; note: string }) => void
