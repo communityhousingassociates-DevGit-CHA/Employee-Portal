@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { TRACKING_DIGEST_TO, TRACKING_DIGEST_INCLUDE_ACTIVITY } from '@/lib/constants/approvals'
 import { logEmails } from '@/lib/notifications'
+import { PORTAL_REPLY_TO } from '@/lib/constants/email'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import { todayET } from '@/lib/pay-periods'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
@@ -84,7 +85,7 @@ export async function sendTrackingDigest(admin: SupabaseClient, issues: string[]
     </div>`
 
   const resend = new Resend(process.env.RESEND_API_KEY)
-  const results = await Promise.allSettled(TRACKING_DIGEST_TO.map(to => resend.emails.send({ from: FROM, to, subject, html })))
+  const results = await Promise.allSettled(TRACKING_DIGEST_TO.map(to => resend.emails.send({ from: FROM, replyTo: PORTAL_REPLY_TO, to, subject, html })))
   await logEmails(admin, results.map((res, i) => {
     const base = { source: 'notification' as const, kind: 'tracking_digest', recipient_email: TRACKING_DIGEST_TO[i], subject }
     if (res.status === 'rejected') return { ...base, status: 'failed' as const, error: String(res.reason instanceof Error ? res.reason.message : res.reason) }

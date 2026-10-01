@@ -10,6 +10,7 @@ import { Resend } from 'resend'
 import { getAuthUserInfo } from '@/lib/auth-users'
 import { INVITE_VALID_HOURS } from '@/lib/constants/invites'
 import { logEmails } from '@/lib/notifications'
+import { PORTAL_REPLY_TO } from '@/lib/constants/email'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
 const KIND = 'invite_reminder'
@@ -77,7 +78,7 @@ export async function sendInviteReminders(admin: SupabaseClient, now: Date = new
 
       const link = `${origin}/set-password?token_hash=${encodeURIComponent(gen.properties.hashed_token)}&type=invite`
       const subject = '[CHA Portal] Reminder: please finish setting up your account'
-      const sent = await resend.emails.send({ from: FROM, to: emp.email, subject, html: reminderEmail(emp.first_name ?? '', link) })
+      const sent = await resend.emails.send({ from: FROM, replyTo: PORTAL_REPLY_TO, to: emp.email, subject, html: reminderEmail(emp.first_name ?? '', link) })
       await logEmails(admin, [{ source: 'notification', kind: KIND, recipient_email: emp.email, subject, status: sent.error ? 'failed' : 'sent', error: sent.error?.message ?? null, resend_id: sent.data?.id ?? null }])
       if (sent.error) throw new Error(sent.error.message)
       out.reminded.push(emp.name as string)

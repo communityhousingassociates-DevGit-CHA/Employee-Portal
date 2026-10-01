@@ -2,6 +2,7 @@ import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NotificationKind, Role } from '@/types'
 import { NOTIFICATION_TEST_MODE, APPROVER_ALERT_COPY_TO } from '@/lib/constants/approvals'
+import { PORTAL_REPLY_TO } from '@/lib/constants/email'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
 
@@ -95,6 +96,7 @@ export async function notify(
     emailTo.map(r =>
       resend.emails.send({
         from: FROM,
+        replyTo: PORTAL_REPLY_TO,
         to: r.email,
         subject,
         html: renderEmail(r, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, testNote: email?.testNote }),
@@ -105,7 +107,7 @@ export async function notify(
   const copyTo = (opts?.copyTo ?? []).filter(addr => !emailTo.some(r => r.email.toLowerCase() === addr.toLowerCase()))
   const copyNote = `A copy of the alert sent to ${emailTo.map(r => r.name).join(' and ') || 'the approvers'}.`
   const copyResults = await Promise.allSettled(
-    copyTo.map(addr => resend.emails.send({ from: FROM, to: addr, subject, html: renderEmail({ name: 'CHA team' }, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, copyNote }) })),
+    copyTo.map(addr => resend.emails.send({ from: FROM, replyTo: PORTAL_REPLY_TO, to: addr, subject, html: renderEmail({ name: 'CHA team' }, { kind: n.kind, title: n.title, body: n.body, link: n.link, cta, copyNote }) })),
   )
 
   const log: EmailLogEntry[] = []
