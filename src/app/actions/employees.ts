@@ -425,18 +425,21 @@ export async function getEmployeeSummary(id: string) {
   }
 }
 
-/** Read-only staff directory for the (portal) Employees page — visible to ceo/admin. Test accounts never appear here, regardless of who's viewing. */
+/**
+ * Read-only staff directory for the (portal) Employees page — visible to ceo/admin. Test accounts are hidden from real
+ * staff's view, and shown (labelled "Test") only to a viewer who is themselves a test account — the same convention as the
+ * approval queues and calendar — so the person doing the testing can open a test account, e.g. to act on its behalf.
+ */
 export async function getEmployeeDirectory() {
-  await requireRole(['ceo', 'admin'])
+  const viewer = await requireRole(['ceo', 'admin'])
   const admin = createAdminClient()
   const policy = await loadPolicy(admin)
   const { data, error } = await admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
-    .eq('is_test_account', false)
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, employee_type, department, job_title, hire_date, is_active, is_test_account, pto_uncapped, leave_balances(pto_hours, sick_hours, personal_hours)')
     .order('name')
   if (error) throw new Error(error.message)
-  return (data ?? []).map(e => {
+  return (data ?? []).filter(e => viewer.is_test_account || !e.is_test_account).map(e => {
     const { tier, ptoRate } = calcTier(e.hire_date, Date.now(), policy)
     const bal = Array.isArray(e.leave_balances) ? e.leave_balances[0] : e.leave_balances
     return {

@@ -15,6 +15,7 @@ type Employee = {
   job_title: string | null
   hire_date: string
   is_active: boolean
+  is_test_account?: boolean
   tier: string
   accrual: number
   status: string
@@ -196,7 +197,7 @@ export default function EmployeesClient({ employees }: { employees: Employee[] }
                     onClick={() => setExpanded(prev => prev === e.id ? null : e.id)}>
                     <div className="w-10 h-10 rounded-full flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0" style={{ background: color }}>{initials(e.name)}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-[14px] text-[#0b2b35] leading-tight">{e.name} <span className="text-[10px] text-gray-400 font-normal ml-1">{formatEmployeeId(e.employee_number)}</span></p>
+                      <p className="font-semibold text-[14px] text-[#0b2b35] leading-tight">{e.name} <span className="text-[10px] text-gray-400 font-normal ml-1">{formatEmployeeId(e.employee_number)}</span>{e.is_test_account && <span title="Test account — hidden from other staff" className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 align-middle">Test</span>}</p>
                       <p className="text-[11px] text-gray-400 mt-0.5">{e.job_title || '—'}</p>
                     </div>
                     <span className="text-[10px] font-semibold px-2 py-1 rounded-full hidden md:inline-block flex-shrink-0 bg-gray-100 text-gray-500">{e.department || '—'}</span>
