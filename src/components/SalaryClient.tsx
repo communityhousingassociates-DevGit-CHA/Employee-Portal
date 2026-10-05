@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { Fragment, useEffect, useRef, useState, useTransition } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
@@ -47,7 +48,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       setAllShown(await revealAllSalaries())
       hideTimer.current = setTimeout(hideAll, SHOW_ALL_SECONDS * 1000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Couldn’t load the amounts')
+      setError(errMsg(e, 'Couldn’t load the amounts'))
     } finally {
       setShowingAll(false)
     }
@@ -68,7 +69,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       const entry = await getCurrentSalaryEntry(row.id)
       if (!entry) { showToast('No salary on file yet — add one with “+ Salary Change”'); return }
       setEditEntry({ id: entry.id, employeeId: row.id, name: row.name, annual_salary: String(entry.annual_salary), effective_date: entry.effective_date, note: entry.note ?? '' })
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t open that entry') }
+    } catch (e: unknown) { setError(errMsg(e, 'Couldn’t open that entry')) }
   }
 
   async function openEditHistory(row: SalaryRow, h: HistoryEntry) {
@@ -76,7 +77,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
     try {
       const amount = await revealSalaryEntry(h.id)
       setEditEntry({ id: h.id, employeeId: row.id, name: row.name, annual_salary: amount === null ? '' : String(amount), effective_date: h.effective_date, note: h.note ?? '' })
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t open that entry') }
+    } catch (e: unknown) { setError(errMsg(e, 'Couldn’t open that entry')) }
   }
 
   async function handleEditSave() {
@@ -92,7 +93,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       if (allShown) setAllShown(await revealAllSalaries())
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setEditError(e instanceof Error ? e.message : 'Something went wrong')
+      setEditError(errMsg(e, 'Something went wrong'))
     } finally {
       setEditSaving(false)
     }
@@ -128,7 +129,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       setSelected(new Set())
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setBulkError(e instanceof Error ? e.message : 'Something went wrong')
+      setBulkError(errMsg(e, 'Something went wrong'))
     } finally {
       setBulkSaving(false)
     }
@@ -151,7 +152,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
         const rows = await getSalaryHistory(row.id)
         setHistory(h => ({ ...h, [row.id]: rows }))
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Failed to load history')
+        setError(errMsg(e, 'Failed to load history'))
       } finally {
         setLoadingHistory(false)
       }
@@ -177,7 +178,7 @@ export default function SalaryClient({ initialSalaries }: { initialSalaries: Sal
       setEditTarget(null)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     }
   }
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useTransition } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { setYearEndHoliday } from '@/app/actions/profile'
@@ -22,7 +23,7 @@ export default function YearEndHolidayCard({ initial }: { initial: YearEndChoice
     if (!choice) return
     setError('')
     startTransition(async () => {
-      try { await setYearEndHoliday(choice); setSaved(choice) } catch (e) { setError(e instanceof Error ? e.message : 'Could not save') }
+      try { await setYearEndHoliday(choice); setSaved(choice) } catch (e) { setError(errMsg(e, 'Could not save')) }
     })
   }
 

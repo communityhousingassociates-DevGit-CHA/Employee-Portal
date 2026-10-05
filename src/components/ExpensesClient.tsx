@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { Fragment, useMemo, useRef, useState, useTransition } from 'react'
 import { todayET, getCurrentPeriod, getPreviousPeriod } from '@/lib/pay-periods'
 import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/lib/constants/expense-policy'
@@ -133,7 +134,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
       setShowForm(false)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     } finally {
       setSaving(false)
     }
@@ -144,7 +145,7 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
       const url = await getReceiptViewUrl(id)
       if (url) window.open(url, '_blank')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to open receipt')
+      setError(errMsg(e, 'Failed to open receipt'))
     }
   }
 

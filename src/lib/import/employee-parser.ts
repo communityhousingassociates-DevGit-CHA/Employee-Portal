@@ -1,3 +1,4 @@
+import { UserError } from '@/lib/user-error'
 import * as XLSX from 'xlsx'
 import type { ParsedEmployeeRow } from './types'
 
@@ -15,7 +16,7 @@ export async function parseEmployeeWorkbook(buffer: ArrayBuffer): Promise<Parsed
   const wb = XLSX.read(buffer, { type: 'array' })
   const ws = wb.Sheets[SHEET_NAME]
   if (!ws) {
-    throw new Error(`Sheet "${SHEET_NAME}" not found — is this the right file?`)
+    throw new UserError(`Sheet "${SHEET_NAME}" not found — is this the right file?`)
   }
 
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' })

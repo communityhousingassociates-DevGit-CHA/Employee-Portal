@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { createLeaveRequest, getTeamConflicts, checkMyLeaveDays, getLeaveAttachmentUploadUrl } from '@/app/actions/leave-requests'
@@ -231,7 +232,7 @@ export default function RequestClient({
       setAutoApproved(result.autoApproved)
       setSubmitted(true)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to submit request')
+      setError(errMsg(e, 'Failed to submit request'))
     } finally {
       setSubmitting(false)
     }

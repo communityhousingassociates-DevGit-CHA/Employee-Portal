@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useEffect, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { markIssueReviewed, markIssueFixed, markIssuesSeen, getIssueAttachmentViewUrl } from '@/app/actions/report-issue'
@@ -51,7 +52,7 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
       await markIssueReviewed(id)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     } finally {
       setBusyId(null)
     }
@@ -71,7 +72,7 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
       setFixingId(null)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     } finally {
       setBusyId(null)
     }
@@ -82,7 +83,7 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
       const url = await getIssueAttachmentViewUrl(id)
       if (url) window.open(url, '_blank')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to open attachment')
+      setError(errMsg(e, 'Failed to open attachment'))
     }
   }
 

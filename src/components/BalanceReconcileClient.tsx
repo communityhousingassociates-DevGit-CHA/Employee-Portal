@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useRef, useState } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
@@ -51,7 +52,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
       setResult(res)
       setPicked(new Set(res.rows.filter(r => r.variance.pto || r.variance.sick || r.variance.vacation).map(r => r.employeeId)))
       setReason(`Reconciliation to Sage as of ${fmtDate(asOf)}`)
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t compare that file') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Couldn’t compare that file')) } finally { setBusy(false) }
   }
 
   async function handlePostVariances() {
@@ -63,7 +64,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
       showToast(`Adjusted ${res.applied} employee${res.applied === 1 ? '' : 's'} to match Sage`)
       setResult(null); setFileRows([]); if (fileRef.current) fileRef.current.value = ''
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')) } finally { setBusy(false) }
   }
 
   async function handleManual() {
@@ -73,7 +74,7 @@ export default function BalanceReconcileClient({ snapshotAsOf, snapshots, employ
       showToast(`Adjustment posted (${res.applied})`)
       setAdj(a => ({ ...a, pto: '', sick: '', vacation: '', reason: '' }))
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')) } finally { setBusy(false) }
   }
 
   const varianceRows = result?.rows.filter(r => r.variance.pto || r.variance.sick || r.variance.vacation) ?? []

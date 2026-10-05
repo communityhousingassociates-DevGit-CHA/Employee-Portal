@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { randomUUID } from 'crypto'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -17,7 +18,7 @@ import type { Employee } from '@/types'
 /** Overriding leave balances is limited to the payroll-access group (Nico, Carrileen, super admin). */
 async function requireBalanceManager(): Promise<Employee> {
   const employee = await getCurrentEmployee()
-  if (!employee || !hasPayrollAccess(employee)) throw new Error('Forbidden')
+  if (!employee || !hasPayrollAccess(employee)) throw new UserError('Forbidden')
   return employee
 }
 
@@ -43,7 +44,7 @@ export async function getBulkLockState(): Promise<BulkLockState> {
 /** Lock (no reason needed) or unlock (reason required, recorded) bulk balance overrides. */
 export async function setBulkOverrideLock(locked: boolean, reason: string) {
   const actor = await requireBalanceManager()
-  if (!locked && !reason.trim()) throw new Error('Give a reason for unlocking bulk overrides')
+  if (!locked && !reason.trim()) throw new UserError('Give a reason for unlocking bulk overrides')
   const admin = createAdminClient()
   const { error } = await admin
     .from('accrual_settings')
@@ -59,7 +60,7 @@ export async function setBulkOverrideLock(locked: boolean, reason: string) {
 export async function parseBalanceFileForUpdate(formData: FormData): Promise<{ rows: BalanceFileRow[]; fileAsOf: string | null; filePath: string }> {
   await requireBalanceManager()
   const file = formData.get('file')
-  if (!(file instanceof File)) throw new Error('No file uploaded')
+  if (!(file instanceof File)) throw new UserError('No file uploaded')
   const buffer = await file.arrayBuffer()
   const rows = await parseBalanceUpdateFile(buffer)
   // Keep the original: what was sent, and the date written on it, must stay retrievable.
@@ -69,8 +70,8 @@ export async function parseBalanceFileForUpdate(formData: FormData): Promise<{ r
 
 /** A balance file must say what date it describes, and that date can't be in the future. */
 function assertAsOf(asOf: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date these balances are as of')
-  if (asOf > todayET()) throw new Error('The “as of” date can’t be in the future')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new UserError('Enter the date these balances are as of')
+  if (asOf > todayET()) throw new UserError('The “as of” date can’t be in the future')
 }
 
 type Buckets = { pto: number; sick: number; vacation: number }
@@ -211,14 +212,14 @@ export async function applyBalanceUpdate(
 ) {
   const actor = await requireBalanceManager()
   assertAsOf(asOf)
-  if (updates.length === 0) throw new Error('Nothing to apply')
+  if (updates.length === 0) throw new UserError('Nothing to apply')
   const admin = createAdminClient()
   if ((await getBulkLockState()).locked) {
-    throw new Error('Bulk overrides are locked because balances have been validated. Use “Adjust one balance” for a correction, or unlock with a reason.')
+    throw new UserError('Bulk overrides are locked because balances have been validated. Use “Adjust one balance” for a correction, or unlock with a reason.')
   }
 
   for (const u of updates) {
-    if (![u.pto, u.sick, u.vacation].every(n => Number.isFinite(n) && n >= 0)) throw new Error('Balances must be zero or positive numbers')
+    if (![u.pto, u.sick, u.vacation].every(n => Number.isFinite(n) && n >= 0)) throw new UserError('Balances must be zero or positive numbers')
   }
 
   const ids = updates.map(u => u.employeeId)
@@ -319,7 +320,7 @@ export async function getAccrualState(): Promise<AccrualState> {
 export async function saveAccrualSettings(firstPeriodStart: string | null, enabled: boolean) {
   const actor = await requireBalanceManager()
   if (enabled) {
-    if (!firstPeriodStart || !isPeriodBoundary(firstPeriodStart)) throw new Error('Choose the first pay period to accrue')
+    if (!firstPeriodStart || !isPeriodBoundary(firstPeriodStart)) throw new UserError('Choose the first pay period to accrue')
   }
   const admin = createAdminClient()
   const { error } = await admin
@@ -336,7 +337,7 @@ export async function runAccrualsNow(): Promise<AccrualRunSummary> {
   const admin = createAdminClient()
   const { data: settings, error } = await admin.from('accrual_settings').select('enabled, first_period_start').maybeSingle()
   if (error) throw new Error(error.message)
-  if (!settings?.enabled || !settings.first_period_start) throw new Error('Switch accruals on first')
+  if (!settings?.enabled || !settings.first_period_start) throw new UserError('Switch accruals on first')
   const summary = await runAccruals(admin, settings.first_period_start)
   await applyDueLeaveDeductions(admin).catch(e => summary.errors.push(`leave deductions: ${e instanceof Error ? e.message : e}`))
   revalidatePath('/admin/balances')
@@ -445,11 +446,11 @@ export async function postBalanceAdjustments(
   reason: string,
 ) {
   const actor = await requireBalanceManager()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw new Error('Choose the date the correction is effective')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) throw new UserError('Choose the date the correction is effective')
   const why = reason.trim()
-  if (!why) throw new Error('Give a reason for the adjustment')
+  if (!why) throw new UserError('Give a reason for the adjustment')
   const changes = items.filter(i => [i.pto, i.sick, i.vacation].every(n => Number.isFinite(n)) && (i.pto !== 0 || i.sick !== 0 || i.vacation !== 0))
-  if (changes.length === 0) throw new Error('Nothing to adjust — every change is zero')
+  if (changes.length === 0) throw new UserError('Nothing to adjust — every change is zero')
 
   const admin = createAdminClient()
   const ids = changes.map(c => c.employeeId)

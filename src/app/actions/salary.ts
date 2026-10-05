@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayET } from '@/lib/pay-periods'
 import { revalidatePath } from 'next/cache'
@@ -10,14 +11,14 @@ import type { Employee } from '@/types'
 /** Salary data is limited to a named pair of people (see lib/constants/salary-access.ts), not a whole role. */
 async function requireSalaryViewer(): Promise<Employee> {
   const employee = await getCurrentEmployee()
-  if (!employee || !canViewSalaries(employee)) throw new Error('Forbidden')
+  if (!employee || !canViewSalaries(employee)) throw new UserError('Forbidden')
   return employee
 }
 
 /** The signed-in employee's own current salary (always allowed — it's their own pay). */
 export async function getMySalary() {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('employee_current_salary')
@@ -113,8 +114,8 @@ export async function getCurrentSalaryEntry(employeeId: string) {
 /** Corrects an existing salary entry in place. Records who edited it, when, and the amount it had before. */
 export async function editSalaryEntry(entryId: string, data: { annual_salary: number; effective_date: string; note: string }) {
   const actor = await requireSalaryViewer()
-  if (!Number.isFinite(data.annual_salary) || data.annual_salary <= 0) throw new Error('Enter an annual salary greater than zero')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.effective_date)) throw new Error('Choose an effective date')
+  if (!Number.isFinite(data.annual_salary) || data.annual_salary <= 0) throw new UserError('Enter an annual salary greater than zero')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data.effective_date)) throw new UserError('Choose an effective date')
   const admin = createAdminClient()
   const { data: old, error: oldError } = await admin.from('employee_salaries').select('annual_salary').eq('id', entryId).single()
   if (oldError) throw new Error(oldError.message)
@@ -162,7 +163,7 @@ export type BulkSalaryChange = { mode: 'set' | 'add' | 'percent'; value: number 
  */
 export async function bulkSetSalary(employeeIds: string[], change: BulkSalaryChange, effective_date: string, note: string) {
   const actor = await requireSalaryViewer()
-  if (!Number.isFinite(change.value) || (change.mode !== 'set' && change.value === 0)) throw new Error('Enter an amount')
+  if (!Number.isFinite(change.value) || (change.mode !== 'set' && change.value === 0)) throw new UserError('Enter an amount')
   const admin = createAdminClient()
 
   const { data: employees, error: empError } = await admin.from('employees').select('id, name').in('id', employeeIds)
@@ -183,7 +184,7 @@ export async function bulkSetSalary(employeeIds: string[], change: BulkSalaryCha
     if (amount === null) skipped.push(emp.name)
     else updates.push({ employee_id: emp.id, annual_salary: amount })
   }
-  if (updates.length === 0) throw new Error('No eligible employees to update — for %/add mode, selected employees need an existing current salary.')
+  if (updates.length === 0) throw new UserError('No eligible employees to update — for %/add mode, selected employees need an existing current salary.')
 
   const { error } = await admin.from('employee_salaries').insert(
     updates.map(u => ({ ...u, effective_date, note: note || null, created_by: actor.id })),

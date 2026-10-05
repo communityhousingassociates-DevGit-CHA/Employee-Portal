@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { denyReasonProblem } from '@/lib/deny-reason'
@@ -75,7 +76,7 @@ function LeaveApprovalCard({ item, canDecide, onDecided }: { item: LeaveApproval
       await approveLeaveRequest(item.id)
       onDecided()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to approve')
+      setError(errMsg(e, 'Failed to approve'))
       setBusy(false)
     }
   }
@@ -87,7 +88,7 @@ function LeaveApprovalCard({ item, canDecide, onDecided }: { item: LeaveApproval
       await denyLeaveRequest(item.id, denyReason)
       onDecided()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to deny')
+      setError(errMsg(e, 'Failed to deny'))
       setBusy(false)
     }
   }
@@ -97,7 +98,7 @@ function LeaveApprovalCard({ item, canDecide, onDecided }: { item: LeaveApproval
       const url = await getLeaveAttachmentViewUrl(item.id)
       if (url) window.open(url, '_blank')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to open attachment')
+      setError(errMsg(e, 'Failed to open attachment'))
     }
   }
 
@@ -265,11 +266,11 @@ function ExpenseCard({ item, canDecide, onDecided }: { item: ExpenseApproval; ca
 
   async function submitApprove() {
     setBusy(true); setError('')
-    try { await approveExpense(item.id); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed'); setBusy(false) }
+    try { await approveExpense(item.id); onDecided() } catch (e: unknown) { setError(errMsg(e, 'Failed')); setBusy(false) }
   }
   async function submitDeny() {
     setBusy(true); setError('')
-    try { await denyExpense(item.id, denyReason); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed'); setBusy(false) }
+    try { await denyExpense(item.id, denyReason); onDecided() } catch (e: unknown) { setError(errMsg(e, 'Failed')); setBusy(false) }
   }
 
   return (
@@ -357,7 +358,7 @@ function TimesheetCard({ item, mode, viewerRole, canDecide, customTags, onDecide
 
   async function submitApprove() {
     setBusy(true); setError('')
-    try { await approveTimesheet(item.id); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to approve'); setBusy(false) }
+    try { await approveTimesheet(item.id); onDecided() } catch (e: unknown) { setError(errMsg(e, 'Failed to approve')); setBusy(false) }
   }
   async function submitReopen() {
     setBusy(true); setError('')
@@ -365,7 +366,7 @@ function TimesheetCard({ item, mode, viewerRole, canDecide, customTags, onDecide
       if (mode === 'pending') await returnTimesheet(item.id, code, note)
       else await reopenTimesheet(item.id, code, note)
       onDecided()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed'); setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')); setBusy(false) }
   }
 
   const reopenLabel = mode === 'pending' ? 'Return for correction' : isOverride ? 'CEO override — reopen' : 'Reopen for correction'
@@ -454,7 +455,7 @@ function TimesheetCard({ item, mode, viewerRole, canDecide, customTags, onDecide
                     <td className="py-1.5 pr-3 text-gray-500">{r.description || <span className="text-gray-300">—</span>}</td>
                     <td className="py-1.5 pr-3">
                       <TagsCell tags={dayTags[ri] ?? []} allTags={customTags} selectedIds={r.tag_ids ?? []} editable={mode === 'pending'}
-                        onChange={async ids => { try { await adjustRowTags(item.id, r.id, ids); onDecided() } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to update tags') } }} />
+                        onChange={async ids => { try { await adjustRowTags(item.id, r.id, ids); onDecided() } catch (e: unknown) { setError(errMsg(e, 'Failed to update tags')) } }} />
                     </td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.regular_hours) || <span className="text-gray-300">0</span>}</td>
                     <td className="py-1.5 pr-3 text-right">{Number(r.leave_hours) || <span className="text-gray-300">0</span>}</td>

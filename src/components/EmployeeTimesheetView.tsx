@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState } from 'react'
 import { getTimesheetForEmployeePeriod } from '@/app/actions/timesheets'
 import { fmtDateRange, fmtDateShort } from '@/lib/format-date'
@@ -51,7 +52,7 @@ export default function EmployeeTimesheetView({
       setTimesheet(ts)
       setRows(r)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load period')
+      setError(errMsg(e, 'Failed to load period'))
     } finally {
       setLoading(false)
     }

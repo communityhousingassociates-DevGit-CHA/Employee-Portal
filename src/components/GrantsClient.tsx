@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addGrant, renameGrant, deactivateGrant, restoreGrant } from '@/app/actions/grants'
@@ -56,7 +57,7 @@ export default function GrantsClient({ initialGrants }: { initialGrants: Grant[]
       setShowForm(false)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     }
   }
 

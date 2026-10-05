@@ -1,3 +1,4 @@
+import { UserError } from '@/lib/user-error'
 import * as XLSX from 'xlsx'
 import { parseBalanceWorkbook } from './balance-parser'
 
@@ -33,7 +34,7 @@ export async function parseBalanceUpdateFile(buffer: ArrayBuffer): Promise<Balan
   }
 
   const ws = wb.Sheets[wb.SheetNames[0]]
-  if (!ws) throw new Error('The file has no sheets')
+  if (!ws) throw new UserError('The file has no sheets')
   const grid: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false })
 
   // Find the header row: the first one that names a person column and at least two of the three balances.
@@ -63,7 +64,7 @@ export async function parseBalanceUpdateFile(buffer: ArrayBuffer): Promise<Balan
     }
     return out
   }
-  throw new Error('Couldn’t find a header row with a Name or Email column and PTO / Sick / Vacation balance columns')
+  throw new UserError('Couldn’t find a header row with a Name or Email column and PTO / Sick / Vacation balance columns')
 }
 
 /**

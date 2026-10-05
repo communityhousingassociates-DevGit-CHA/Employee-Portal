@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl } from '@/app/actions/profile'
@@ -78,7 +79,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to save')
+      setError(errMsg(e, 'Failed to save'))
     } finally {
       setSaving(false)
     }
@@ -97,7 +98,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       await updateAvatarUrl(publicUrl)
       setAvatarUrl(publicUrl + '?t=' + Date.now())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Photo upload failed')
+      setError(errMsg(e, 'Photo upload failed'))
     } finally {
       setUploading(false)
     }
@@ -108,7 +109,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       await updateAvatarUrl(null)
       setAvatarUrl(null)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to remove photo')
+      setError(errMsg(e, 'Failed to remove photo'))
     }
   }
 
@@ -131,7 +132,7 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       setPwSaved(true)
       setTimeout(() => setPwSaved(false), 3000)
     } catch (e: unknown) {
-      setPwError(e instanceof Error ? e.message : 'Failed to change password')
+      setPwError(errMsg(e, 'Failed to change password'))
     } finally {
       setPwSaving(false)
     }

@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -53,7 +54,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
   const [accrualMsg, setAccrualMsg] = useState('')
 
   async function openFile(path: string) {
-    try { window.open(await getBalanceFileUrl(path), '_blank') } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t open the file') }
+    try { window.open(await getBalanceFileUrl(path), '_blank') } catch (e: unknown) { setError(errMsg(e, 'Couldn’t open the file')) }
   }
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 4000) }
@@ -70,13 +71,13 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
       if (!asOf && detected) setAsOf(detected)
       if (!date) { setError('This file doesn’t state a date — enter the date its balances are as of, then it will preview.'); return }
       setPreview(await previewBalanceUpdate(rows, date))
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Couldn’t read that file') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Couldn’t read that file')) } finally { setBusy(false) }
   }
 
   async function refreshPreview(nextAsOf: string) {
     setAsOf(nextAsOf)
     if (!fileRows.length || !/^\d{4}-\d{2}-\d{2}$/.test(nextAsOf)) return
-    try { setPreview(await previewBalanceUpdate(fileRows, nextAsOf)); setConfirmed(false) } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') }
+    try { setPreview(await previewBalanceUpdate(fileRows, nextAsOf)); setConfirmed(false) } catch (e: unknown) { setError(errMsg(e, 'Failed')) }
   }
 
   const okRows = (preview?.rows ?? []).filter((r): r is BalancePreviewRow & { employeeId: string; file: NonNullable<BalancePreviewRow['file']> } => r.status === 'ok' && !!r.employeeId && !!r.file)
@@ -97,7 +98,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
       setPreview(null); setFileRows([]); setFileName(''); setFilePath(null); setConfirmed(false); setNote('')
       if (fileRef.current) fileRef.current.value = ''
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to apply') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed to apply')) } finally { setBusy(false) }
   }
 
   async function handleLock(locked: boolean) {
@@ -107,7 +108,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
       showToast(locked ? 'Bulk overrides locked' : 'Bulk overrides unlocked')
       setShowUnlock(false); setUnlockReason('')
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')) } finally { setBusy(false) }
   }
 
   async function handleAccrualSave(enabled: boolean) {
@@ -116,7 +117,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
       await saveAccrualSettings(enabled ? firstPeriod : accrual.firstPeriodStart, enabled)
       showToast(enabled ? 'Accruals switched on' : 'Accruals switched off')
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')) } finally { setBusy(false) }
   }
 
   async function handleRunNow() {
@@ -125,7 +126,7 @@ export default function BalanceUpdateClient({ bulkLock, accrual, history, period
       const s = await runAccrualsNow()
       setAccrualMsg(`Credited ${s.processed} employee accrual${s.processed === 1 ? '' : 's'} across ${s.periods.length} period${s.periods.length === 1 ? '' : 's'}${s.errors.length ? ` — ${s.errors.length} error(s): ${s.errors[0]}` : ''}.`)
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed')) } finally { setBusy(false) }
   }
 
   return (

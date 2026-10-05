@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -67,7 +68,7 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
       await cancelMyLeaveRequest(r.id)
       router.refresh()
     } catch (err) {
-      setCancelError(err instanceof Error ? err.message : 'Could not cancel this request.')
+      setCancelError(errMsg(err, 'Could not cancel this request.'))
       setCancelling(false)
     }
   }

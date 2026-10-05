@@ -1,3 +1,4 @@
+import { UserError } from '@/lib/user-error'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Employee, Role } from '@/types'
@@ -34,7 +35,7 @@ export async function getCurrentEmployee(): Promise<Employee | null> {
 export async function requireRole(allowed: Role[]): Promise<Employee> {
   const employee = await getCurrentEmployee()
   if (!employee || !allowed.includes(employee.role)) {
-    throw new Error('Forbidden')
+    throw new UserError('Forbidden')
   }
   return employee
 }
@@ -47,9 +48,9 @@ export async function requireRole(allowed: Role[]): Promise<Employee> {
  */
 export async function requireSelfOrRole(targetEmployeeId: string, allowed: Role[]): Promise<Employee> {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   if (employee.id === targetEmployeeId || allowed.includes(employee.role)) return employee
-  throw new Error('Forbidden')
+  throw new UserError('Forbidden')
 }
 
 /**
@@ -60,6 +61,6 @@ export async function requireSelfOrRole(targetEmployeeId: string, allowed: Role[
  */
 export async function requireSuperAdmin(): Promise<Employee> {
   const employee = await getCurrentEmployee()
-  if (!employee || !employee.is_super_admin) throw new Error('Forbidden')
+  if (!employee || !employee.is_super_admin) throw new UserError('Forbidden')
   return employee
 }

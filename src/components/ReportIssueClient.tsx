@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { reportIssue, getIssueAttachmentUploadUrl } from '@/app/actions/report-issue'
@@ -40,7 +41,7 @@ export default function ReportIssueClient({ employeeName, employeeEmail }: { emp
       await reportIssue({ category, description, page_url: pathname, attachment_path })
       setSent(true)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     } finally {
       setSaving(false)
     }

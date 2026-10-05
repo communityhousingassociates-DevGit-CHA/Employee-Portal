@@ -3,6 +3,7 @@
 // queue honest. Not a
 // 'use server' file — it runs from the cron only.
 
+import { UserError } from '@/lib/user-error'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPolicy } from '@/lib/policy-server'
 import { FINAL_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
@@ -36,7 +37,7 @@ export async function sendApprovalDigest(admin: SupabaseClient): Promise<{ sent:
     // Every pending leave request, of any age — the manager summary lists them all so nothing is forgotten.
     admin.from('leave_requests').select('employee_id, leave_type, start_date, end_date, hours, created_at, employee:employees!leave_requests_employee_id_fkey(name)').eq('status', 'pending').order('created_at'),
   ])
-  for (const r of [leave, expenses, sheets, allLeave]) if (r.error) throw new Error(r.error.message)
+  for (const r of [leave, expenses, sheets, allLeave]) if (r.error) throw new UserError(r.error.message)
 
   // Test accounts (workflow testing) never trigger reminders to the real approvers.
   const testIds = await getTestAccountIds(admin)

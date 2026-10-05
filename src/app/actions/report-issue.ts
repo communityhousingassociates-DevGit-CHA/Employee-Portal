@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { Resend } from 'resend'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -23,10 +24,10 @@ const REPORT_CC = 'support@globalist.pro'
 
 export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string }) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
 
   const description = data.description.trim()
-  if (!description) throw new Error('Please describe the issue before submitting.')
+  if (!description) throw new UserError('Please describe the issue before submitting.')
 
   const admin = createAdminClient()
   const { error: insertError } = await admin.from('issue_reports').insert({
@@ -90,7 +91,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
 
 export async function getIssueAttachmentUploadUrl(fileName: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const ext = fileName.split('.').pop()
   const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
@@ -101,12 +102,12 @@ export async function getIssueAttachmentUploadUrl(fileName: string) {
 
 export async function getIssueAttachmentViewUrl(issueId: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data: issue, error: fetchError } = await admin.from('issue_reports').select('employee_id, attachment_url').eq('id', issueId).single()
   if (fetchError) throw new Error(fetchError.message)
   if (!issue.attachment_url) return null
-  if (issue.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new Error('Forbidden')
+  if (issue.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new UserError('Forbidden')
   const { data, error } = await admin.storage.from('issue-attachments').createSignedUrl(issue.attachment_url, 60 * 10)
   if (error) throw new Error(error.message)
   return data.signedUrl

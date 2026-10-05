@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useTransition } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
@@ -32,7 +33,7 @@ export default function MileageRateClient({ initialRates, canEdit }: { initialRa
       setRate('')
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     }
   }
 

@@ -2,6 +2,7 @@
 // It is a record-keeping email — it takes no action and never goes to employees. Test accounts are left out. Not a 'use server' file: it
 // runs from the daily cron only.
 
+import { UserError } from '@/lib/user-error'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { TRACKING_DIGEST_TO, TRACKING_DIGEST_INCLUDE_ACTIVITY } from '@/lib/constants/approvals'
@@ -41,7 +42,7 @@ export async function sendTrackingDigest(admin: SupabaseClient, issues: string[]
     admin.from('expenses').select('employee_id, category, amount, created_at, employee:employees!expenses_employee_id_fkey(name)').eq('status', 'pending').order('created_at'),
     admin.from('timesheets').select('employee_id, period_start, period_end, employee_signed_at, employee:employees!timesheets_employee_id_fkey(name)').eq('status', 'submitted').order('employee_signed_at'),
   ])
-  for (const r of [leaveNew, expNew, sheetNew, leaveWait, expWait, sheetWait]) if (r.error) throw new Error(r.error.message)
+  for (const r of [leaveNew, expNew, sheetNew, leaveWait, expWait, sheetWait]) if (r.error) throw new UserError(r.error.message)
 
   const submitted: { label: string; rows: Row[] }[] = [
     { label: 'Leave requests', rows: real(leaveNew.data as never).map((r: any) => ({ who: nameOf(r.employee), what: `${r.leave_type} · ${fmtDateRange(r.start_date, r.end_date)} · ${r.hours} hrs`, status: r.status })) },

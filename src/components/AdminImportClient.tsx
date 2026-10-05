@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useRef, useState } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import {
@@ -111,7 +112,7 @@ export default function AdminImportClient({
       setSubmittedForReview(false)
       setStep('review')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to parse or validate files')
+      setError(errMsg(e, 'Failed to parse or validate files'))
     } finally {
       setLoading(false)
     }
@@ -136,7 +137,7 @@ export default function AdminImportClient({
       setSubmittedForReview(false)
       setStep('review')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load batch for review')
+      setError(errMsg(e, 'Failed to load batch for review'))
     } finally {
       setBatchLoading(null)
     }
@@ -149,7 +150,7 @@ export default function AdminImportClient({
       await discardImportBatch(batchId)
       setPendingBatches(bs => bs.filter(b => b.id !== batchId))
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to discard batch')
+      setError(errMsg(e, 'Failed to discard batch'))
     } finally {
       setBatchLoading(null)
     }
@@ -175,7 +176,7 @@ export default function AdminImportClient({
       })
       setSubmittedForReview(true)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to submit for review')
+      setError(errMsg(e, 'Failed to submit for review'))
     } finally {
       setLoading(false)
     }
@@ -194,7 +195,7 @@ export default function AdminImportClient({
       setResult(res)
       setStep('done')
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to commit import')
+      setError(errMsg(e, 'Failed to commit import'))
     } finally {
       setLoading(false)
     }
@@ -207,7 +208,7 @@ export default function AdminImportClient({
       const res = await inviteEmployees(result.createdEmployees.map(e => e.id))
       setInviteResult(res)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to send invites')
+      setError(errMsg(e, 'Failed to send invites'))
     } finally {
       setInviting(false)
     }

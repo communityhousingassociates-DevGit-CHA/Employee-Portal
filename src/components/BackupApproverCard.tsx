@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setBackupApprover, revokeBackupApprover, type BackupApprover, type BackupCandidate } from '@/app/actions/delegation'
@@ -22,13 +23,13 @@ export default function BackupApproverCard({ backups, candidates, today }: { bac
   async function save() {
     setBusy(true); setError('')
     try { await setBackupApprover(delegateId, startsOn, endsOn, note); setOpen(false); setNote(''); router.refresh() }
-    catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not save') }
+    catch (e: unknown) { setError(errMsg(e, 'Could not save')) }
     setBusy(false)
   }
   async function revoke(id: string) {
     setBusy(true); setError('')
     try { await revokeBackupApprover(id); router.refresh() }
-    catch (e: unknown) { setError(e instanceof Error ? e.message : 'Could not revoke') }
+    catch (e: unknown) { setError(errMsg(e, 'Could not revoke')) }
     setBusy(false)
   }
 

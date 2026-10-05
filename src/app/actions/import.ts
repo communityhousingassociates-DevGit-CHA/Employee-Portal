@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
@@ -32,14 +33,14 @@ export async function getImportApprover(): Promise<{ isSuperAdmin: boolean; supe
 export async function parseEmployeeFile(formData: FormData): Promise<ParsedEmployeeRow[]> {
   await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
-  if (!(file instanceof File)) throw new Error('No file uploaded')
+  if (!(file instanceof File)) throw new UserError('No file uploaded')
   return parseEmployeeWorkbook(await file.arrayBuffer())
 }
 
 export async function parseBalanceFile(formData: FormData): Promise<ParsedBalanceRow[]> {
   await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
-  if (!(file instanceof File)) throw new Error('No file uploaded')
+  if (!(file instanceof File)) throw new UserError('No file uploaded')
   return parseBalanceWorkbook(await file.arrayBuffer())
 }
 
@@ -61,15 +62,15 @@ export async function storeBalanceFileForImport(formData: FormData): Promise<str
 
 /** Every balance load must say what date its numbers describe, and that date can't be in the future. */
 function assertBalancesAsOf(asOf: string | null | undefined): string {
-  if (!asOf || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new Error('Enter the date the leave balances are as of')
-  if (asOf > todayET()) throw new Error('The “balances as of” date can’t be in the future')
+  if (!asOf || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) throw new UserError('Enter the date the leave balances are as of')
+  if (asOf > todayET()) throw new UserError('The “balances as of” date can’t be in the future')
   return asOf
 }
 
 export async function parseSalaryFile(formData: FormData): Promise<ParsedSalaryRow[]> {
   await requireRole(ADMIN_ROLES)
   const file = formData.get('file')
-  if (!(file instanceof File)) throw new Error('No file uploaded')
+  if (!(file instanceof File)) throw new UserError('No file uploaded')
   return parseSalaryWorkbook(await file.arrayBuffer())
 }
 
@@ -120,7 +121,7 @@ export async function commitImport(payload: {
   const badBalances = preview.balances.filter(r => r.status === 'error')
   const badSalaries = preview.salaries.filter(r => r.status === 'error')
   if (badEmployees.length > 0 || badBalances.length > 0 || badSalaries.length > 0) {
-    throw new Error(`${badEmployees.length + badBalances.length + badSalaries.length} row(s) still have unresolved errors — re-validate before committing`)
+    throw new UserError(`${badEmployees.length + badBalances.length + badSalaries.length} row(s) still have unresolved errors — re-validate before committing`)
   }
 
   const skipped: string[] = []
@@ -271,7 +272,7 @@ export async function submitImportForReview(payload: {
   const existing = await getExistingEmployees()
   const preview = buildPreview(payload.employees, payload.balances, existing, payload.salaries)
   if (preview.summary.errors > 0) {
-    throw new Error(`${preview.summary.errors} row(s) still have unresolved errors — resolve before submitting for review`)
+    throw new UserError(`${preview.summary.errors} row(s) still have unresolved errors — resolve before submitting for review`)
   }
 
   const { data, error } = await admin
@@ -394,8 +395,8 @@ export async function discardImportBatch(id: string): Promise<void> {
     .eq('id', id)
     .single()
   if (fetchError) throw new Error(fetchError.message)
-  if (batch.status !== 'pending') throw new Error('This batch has already been resolved')
-  if (batch.prepared_by !== actor.id && !actor.is_super_admin) throw new Error('Forbidden')
+  if (batch.status !== 'pending') throw new UserError('This batch has already been resolved')
+  if (batch.prepared_by !== actor.id && !actor.is_super_admin) throw new UserError('Forbidden')
 
   const { error } = await admin.from('import_batches').update({ status: 'discarded' }).eq('id', id)
   if (error) throw new Error(error.message)

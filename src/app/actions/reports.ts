@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { calcTier } from '@/lib/constants/accrual'
@@ -14,7 +15,7 @@ const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 
 export async function getReportSummary(periodStart: string, periodEnd: string) {
   const me = await getCurrentEmployee()
-  if (!me) throw new Error('Forbidden')
+  if (!me) throw new UserError('Forbidden')
   const isManager = MANAGER_ROLES.includes(me.role)
   // Salary-derived figures: everyone sees only their own; the named salary viewers can additionally reveal others' one click at a time.
   const canViewSalary = canViewSalaries(me)

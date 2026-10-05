@@ -1,3 +1,4 @@
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import { FINAL_APPROVER_ROLES, isTestApprover } from '@/lib/constants/approvals'
@@ -53,7 +54,7 @@ export async function getDecisionAuthority(): Promise<DecisionAuthority | null> 
 /** For Server Actions that approve or deny. Throws unless the caller is the CEO or his backup for today. */
 export async function requireDecisionAuthority(): Promise<DecisionAuthority> {
   const authority = await getDecisionAuthority()
-  if (!authority) throw new Error('Final approval belongs to the CEO. Ask him to approve this, or to name you as backup while he is away.')
+  if (!authority) throw new UserError('Final approval belongs to the CEO. Ask him to approve this, or to name you as backup while he is away.')
   return authority
 }
 
@@ -66,13 +67,13 @@ export async function assertMayDecide(admin: Admin, authority: DecisionAuthority
   // Test items and real items never mix: the test approver decides only test-account items, everyone else only real ones.
   const { data: owner } = await admin.from('employees').select('is_test_account').eq('id', item.employee_id).maybeSingle()
   const isTestItem = !!owner?.is_test_account
-  if (!override && isTestItem) throw new Error(`This ${noun} belongs to a test account — only the test approver decides it.`)
+  if (!override && isTestItem) throw new UserError(`This ${noun} belongs to a test account — only the test approver decides it.`)
   // The test approver may decide test items freely (his own and on-behalf ones included). On a REAL item it is an emergency
   // override: allowed, but the caller reports it to the CEO. Returns true when that is the case.
   if (override) return !isTestItem
-  if (item.employee_id === actor.id && viaDelegation) throw new Error(`You can't decide your own ${noun} — only the CEO can approve it.`)
-  if (item.submitted_by === actor.id && viaDelegation) throw new Error(`You completed this ${noun} on the employee's behalf, so the CEO needs to decide it.`)
-  if (viaDelegation && item.employee_id === delegatorId) throw new Error(`A backup approver can't decide the CEO's own ${noun} — only he can approve it.`)
+  if (item.employee_id === actor.id && viaDelegation) throw new UserError(`You can't decide your own ${noun} — only the CEO can approve it.`)
+  if (item.submitted_by === actor.id && viaDelegation) throw new UserError(`You completed this ${noun} on the employee's behalf, so the CEO needs to decide it.`)
+  if (viaDelegation && item.employee_id === delegatorId) throw new UserError(`A backup approver can't decide the CEO's own ${noun} — only he can approve it.`)
   return false
 }
 

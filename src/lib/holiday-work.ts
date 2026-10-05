@@ -7,6 +7,7 @@
 //   * Non-exempt employee: no flex time; the hours are paid at time-and-a-half. Payroll sees that on the Reports → Timesheets
 //     view (holiday-worked hours and their time-and-a-half equivalent).
 
+import { UserError } from '@/lib/user-error'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { holidayOn, type YearEndChoice } from '@/lib/holidays'
 import { HOLIDAY_WORK_MULTIPLIER, holidayWorkedHours, round2 } from '@/lib/constants/holiday-work'
@@ -44,7 +45,7 @@ export async function creditHolidayFlex(admin: SupabaseClient, timesheetId: stri
   if (delta !== 0) {
     const { data: bal, error: balError } = await admin.from('leave_balances').select('flex_hours').eq('employee_id', employeeId).maybeSingle()
     if (balError) throw new Error(balError.message)
-    if (!bal) throw new Error('No leave_balances row for this employee — flex time could not be credited.')
+    if (!bal) throw new UserError('No leave_balances row for this employee — flex time could not be credited.')
     const { error } = await admin.from('leave_balances').update({ flex_hours: round2(Number(bal.flex_hours ?? 0) + delta) }).eq('employee_id', employeeId)
     if (error) throw new Error(error.message)
   }

@@ -1,6 +1,7 @@
 // Keeps an original copy of every balance file that is parsed for a load, in a private bucket. Not a 'use server' file:
 // callers are the (already authorised) server actions.
 
+import { UserError } from '@/lib/user-error'
 import { randomUUID } from 'crypto'
 import { todayET } from '@/lib/pay-periods'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -15,13 +16,13 @@ export async function storeBalanceFile(admin: SupabaseClient, file: File, folder
     contentType: file.type || 'application/octet-stream',
     upsert: false,
   })
-  if (error) throw new Error(`Couldn’t save a copy of the file: ${error.message}`)
+  if (error) throw new UserError(`Couldn’t save a copy of the file: ${error.message}`)
   return path
 }
 
 /** A short-lived link to download a stored balance file. */
 export async function signedBalanceFileUrl(admin: SupabaseClient, path: string): Promise<string> {
   const { data, error } = await admin.storage.from(BUCKET).createSignedUrl(path, 300)
-  if (error || !data) throw new Error(error?.message ?? 'File not found')
+  if (error || !data) throw new UserError(error?.message ?? 'File not found')
   return data.signedUrl
 }

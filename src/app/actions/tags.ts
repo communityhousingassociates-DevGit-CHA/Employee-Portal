@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
@@ -10,7 +11,7 @@ import type { Employee, TimesheetTag } from '@/types'
 /** Managing the tag list is limited to the payroll-access group (Nico, Carrileen, super admin). */
 async function requireTagManager(): Promise<Employee> {
   const employee = await getCurrentEmployee()
-  if (!employee || !hasPayrollAccess(employee)) throw new Error('Forbidden')
+  if (!employee || !hasPayrollAccess(employee)) throw new UserError('Forbidden')
   return employee
 }
 
@@ -41,9 +42,9 @@ export async function getManagedTags(): Promise<(TimesheetTag & { usage: number 
 
 function clean(input: { name: string; color: string; description?: string; code?: string }) {
   const name = input.name.trim()
-  if (!name) throw new Error('Give the tag a name')
-  if (name.length > 40) throw new Error('Tag names can be at most 40 characters')
-  if (!TAG_COLORS[input.color]) throw new Error('Choose a color')
+  if (!name) throw new UserError('Give the tag a name')
+  if (name.length > 40) throw new UserError('Tag names can be at most 40 characters')
+  if (!TAG_COLORS[input.color]) throw new UserError('Choose a color')
   return { name, color: input.color, description: input.description?.trim() || null, code: input.code?.trim() || null }
 }
 
@@ -56,7 +57,7 @@ export async function createTag(input: { name: string; color: string; descriptio
   const row = clean(input)
   const admin = createAdminClient()
   const { error } = await admin.from('timesheet_tags').insert({ ...row, created_by: actor.id })
-  if (error) throw new Error(friendly(error.message))
+  if (error) throw new UserError(friendly(error.message))
   revalidatePath('/admin/tags')
 }
 
@@ -65,7 +66,7 @@ export async function updateTag(id: string, input: { name: string; color: string
   const row = clean(input)
   const admin = createAdminClient()
   const { error } = await admin.from('timesheet_tags').update(row).eq('id', id)
-  if (error) throw new Error(friendly(error.message))
+  if (error) throw new UserError(friendly(error.message))
   revalidatePath('/admin/tags')
   revalidatePath('/timesheet')
 }

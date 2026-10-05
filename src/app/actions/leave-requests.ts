@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
@@ -91,21 +92,21 @@ async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, emplo
     const label = fmtDate(day.date)
     if (eligibleFrom && day.date < eligibleFrom) {
       const what = leaveType === 'Personal' ? 'Personal Days' : leaveType === 'Sick' ? 'sick leave' : 'annual leave (PTO)'
-      throw new Error(`${label}: ${what} can’t be taken until ${fmtDate(eligibleFrom)}, when your ${leaveType === 'Personal' ? '6-month' : '90-day'} waiting period ends. An exception can only be granted by the President and CEO.`)
+      throw new UserError(`${label}: ${what} can’t be taken until ${fmtDate(eligibleFrom)}, when your ${leaveType === 'Personal' ? '6-month' : '90-day'} waiting period ends. An exception can only be granted by the President and CEO.`)
     }
     if (day.date > latestLeaveDate()) {
-      throw new Error(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
+      throw new UserError(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
     }
     if (day.date < earliest) {
-      throw new Error(`${label}: leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
+      throw new UserError(`${label}: leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
     }
     const closedHit = closedRangeOverlapping(day.date, day.date, closedRanges)
     if (closedHit) {
-      throw new Error(`${label} is in ${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}, which accounting has closed, so no new leave can be entered for it. Contact your Accounting Manager.`)
+      throw new UserError(`${label} is in ${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}, which accounting has closed, so no new leave can be entered for it. Contact your Accounting Manager.`)
     }
   }
   const overage = await dailyLeaveOverage(admin, employeeId, days)
-  if (overage) throw new Error(overage)
+  if (overage) throw new UserError(overage)
 }
 
 function daysLabel(days: LeaveDay[]) {
@@ -127,26 +128,26 @@ export async function createLeaveRequest(data: {
   // `forEmployee` = an admin completing this for someone else (an exception, with a reason code and notes). Validated here.
   const { actor, subject: employee, onBehalf } = await resolveActor(admin, { employeeId: forEmployee?.employeeId, onBehalf: forEmployee?.onBehalf })
   if (data.leave_type === 'Jury Duty' && !data.attachment_path) {
-    throw new Error('Jury Duty requests require the summons attached.')
+    throw new UserError('Jury Duty requests require the summons attached.')
   }
   const days = data.days.map(d => ({ date: d.date, hours: Number(d.hours) })).sort((a, b) => a.date.localeCompare(b.date))
-  if (days.length === 0) throw new Error('Select at least one day.')
-  if (days.length > 45) throw new Error('A single request can cover up to 45 days.')
-  if (new Set(days.map(d => d.date)).size !== days.length) throw new Error('Each date can only appear once in a request.')
+  if (days.length === 0) throw new UserError('Select at least one day.')
+  if (days.length > 45) throw new UserError('A single request can cover up to 45 days.')
+  if (new Set(days.map(d => d.date)).size !== days.length) throw new UserError('Each date can only appear once in a request.')
 
   // Per-type limits (SOP §4). Voting: 4 hrs standard, up to 6 with the approver's OK; it is flagged in the note so the approver
   // sees that the extra time needs a decision against the policy. Workers' comp covers only the first 3 days.
   let requestNote = data.note
   const requestedHours = days.reduce((sum, d) => sum + d.hours, 0)
   if (data.leave_type === 'Voting') {
-    if (days.length !== 1) throw new Error('Election voting leave is for a single day.')
-    if (requestedHours > 6) throw new Error('Election voting leave is limited to 6 hours (4 standard plus 2 more with manager approval).')
+    if (days.length !== 1) throw new UserError('Election voting leave is for a single day.')
+    if (requestedHours > 6) throw new UserError('Election voting leave is limited to 6 hours (4 standard plus 2 more with manager approval).')
     if (requestedHours > 4) requestNote = `Extra voting time requested: ${requestedHours} hrs. The standard is 4 hrs; up to 2 additional hrs require manager approval (long distance from home to work).${data.note ? ` ${data.note}` : ''}`
   }
-  if (data.leave_type === 'Workers Comp' && requestedHours > 24) throw new Error('Workers’ compensation leave covers the first 3 days (24 hrs).')
+  if (data.leave_type === 'Workers Comp' && requestedHours > 24) throw new UserError('Workers’ compensation leave covers the first 3 days (24 hrs).')
   if (data.leave_type === 'Flex Time') {
     const { data: flex } = await admin.from('leave_balances').select('flex_hours').eq('employee_id', employee.id).maybeSingle()
-    if (requestedHours > Number(flex?.flex_hours ?? 0)) throw new Error('You don’t have enough flex time for this request.')
+    if (requestedHours > Number(flex?.flex_hours ?? 0)) throw new UserError('You don’t have enough flex time for this request.')
   }
   await checkLeaveDays(admin, employee.id, data.leave_type, days)
 
@@ -294,7 +295,7 @@ export async function getMyBookedLeaveDays(forEmployeeId?: string) {
 
 export async function getLeaveAttachmentUploadUrl(fileName: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const ext = fileName.split('.').pop()
   const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
@@ -305,12 +306,12 @@ export async function getLeaveAttachmentUploadUrl(fileName: string) {
 
 export async function getLeaveAttachmentViewUrl(requestId: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('employee_id, attachment_url').eq('id', requestId).single()
   if (fetchError) throw new Error(fetchError.message)
   if (!request.attachment_url) return null
-  if (request.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new Error('Forbidden')
+  if (request.employee_id !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new UserError('Forbidden')
   const { data, error } = await admin.storage.from('leave-attachments').createSignedUrl(request.attachment_url, 60 * 10)
   if (error) throw new Error(error.message)
   return data.signedUrl
@@ -318,9 +319,9 @@ export async function getLeaveAttachmentViewUrl(requestId: string) {
 
 export async function getLeaveHistory(employeeId?: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const targetId = employeeId ?? employee.id
-  if (targetId !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new Error('Forbidden')
+  if (targetId !== employee.id && !MANAGER_ROLES.includes(employee.role)) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
@@ -341,7 +342,7 @@ export async function getLeaveHistory(employeeId?: string) {
 /** Teammates with pending/approved leave on any of the given days (only the days that actually overlap). */
 export async function getTeamConflicts(dates: string[]) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   if (dates.length === 0) return []
   const wanted = new Set(dates)
   const sorted = [...wanted].sort()
@@ -375,7 +376,7 @@ export async function getMyBalance(forEmployeeId?: string) {
 
 export async function getMyRecentRequests(limit = 5) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('leave_requests')
@@ -390,7 +391,7 @@ export async function getMyRecentRequests(limit = 5) {
 
 export async function getNextApprovedLeave() {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const today = todayET()
   const { data, error } = await admin
@@ -509,16 +510,16 @@ export async function approveLeaveRequest(id: string) {
 
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
-  if (request.status !== 'pending') throw new Error('This request has already been decided')
+  if (request.status !== 'pending') throw new UserError('This request has already been decided')
   const overrideUsed = await assertMayDecide(admin, authority, request, 'request')
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
   if (closedHit) {
-    throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
+    throw new UserError(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
   }
 
   const requestDays = (await loadRequestDays(admin, [request])).get(request.id) ?? []
   const overage = await dailyLeaveOverage(admin, request.employee_id, requestDays, id)
-  if (overage) throw new Error(`${overage} Deny this request instead.`)
+  if (overage) throw new UserError(`${overage} Deny this request instead.`)
 
   // Leave that has begun, or starts within the next two pay periods, comes off the balance now (and must be covered by
   // it). Leave planned further out is RESERVED instead: it's judged against the balance projected for its start date
@@ -533,13 +534,13 @@ export async function approveLeaveRequest(id: string) {
     const current = balance ? Number(balance[col]) : 0
     if (!startsLater) {
       if (current < Number(request.hours)) {
-        throw new Error(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs. Leave this close comes off the current balance when approved.`)
+        throw new UserError(`Insufficient balance — employee has ${current} hrs, request is for ${request.hours} hrs. Leave this close comes off the current balance when approved.`)
       }
     } else {
       const ctx = await loadProjectionContext(admin, request.employee_id)
       const proj = projectedAvailable({ type: balanceType, onDate: request.start_date, current, reserved: ctx.reserved.filter(r => r.id !== id), hireDate: ctx.hireDate, ptoUncapped: ctx.ptoUncapped, accrualsOn: ctx.accrualsOn, policy: ctx.policy })
       if (proj.projected < Number(request.hours)) {
-        throw new Error(
+        throw new UserError(
           `Projected balance on ${fmtDate(request.start_date)} is ${proj.projected} hrs (${current} now + ${proj.accrued} accruing − ${proj.reservedBefore} already reserved)` +
           `${ctx.accrualsOn ? '' : ' — accruals are not switched on, so none are projected'}; this request is for ${request.hours} hrs.`,
         )
@@ -585,11 +586,11 @@ export async function denyLeaveRequest(id: string, reason: string) {
   const authority = await requireDecisionAuthority()
   const actor = authority.actor
   const reasonProblem = denyReasonProblem(reason)
-  if (reasonProblem) throw new Error(reasonProblem)
+  if (reasonProblem) throw new UserError(reasonProblem)
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours, submitted_by').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
-  if (request.status !== 'pending') throw new Error('This request has already been decided')
+  if (request.status !== 'pending') throw new UserError('This request has already been decided')
   const overrideUsed = await assertMayDecide(admin, authority, request, 'request')
 
   const { error } = await admin.from('leave_requests').update({
@@ -624,26 +625,26 @@ export async function denyLeaveRequest(id: string, reason: string) {
  */
 export async function cancelMyLeaveRequest(id: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
-  if (request.employee_id !== employee.id) throw new Error('Forbidden')
-  if (request.status === 'denied' || request.status === 'cancelled') throw new Error('This request is already closed.')
+  if (request.employee_id !== employee.id) throw new UserError('Forbidden')
+  if (request.status === 'denied' || request.status === 'cancelled') throw new UserError('This request is already closed.')
 
   const deducted = !!request.balance_deducted_at
   const selfService = request.status === 'pending' || !request.approver_id || request.start_date > todayET()
-  if (!selfService) throw new Error('This leave was approved by an approver and has already started, so it needs your Accounting Manager to change it.')
+  if (!selfService) throw new UserError('This leave was approved by an approver and has already started, so it needs your Accounting Manager to change it.')
 
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
-  if (closedHit) throw new Error(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)
+  if (closedHit) throw new UserError(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)
 
   // Claim the cancel first so a double-click can't restore the balance twice.
   const { data: claimed, error: claimError } = await admin.from('leave_requests')
     .update({ status: 'cancelled', deny_reason: 'Cancelled by employee' })
     .eq('id', id).eq('status', request.status).select('id').maybeSingle()
   if (claimError) throw new Error(claimError.message)
-  if (!claimed) throw new Error('This request was just changed — refresh and try again.')
+  if (!claimed) throw new UserError('This request was just changed — refresh and try again.')
   await logLeaveEvent(admin, { requestId: id, action: 'cancelled', actor: employee, note: `Cancelled by employee (was ${request.status})` })
 
   const col = balanceColumnFor(request.leave_type)

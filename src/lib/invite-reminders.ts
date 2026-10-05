@@ -5,6 +5,7 @@
 // Supabase sending its own email — we send the reminder ourselves so the wording says "reminder". The newest email always works.
 // Not a 'use server' file: it deletes and recreates auth accounts and must only run behind the cron secret.
 
+import { UserError } from '@/lib/user-error'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 import { getAuthUserInfo } from '@/lib/auth-users'
@@ -64,23 +65,23 @@ export async function sendInviteReminders(admin: SupabaseClient, now: Date = new
     try {
       // Replace the unused account (it can't hold anything yet), then mint a fresh invite token without emailing.
       const { error: unlink } = await admin.from('employees').update({ user_id: null }).eq('id', emp.id)
-      if (unlink) throw new Error(unlink.message)
+      if (unlink) throw new UserError(unlink.message)
       const { error: del } = await admin.auth.admin.deleteUser(emp.user_id as string)
-      if (del) { await admin.from('employees').update({ user_id: emp.user_id }).eq('id', emp.id); throw new Error(del.message) }
+      if (del) { await admin.from('employees').update({ user_id: emp.user_id }).eq('id', emp.id); throw new UserError(del.message) }
 
       const { data: gen, error: genError } = await admin.auth.admin.generateLink({
         type: 'invite', email: emp.email,
         options: { data: { first_name: emp.first_name }, redirectTo: `${origin}/set-password` },
       })
-      if (genError || !gen?.user || !gen.properties?.hashed_token) throw new Error(`${genError?.message ?? 'no token returned'} — this person's login was reset; use "Send Invite" in User Management`)
+      if (genError || !gen?.user || !gen.properties?.hashed_token) throw new UserError(`${genError?.message ?? 'no token returned'} — this person's login was reset; use "Send Invite" in User Management`)
       const { error: relink } = await admin.from('employees').update({ user_id: gen.user.id }).eq('id', emp.id)
-      if (relink) throw new Error(relink.message)
+      if (relink) throw new UserError(relink.message)
 
       const link = `${origin}/set-password?token_hash=${encodeURIComponent(gen.properties.hashed_token)}&type=invite`
       const subject = '[CHA Portal] Reminder: please finish setting up your account'
       const sent = await resend.emails.send({ from: FROM, replyTo: PORTAL_REPLY_TO, to: emp.email, subject, html: reminderEmail(emp.first_name ?? '', link) })
       await logEmails(admin, [{ source: 'notification', kind: KIND, recipient_email: emp.email, subject, status: sent.error ? 'failed' : 'sent', error: sent.error?.message ?? null, resend_id: sent.data?.id ?? null }])
-      if (sent.error) throw new Error(sent.error.message)
+      if (sent.error) throw new UserError(sent.error.message)
       out.reminded.push(emp.name as string)
     } catch (e) {
       out.failed.push({ name: emp.name as string, error: e instanceof Error ? e.message : String(e) })

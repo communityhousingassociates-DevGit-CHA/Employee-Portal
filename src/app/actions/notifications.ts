@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
@@ -21,7 +22,7 @@ export async function getMyNotifications(limit = 10): Promise<{ items: PortalNot
 /** Marks the given notices read (or every unread one if no ids are passed). Scoped to the caller's own rows. */
 export async function markNotificationsRead(ids?: string[]) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   let query = admin.from('notifications').update({ read_at: new Date().toISOString() }).eq('employee_id', employee.id).is('read_at', null)
   if (ids && ids.length > 0) query = query.in('id', ids)

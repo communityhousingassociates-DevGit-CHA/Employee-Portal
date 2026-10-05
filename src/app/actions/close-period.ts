@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
@@ -14,11 +15,11 @@ const MAX_SPAN_DAYS = 92
 
 function validateRange(start: string, end: string) {
   const iso = /^\d{4}-\d{2}-\d{2}$/
-  if (!iso.test(start) || !iso.test(end)) throw new Error('Choose a start and end date')
-  if (end < start) throw new Error('The end date can’t be before the start date')
-  if (end > todayET()) throw new Error('You can only close dates up to today')
+  if (!iso.test(start) || !iso.test(end)) throw new UserError('Choose a start and end date')
+  if (end < start) throw new UserError('The end date can’t be before the start date')
+  if (end > todayET()) throw new UserError('You can only close dates up to today')
   const span = (new Date(`${end}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86400000 + 1
-  if (span > MAX_SPAN_DAYS) throw new Error(`Close at most ${MAX_SPAN_DAYS} days at a time`)
+  if (span > MAX_SPAN_DAYS) throw new UserError(`Close at most ${MAX_SPAN_DAYS} days at a time`)
 }
 
 /** Active closed ranges — dates only, so any signed-in employee can read them (timesheet and leave forms need to know). */
@@ -116,7 +117,7 @@ export async function closePeriod(start: string, end: string, note: string) {
 export async function liftClosure(id: string, note: string) {
   const actor = await requireRole(REOPEN_OVERRIDE_ROLES)
   const trimmed = note.trim()
-  if (!trimmed) throw new Error('Add a note explaining why the closure is being lifted')
+  if (!trimmed) throw new UserError('Add a note explaining why the closure is being lifted')
   const admin = createAdminClient()
   const { error } = await admin
     .from('closed_periods')

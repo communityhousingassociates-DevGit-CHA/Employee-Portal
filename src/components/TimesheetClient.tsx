@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
@@ -152,7 +153,7 @@ export default function TimesheetClient({
       setSaveStatus('idle')
     } catch (e: unknown) {
       setSaveStatus('error')
-      setError(e instanceof Error ? e.message : 'Failed to save changes')
+      setError(errMsg(e, 'Failed to save changes'))
       throw e
     } finally {
       savingRef.current = false
@@ -204,7 +205,7 @@ export default function TimesheetClient({
       setRows(normalizeRows(r, isSalaried))
       setExpenses(exp)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load period')
+      setError(errMsg(e, 'Failed to load period'))
     } finally {
       setLoading(false)
     }
@@ -236,7 +237,7 @@ export default function TimesheetClient({
       setRows(normalizeRows(fresh.rows, isSalaried))
       setSigned(false)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to submit timesheet')
+      setError(errMsg(e, 'Failed to submit timesheet'))
     } finally {
       setSubmitting(false)
     }
@@ -251,7 +252,7 @@ export default function TimesheetClient({
       setShowCorrection(false)
       setCorrectionNote('')
     } catch (e: unknown) {
-      setCorrectionError(e instanceof Error ? e.message : 'Failed to send request')
+      setCorrectionError(errMsg(e, 'Failed to send request'))
     } finally {
       setCorrectionBusy(false)
     }

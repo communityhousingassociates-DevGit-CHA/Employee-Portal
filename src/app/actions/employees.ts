@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -173,7 +174,7 @@ export async function sendPasswordReset(id: string) {
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
-  if (!employee.user_id) throw new Error('This employee has not been invited yet — no account to reset.')
+  if (!employee.user_id) throw new UserError('This employee has not been invited yet — no account to reset.')
 
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? ''
   const { error: resetError } = await admin.auth.resetPasswordForEmail(employee.email, {
@@ -199,7 +200,7 @@ export async function setTemporaryPassword(id: string): Promise<string> {
     .eq('id', id)
     .single()
   if (error) throw new Error(error.message)
-  if (!employee.user_id) throw new Error('This employee has not been invited yet — no account to set a password for.')
+  if (!employee.user_id) throw new UserError('This employee has not been invited yet — no account to set a password for.')
 
   const tempPassword = `CHA-${randomBytes(6).toString('hex')}!`
   const { error: pwError } = await admin.auth.admin.updateUserById(employee.user_id, { password: tempPassword })
@@ -248,11 +249,11 @@ const TRAVEL_ACCESS_ROLES = ['admin', 'ceo', 'accounting_manager'] as const
 /** Lets someone sign in from anywhere for `days` days (a business trip, a phone on an odd carrier). 0 clears it. Records who granted it. */
 export async function setGeofenceOverride(id: string, days: number) {
   const me = await requireRole([...TRAVEL_ACCESS_ROLES])
-  if (!Number.isFinite(days) || days < 0 || days > 30) throw new Error('Choose between 0 and 30 days.')
+  if (!Number.isFinite(days) || days < 0 || days > 30) throw new UserError('Choose between 0 and 30 days.')
   const admin = createAdminClient()
   const { data: target, error: readError } = await admin.from('employees').select('login_geofence_regions').eq('id', id).single()
   if (readError) throw new Error(readError.message)
-  if ((target.login_geofence_regions as string[] | null)?.includes('*')) throw new Error('This account is already allowed from anywhere.')
+  if ((target.login_geofence_regions as string[] | null)?.includes('*')) throw new UserError('This account is already allowed from anywhere.')
   const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null
   const { error } = await admin.from('employees').update({ geofence_override_until: until, geofence_override_by: days > 0 ? me.id : null }).eq('id', id)
   if (error) throw new Error(error.message)
@@ -384,12 +385,12 @@ const BULK_EDITABLE_FIELDS: BulkEditableField[] = ['role', 'employee_type', 'sta
  * supplies one of their fixed options.
  */
 export async function bulkEditEmployees(ids: string[], field: BulkEditableField, value: string | null) {
-  if (!BULK_EDITABLE_FIELDS.includes(field)) throw new Error('Not a bulk-editable field')
+  if (!BULK_EDITABLE_FIELDS.includes(field)) throw new UserError('Not a bulk-editable field')
   const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
   const targetIds = ids.filter(id => id !== me.id)
   if (targetIds.length === 0) return
-  if (field === 'is_active' && value !== 'true' && value !== 'false') throw new Error('Status must be active or inactive')
+  if (field === 'is_active' && value !== 'true' && value !== 'false') throw new UserError('Status must be active or inactive')
   const normalized = field === 'is_active' ? value === 'true' : field === 'employee_type' && value ? value.toLowerCase() : value
   const { error } = await admin.from('employees').update({ [field]: normalized }).in('id', targetIds)
   if (error) throw new Error(error.message)

@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { todayET } from '@/lib/pay-periods'
 import { getCurrentEmployee } from '@/lib/auth/session'
@@ -8,7 +9,7 @@ import { getTestAccountIds } from '@/lib/test-accounts'
 
 export async function getLeaveEventsInRange(startIso: string, endIso: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   let query = admin
     .from('leave_requests')
@@ -44,7 +45,7 @@ export async function getLeaveEventsInRange(startIso: string, endIso: string) {
 
 export async function getUpcomingLeave(limit = 10) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const today = todayET()
   let query = admin

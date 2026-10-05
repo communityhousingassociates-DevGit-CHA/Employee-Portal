@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
@@ -162,7 +163,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setEmployees(es => es.map(x => x.id === e.id ? { ...x, is_test_account: makingTest, status: makingTest ? 'test' : (x.is_active ? 'active' : 'archived') } : x))
       showToast(makingTest ? `${e.name} marked as a test account` : `${e.name} restored to ${e.is_active ? 'active' : 'inactive'}`)
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to update test-account flag')
+      showToast(errMsg(err, 'Failed to update test-account flag'))
     }
   }
 
@@ -214,7 +215,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setShowForm(false)
       startTransition(() => router.refresh())
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setError(errMsg(e, 'Something went wrong'))
     }
   }
 
@@ -244,7 +245,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       showToast(days > 0 ? `Travel access granted for ${days} days` : 'Travel access cleared')
       startTransition(() => router.refresh())
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Could not update travel access')
+      showToast(errMsg(err, 'Could not update travel access'))
     } finally {
       setBusy(false)
     }
@@ -258,7 +259,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setSelected(new Set())
       startTransition(() => router.refresh())
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to send invites')
+      showToast(errMsg(err, 'Failed to send invites'))
     } finally {
       setBusy(false)
       setConfirmBulk(null)
@@ -274,7 +275,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} ${active ? 'restored' : 'deactivated'}`)
       setSelected(new Set())
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Bulk action failed')
+      showToast(errMsg(err, 'Bulk action failed'))
     } finally {
       setBusy(false)
     }
@@ -299,7 +300,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setBulkEditOpen(false)
       startTransition(() => router.refresh())
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Bulk edit failed')
+      showToast(errMsg(err, 'Bulk edit failed'))
     } finally {
       setBusy(false)
     }
@@ -315,7 +316,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       showToast(`${ids.length} employee${ids.length === 1 ? '' : 's'} deleted`)
       setSelected(new Set())
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Bulk delete failed')
+      showToast(errMsg(err, 'Bulk delete failed'))
     } finally {
       setBusy(false)
       setConfirmBulk(null)
@@ -327,7 +328,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       await sendPasswordReset(e.id)
       showToast(`Password reset link sent to ${e.email}`)
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to send reset link')
+      showToast(errMsg(err, 'Failed to send reset link'))
     }
   }
 
@@ -337,7 +338,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       setCopied(false)
       setTempPasswordResult({ email: e.email, password })
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to set temporary password')
+      showToast(errMsg(err, 'Failed to set temporary password'))
     }
   }
 

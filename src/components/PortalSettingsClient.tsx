@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useTransition } from 'react'
 import MileageRateClient from '@/components/MileageRateClient'
 import { savePolicySettings, saveGeofenceSettings } from '@/app/actions/portal-settings'
@@ -63,7 +64,7 @@ export default function PortalSettingsClient({
         const until = days > 0 ? new Date(Date.now() + days * 86400000).toISOString() : null
         setTravelRows(rs => rs.map(r => r.id === id ? { ...r, override_until: until, granted_by: until ? 'you' : null } : r))
         setTravelMsg(days > 0 ? `Travel access granted for ${days} days.` : 'Travel access cleared.')
-      } catch (e) { setTravelMsg(e instanceof Error ? e.message : 'Could not update travel access') }
+      } catch (e) { setTravelMsg(errMsg(e, 'Could not update travel access')) }
     })
   }
   const [geoEnabled, setGeoEnabled] = useState(initialGeofence.enabled)
@@ -74,7 +75,7 @@ export default function PortalSettingsClient({
     setGeoMsg(null)
     startGeo(async () => {
       try { const r = await saveGeofenceSettings({ enabled: geoEnabled, regionsText: geoRegions }); setGeoEnabled(r.enabled); setGeoRegions(r.regions.join(', ')); setGeoMsg({ ok: true, text: 'Saved — applies to the next request.' }) }
-      catch (e) { setGeoMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save' }) }
+      catch (e) { setGeoMsg({ ok: false, text: errMsg(e, 'Could not save') }) }
     })
   }
 
@@ -100,7 +101,7 @@ export default function PortalSettingsClient({
         setSaved(true)
         setTimeout(() => setSaved(false), 4000)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not save settings')
+        setError(errMsg(e, 'Could not save settings'))
       }
     })
   }

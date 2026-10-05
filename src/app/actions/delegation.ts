@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCurrentEmployee } from '@/lib/auth/session'
@@ -13,7 +14,7 @@ export type BackupCandidate = { id: string; name: string }
 
 async function requireFinalApprover() {
   const actor = await getCurrentEmployee()
-  if (!actor || !FINAL_APPROVER_ROLES.includes(actor.role)) throw new Error('Only the CEO can name a backup approver.')
+  if (!actor || !FINAL_APPROVER_ROLES.includes(actor.role)) throw new UserError('Only the CEO can name a backup approver.')
   return actor
 }
 
@@ -36,16 +37,16 @@ export async function getBackupApproverState(): Promise<{ backups: BackupApprove
 /** Names `delegateId` as backup approver for startsOn–endsOn (inclusive). CEO only; the backup is told by bell + email. */
 export async function setBackupApprover(delegateId: string, startsOn: string, endsOn: string, note: string) {
   const actor = await requireFinalApprover()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn) || !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) throw new Error('Choose a start and end date.')
-  if (endsOn < startsOn) throw new Error('The end date must be on or after the start date.')
-  if (endsOn < todayET()) throw new Error('That period is already over.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn) || !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) throw new UserError('Choose a start and end date.')
+  if (endsOn < startsOn) throw new UserError('The end date must be on or after the start date.')
+  if (endsOn < todayET()) throw new UserError('That period is already over.')
   const admin = createAdminClient()
   const { data: delegate } = await admin.from('employees').select('id, name, role, is_active, is_test_account').eq('id', delegateId).maybeSingle()
-  if (!delegate || !delegate.is_active || delegate.is_test_account || !APPROVER_ROLES.includes(delegate.role) || delegate.id === actor.id) throw new Error('Choose a manager to act as backup.')
+  if (!delegate || !delegate.is_active || delegate.is_test_account || !APPROVER_ROLES.includes(delegate.role) || delegate.id === actor.id) throw new UserError('Choose a manager to act as backup.')
 
   // One backup per overlapping window keeps "who can decide today" unambiguous for the audit trail.
   const { data: overlap } = await admin.from('approval_delegations').select('id').eq('delegator_id', actor.id).eq('delegate_id', delegateId).is('revoked_at', null).lte('starts_on', endsOn).gte('ends_on', startsOn)
-  if (overlap && overlap.length) throw new Error(`${delegate.name} is already your backup for part of that period — revoke it first.`)
+  if (overlap && overlap.length) throw new UserError(`${delegate.name} is already your backup for part of that period — revoke it first.`)
 
   const { error } = await admin.from('approval_delegations').insert({ delegator_id: actor.id, delegate_id: delegateId, starts_on: startsOn, ends_on: endsOn, note: note.trim() || null })
   if (error) throw new Error(error.message)
@@ -65,7 +66,7 @@ export async function revokeBackupApprover(id: string) {
   const actor = await requireFinalApprover()
   const admin = createAdminClient()
   const { data: row } = await admin.from('approval_delegations').select('delegate_id').eq('id', id).eq('delegator_id', actor.id).is('revoked_at', null).maybeSingle()
-  if (!row) throw new Error('That backup approval no longer exists.')
+  if (!row) throw new UserError('That backup approval no longer exists.')
   const { error } = await admin.from('approval_delegations').update({ revoked_at: new Date().toISOString() }).eq('id', id)
   if (error) throw new Error(error.message)
   await notifyEmployee(admin, row.delegate_id as string, {

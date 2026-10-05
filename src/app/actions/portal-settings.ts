@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
@@ -36,7 +37,7 @@ export async function savePolicySettings(input: PolicySettings): Promise<PolicyS
   for (const key of POLICY_KEYS) {
     const v = Number(input[key])
     const { min, max, label } = LIMITS[key]
-    if (!Number.isFinite(v) || v < min || v > max) throw new Error(`${label} must be a number between ${min} and ${max}.`)
+    if (!Number.isFinite(v) || v < min || v > max) throw new UserError(`${label} must be a number between ${min} and ${max}.`)
     values[key] = Math.round(v * 100) / 100
   }
   const admin = createAdminClient()
@@ -61,7 +62,7 @@ export async function getGeofenceSettings(): Promise<GeofenceSettings> {
 export async function saveGeofenceSettings(input: { enabled: boolean; regionsText: string }): Promise<GeofenceSettings> {
   const me = await requireSuperAdmin()
   const regions = parseRegions(input.regionsText)
-  if (input.enabled && (!regions || regions.some(r => !/^[A-Z]{2}$/.test(r)))) throw new Error('Enter two-letter US state codes separated by commas, e.g. MD, DC, VA, PA, DE.')
+  if (input.enabled && (!regions || regions.some(r => !/^[A-Z]{2}$/.test(r)))) throw new UserError('Enter two-letter US state codes separated by commas, e.g. MD, DC, VA, PA, DE.')
   const admin = createAdminClient()
   const { data: current } = await admin.from('portal_settings').select('values').maybeSingle()
   const values = { ...((current?.values as Record<string, unknown>) ?? {}), geofence_enabled: !!input.enabled, ...(regions ? { geofence_regions: regions } : {}) }

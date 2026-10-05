@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createTag, updateTag, setTagActive } from '@/app/actions/tags'
@@ -38,7 +39,7 @@ export default function TagsAdminClient({ initialTags }: { initialTags: ManagedT
       else { await createTag(form); showToast('Tag added') }
       setShowForm(false)
       startTransition(() => router.refresh())
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Something went wrong') }
+    } catch (e: unknown) { setError(errMsg(e, 'Something went wrong')) }
   }
 
   async function toggleActive(t: ManagedTag) {
@@ -46,7 +47,7 @@ export default function TagsAdminClient({ initialTags }: { initialTags: ManagedT
       await setTagActive(t.id, !t.is_active)
       showToast(t.is_active ? `“${t.name}” retired` : `“${t.name}” restored`)
       startTransition(() => router.refresh())
-    } catch (e: unknown) { showToast(e instanceof Error ? e.message : 'Something went wrong') }
+    } catch (e: unknown) { showToast(errMsg(e, 'Something went wrong')) }
   }
 
   return (

@@ -1,5 +1,6 @@
 'use client'
 
+import { errMsg } from '@/lib/user-error'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { closePeriod, liftClosure, previewClosePeriod, type ClosePreview } from '@/app/actions/close-period'
@@ -53,7 +54,7 @@ export default function ClosePeriodClient({ history, canLift, today, recentPerio
 
   async function handlePreview() {
     setBusy(true); setError('')
-    try { setPreview(await previewClosePeriod(start, end)) } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to check these dates'); setPreview(null) } finally { setBusy(false) }
+    try { setPreview(await previewClosePeriod(start, end)) } catch (e: unknown) { setError(errMsg(e, 'Failed to check these dates')); setPreview(null) } finally { setBusy(false) }
   }
 
   async function handleClose() {
@@ -63,7 +64,7 @@ export default function ClosePeriodClient({ history, canLift, today, recentPerio
       showToast(`Closed ${fmtDateRange(start, end)}`)
       setStart(''); setEnd(''); setNote(''); setPreview(null)
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to close') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed to close')) } finally { setBusy(false) }
   }
 
   async function handleLift(id: string) {
@@ -73,7 +74,7 @@ export default function ClosePeriodClient({ history, canLift, today, recentPerio
       showToast('Closure lifted')
       setLifting(null); setLiftNote('')
       router.refresh()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed to lift') } finally { setBusy(false) }
+    } catch (e: unknown) { setError(errMsg(e, 'Failed to lift')) } finally { setBusy(false) }
   }
 
   const unfinished = preview ? preview.drafts.length + preview.submitted.length + preview.pendingLeave.length : 0

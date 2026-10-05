@@ -1,5 +1,6 @@
 'use server'
 
+import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
@@ -23,11 +24,11 @@ import type { Role, Timesheet, TimesheetAudit, TimesheetEventAction, TimesheetFo
 
 async function requireOwnTimesheet(timesheetId: string) {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data: timesheet, error } = await admin.from('timesheets').select('employee_id').eq('id', timesheetId).single()
   if (error) throw new Error(error.message)
-  if (timesheet.employee_id !== employee.id) throw new Error('Forbidden')
+  if (timesheet.employee_id !== employee.id) throw new UserError('Forbidden')
   return employee
 }
 
@@ -84,7 +85,7 @@ export async function getOrCreateTimesheet(periodStart: string, periodEnd: strin
 export async function getTimesheetForEmployeePeriod(employeeId: string, periodStart: string, periodEnd: string) {
   // Your own timesheet, always; anyone else's only for the named payroll viewers (Nico, Carrileen, super admin).
   const viewer = await getCurrentEmployee()
-  if (!viewer || (viewer.id !== employeeId && !canViewTimesheetReports(viewer))) throw new Error('Forbidden')
+  if (!viewer || (viewer.id !== employeeId && !canViewTimesheetReports(viewer))) throw new UserError('Forbidden')
   const admin = createAdminClient()
 
   const { data: timesheet, error: findError } = await admin
@@ -124,8 +125,8 @@ async function validateRowTags(admin: ReturnType<typeof createAdminClient>, time
   for (const r of rows) {
     const ids = [...new Set(r.tag_ids)]
     for (const id of ids) {
-      if (!activeById.has(id)) throw new Error('One of the selected tags no longer exists')
-      if (!activeById.get(id) && !(currentByRow.get(r.id) ?? []).includes(id)) throw new Error('One of the selected tags has been retired and can no longer be applied')
+      if (!activeById.has(id)) throw new UserError('One of the selected tags no longer exists')
+      if (!activeById.get(id) && !(currentByRow.get(r.id) ?? []).includes(id)) throw new UserError('One of the selected tags has been retired and can no longer be applied')
     }
     out.set(r.id, ids)
   }
@@ -164,7 +165,7 @@ async function assertNotClosed(admin: ReturnType<typeof createAdminClient>, ts: 
   if (ts.return_reason) return
   const hit = closedRangeOverlapping(ts.period_start, ts.period_end, await loadClosedRanges(admin))
   if (hit) {
-    throw new Error(`This pay period was closed by accounting (${fmtDate(hit.start)} – ${fmtDate(hit.end)}), so its timesheet can no longer be changed. Contact your Accounting Manager.`)
+    throw new UserError(`This pay period was closed by accounting (${fmtDate(hit.start)} – ${fmtDate(hit.end)}), so its timesheet can no longer be changed. Contact your Accounting Manager.`)
   }
 }
 
@@ -178,7 +179,7 @@ export async function saveTimesheetDraft(
   // Once submitted (or approved) the sheet is locked — the reviewer must be looking at what the employee signed.
   const { data: current, error: statusError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
   if (statusError) throw new Error(statusError.message)
-  if (current.status !== 'draft') throw new Error('This timesheet has been submitted and can no longer be edited')
+  if (current.status !== 'draft') throw new UserError('This timesheet has been submitted and can no longer be edited')
   await assertNotClosed(admin, current)
   const tagIdsByRow = await validateRowTags(admin, timesheetId, rows.filter(r => r.tag_ids).map(r => ({ id: r.id, tag_ids: r.tag_ids! })))
   for (const row of rows) {
@@ -205,7 +206,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
 
   const { data: current, error: currentError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
   if (currentError) throw new Error(currentError.message)
-  if (current.status !== 'draft') throw new Error('This timesheet has already been submitted')
+  if (current.status !== 'draft') throw new UserError('This timesheet has already been submitted')
   await assertNotClosed(admin, current)
 
   // Leave hours only appear on a timesheet once a request is decided, so submitting while one is still pending
@@ -221,7 +222,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
   if (pendingLeave && pendingLeave.length > 0) {
     const first = pendingLeave[0]
     const range = first.start_date === first.end_date ? fmtDate(first.start_date) : `${fmtDate(first.start_date)} – ${fmtDate(first.end_date)}`
-    throw new Error(
+    throw new UserError(
       `${behalf ? `${employee.name} has` : 'You have'} ${pendingLeave.length === 1 ? 'a pending leave request' : `${pendingLeave.length} pending leave requests`} in this pay period (${first.leave_type}, ${range}). ` +
       `Ask your approver to decide ${pendingLeave.length === 1 ? 'it' : 'them'} first so the leave appears on this timesheet, then submit.`,
     )
@@ -328,9 +329,9 @@ async function getReviewableTimesheet(admin: ReturnType<typeof createAdminClient
   const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end, submitted_by').eq('id', id).single()
   if (error) throw new Error(error.message)
   const overrideUsed = authority ? await assertMayDecide(admin, authority, data, 'timesheet') : false
-  if (data.employee_id === actor.id && !canSelfApprove(actor)) throw new Error("You can't review your own timesheet — another approver needs to.")
-  if (data.submitted_by === actor.id && !canSelfApprove(actor)) throw new Error("You completed this timesheet on the employee's behalf, so another approver needs to review it.")
-  if (data.status !== expected) throw new Error(expected === 'submitted' ? 'This timesheet is no longer awaiting review' : 'Only an approved timesheet can be reopened this way')
+  if (data.employee_id === actor.id && !canSelfApprove(actor)) throw new UserError("You can't review your own timesheet — another approver needs to.")
+  if (data.submitted_by === actor.id && !canSelfApprove(actor)) throw new UserError("You completed this timesheet on the employee's behalf, so another approver needs to review it.")
+  if (data.status !== expected) throw new UserError(expected === 'submitted' ? 'This timesheet is no longer awaiting review' : 'Only an approved timesheet can be reopened this way')
   return { ...data, overrideUsed }
 }
 
@@ -371,9 +372,9 @@ export async function approveTimesheet(id: string) {
 }
 
 function requireReason(reasonCode: string, note: string) {
-  if (!REOPEN_REASON_CODES.some(c => c.value === reasonCode)) throw new Error('Choose a reason code')
+  if (!REOPEN_REASON_CODES.some(c => c.value === reasonCode)) throw new UserError('Choose a reason code')
   const trimmed = note.trim()
-  if (!trimmed) throw new Error('Add notes explaining why')
+  if (!trimmed) throw new UserError('Add notes explaining why')
   return trimmed
 }
 
@@ -388,7 +389,7 @@ export async function returnTimesheet(id: string, reasonCode: string, note: stri
   const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted')
   const returnLock = periodLockReason({ start: timesheet.period_start, end: timesheet.period_end }, await loadClosedRanges(admin))
   if (returnLock === 'closed' && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
-    throw new Error('Accounting has closed this period, so only the CEO can return it (CEO override).')
+    throw new UserError('Accounting has closed this period, so only the CEO can return it (CEO override).')
   }
   const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
   const { error } = await admin
@@ -425,7 +426,7 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
   const lockReason = periodLockReason({ start: timesheet.period_start, end: timesheet.period_end }, await loadClosedRanges(admin))
   const locked = lockReason !== null
   if (locked && !REOPEN_OVERRIDE_ROLES.includes(actor.role)) {
-    throw new Error('Accounting has closed this period. Only the CEO can reopen it (CEO override).')
+    throw new UserError('Accounting has closed this period. Only the CEO can reopen it (CEO override).')
   }
 
   const reason = `${reopenReasonLabel(reasonCode)}: ${trimmed}`
@@ -455,11 +456,11 @@ export async function reopenTimesheet(id: string, reasonCode: string, note: stri
 export async function requestTimesheetCorrection(timesheetId: string, note: string) {
   const employee = await requireOwnTimesheet(timesheetId)
   const trimmed = note.trim()
-  if (!trimmed) throw new Error('Describe what needs to be corrected')
+  if (!trimmed) throw new UserError('Describe what needs to be corrected')
   const admin = createAdminClient()
   const { data: ts, error: tsError } = await admin.from('timesheets').select('status, period_start, period_end').eq('id', timesheetId).single()
   if (tsError) throw new Error(tsError.message)
-  if (ts.status === 'draft') throw new Error('This timesheet is still open — you can edit it directly')
+  if (ts.status === 'draft') throw new UserError('This timesheet is still open — you can edit it directly')
 
   const { error } = await admin
     .from('timesheets')
@@ -528,7 +529,7 @@ export async function getTimesheetReminderStatus(): Promise<TimesheetReminder> {
 /** Dismisses the topbar timesheet alert for today only — a fresh reminder can still show tomorrow. */
 export async function dismissTimesheetReminder() {
   const employee = await getCurrentEmployee()
-  if (!employee) throw new Error('Forbidden')
+  if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ timesheet_reminder_dismissed_at: new Date().toISOString() }).eq('id', employee.id)
   if (error) throw new Error(error.message)
