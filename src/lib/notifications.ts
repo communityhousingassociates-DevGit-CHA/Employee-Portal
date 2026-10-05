@@ -1,7 +1,8 @@
 import { Resend } from 'resend'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NotificationKind, Role } from '@/types'
-import { NOTIFICATION_TEST_MODE, APPROVER_ALERT_COPY_TO } from '@/lib/constants/approvals'
+import { NOTIFICATION_TEST_MODE, APPROVER_ALERT_COPY_TO, FINAL_APPROVER_ROLES } from '@/lib/constants/approvals'
+import { todayET } from '@/lib/pay-periods'
 import { PORTAL_REPLY_TO } from '@/lib/constants/email'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
@@ -136,9 +137,20 @@ export async function notify(
  * submitted and minus dev/test accounts. If that leaves nobody, fall back to
  * including test accounts (same roles) so a submission is never silently unrouted.
  */
+/** Employees the CEO has named as backup approver for today (see approval_delegations). */
+async function getActiveDelegateIds(admin: SupabaseClient): Promise<string[]> {
+  const today = todayET()
+  const { data } = await admin.from('approval_delegations').select('delegate_id').is('revoked_at', null).lte('starts_on', today).gte('ends_on', today)
+  return [...new Set((data ?? []).map(d => d.delegate_id as string))]
+}
+
 export async function getApprovers(admin: SupabaseClient, excludeEmployeeId: string, roles: Role[]): Promise<Recipient[]> {
-  const base = () =>
-    admin.from('employees').select('id, email, name, role').in('role', roles).eq('is_active', true).neq('id', excludeEmployeeId)
+  // Alerts meant for the final approver (CEO) also reach whoever he has named as backup for today.
+  const delegateIds = roles.some(r => FINAL_APPROVER_ROLES.includes(r)) ? await getActiveDelegateIds(admin) : []
+  const base = () => {
+    const q = admin.from('employees').select('id, email, name, role').eq('is_active', true).neq('id', excludeEmployeeId)
+    return delegateIds.length ? q.or(`role.in.(${roles.join(',')}),id.in.(${delegateIds.join(',')})`) : q.in('role', roles)
+  }
   // In test mode the dev/test accounts are legitimate approvers (that's who is doing the testing).
   if (NOTIFICATION_TEST_MODE.enabled) {
     const { data: all } = await base()

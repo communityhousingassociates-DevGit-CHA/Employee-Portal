@@ -57,7 +57,7 @@ function daysUntil(iso: string) {
   return `in ${diff} days`
 }
 
-function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided: () => void }) {
+function LeaveApprovalCard({ item, canDecide, onDecided }: { item: LeaveApproval; canDecide: boolean; onDecided: () => void }) {
   const [confirming, setConfirming] = useState<'approve' | 'deny' | null>(null)
   const [denyReason, setDenyReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -121,7 +121,7 @@ function LeaveApprovalCard({ item, onDecided }: { item: LeaveApproval; onDecided
               </div>
             </div>
           </div>
-          {!confirming && (
+          {!confirming && canDecide && (
             <div className="flex gap-2 flex-shrink-0">
               <button onClick={() => setConfirming('deny')} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">Deny</button>
               <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
@@ -255,7 +255,7 @@ function ReviewedLeaveCard({ item }: { item: LeaveApproval }) {
   )
 }
 
-function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: () => void }) {
+function ExpenseCard({ item, canDecide, onDecided }: { item: ExpenseApproval; canDecide: boolean; onDecided: () => void }) {
   const [confirming, setConfirming] = useState<'approve' | 'deny' | null>(null)
   const [denyReason, setDenyReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -280,7 +280,7 @@ function ExpenseCard({ item, onDecided }: { item: ExpenseApproval; onDecided: ()
           {item.submitted_by_name && <p className="mt-1"><span title={item.on_behalf_note ?? undefined} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">Exception: entered by {item.submitted_by_name} on the employee’s behalf{item.on_behalf_reason_code ? ` — ${onBehalfReasonLabel(item.on_behalf_reason_code)}` : ''}</span></p>}
           <p className="text-[12px] text-gray-400 mt-0.5">{item.expense_date} · ${Number(item.amount).toFixed(2)}{item.description ? ` · ${item.description}` : ''}</p>
         </div>
-        {!confirming && (
+        {!confirming && canDecide && (
           <div className="flex gap-2 flex-shrink-0">
             <button onClick={() => setConfirming('deny')} className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors">Deny</button>
             <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
@@ -327,7 +327,7 @@ const EVENT_LABELS: Record<string, string> = {
   tags_changed: 'Tags adjusted',
 }
 
-function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; customTags: TimesheetTag[]; onDecided: () => void }) {
+function TimesheetCard({ item, mode, viewerRole, canDecide, customTags, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; canDecide: boolean; customTags: TimesheetTag[]; onDecided: () => void }) {
   const [confirming, setConfirming] = useState<'approve' | 'reopen' | null>(null)
   const [code, setCode] = useState('')
   const [note, setNote] = useState('')
@@ -400,7 +400,7 @@ function TimesheetCard({ item, mode, viewerRole, customTags, onDecided }: { item
               ) : (
                 <span className="text-[11px] text-gray-400 max-w-[14rem] text-right">This period is locked — only the CEO can reopen it.</span>
               )}
-              {mode === 'pending' && (
+              {mode === 'pending' && canDecide && (
                 <button onClick={() => setConfirming('approve')} className="text-[12px] font-semibold px-4 py-1.5 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e] transition-colors">✓ Approve</button>
               )}
             </div>
@@ -529,8 +529,12 @@ export default function ApprovalsClient({
   initialPendingTimesheets,
   initialApprovedTimesheets,
   viewerRole,
+  canDecide,
+  backupFor,
   customTags,
 }: {
+  canDecide: boolean
+  backupFor: string | null
   approverName: string
   initialPendingLeave: LeaveApproval[]
   initialReviewedLeave: LeaveApproval[]
@@ -568,6 +572,8 @@ export default function ApprovalsClient({
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Approvals</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">{approverName}</p>
+          {backupFor && <p className="text-[12px] font-semibold text-amber-700 mt-1">You are {backupFor}&apos;s backup approver right now — your decisions are marked as made on his behalf.</p>}
+          {!canDecide && <p className="text-[12px] text-gray-500 mt-1 max-w-xl">Final approval of leave, expenses and timesheets belongs to the CEO. You can still send a timesheet back for correction or reopen one; approving and denying is his unless he names you as backup.</p>}
         </div>
         {category === 'leave' && pendingLeave.length > 0 && (
           <div className="flex gap-4 text-right flex-wrap">
@@ -618,7 +624,7 @@ export default function ApprovalsClient({
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingLeave.map(a => <LeaveApprovalCard key={a.id} item={a} onDecided={refresh} />)}
+                {pendingLeave.map(a => <LeaveApprovalCard key={a.id} item={a} canDecide={canDecide} onDecided={refresh} />)}
               </div>
             )
           )}
@@ -647,7 +653,7 @@ export default function ApprovalsClient({
           </div>
         ) : (
           <div className="space-y-4">
-            {pendingExpenses.map(e => <ExpenseCard key={e.id} item={e} onDecided={refresh} />)}
+            {pendingExpenses.map(e => <ExpenseCard key={e.id} item={e} canDecide={canDecide} onDecided={refresh} />)}
           </div>
         )
       )}
@@ -671,7 +677,7 @@ export default function ApprovalsClient({
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="pending" viewerRole={viewerRole} customTags={customTags} onDecided={refresh} />)}
+                {pendingTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="pending" viewerRole={viewerRole} canDecide={canDecide} customTags={customTags} onDecided={refresh} />)}
               </div>
             )
           )}
@@ -684,7 +690,7 @@ export default function ApprovalsClient({
             ) : (
               <div className="space-y-4">
                 <p className="text-[12px] text-gray-500">Reopen an approved timesheet to correct it. While the period is open any approver can; once accounting has closed it, only the CEO (override). A reason code and notes are always required and logged.</p>
-                {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} customTags={customTags} onDecided={refresh} />)}
+                {approvedTimesheets.map(t => <TimesheetCard key={t.id} item={t} mode="approved" viewerRole={viewerRole} canDecide={canDecide} customTags={customTags} onDecided={refresh} />)}
               </div>
             )
           )}

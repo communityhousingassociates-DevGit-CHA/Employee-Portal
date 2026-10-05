@@ -5,7 +5,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { loadPolicy } from '@/lib/policy-server'
-import { APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { FINAL_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { getApprovers, notify } from '@/lib/notifications'
 import { todayET } from '@/lib/pay-periods'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -68,23 +68,23 @@ export async function sendApprovalDigest(admin: SupabaseClient): Promise<{ sent:
   if (leaveItems.length === 0 && groups.every(g => g.items.length === 0) && inviteLines.length === 0) return { sent: 0 }
 
   // Managers who approve, plus super admins (who are the ones able to resend invites).
-  const approvers = await getApprovers(admin, NOBODY, APPROVER_ROLES)
+  const approvers = await getApprovers(admin, NOBODY, FINAL_APPROVER_ROLES) // the CEO, plus today's backup if he named one
   const { data: supers } = await admin.from('employees').select('id, email, name, role').eq('is_super_admin', true).eq('is_active', true)
   const recipients = [...approvers, ...((supers ?? []) as typeof approvers).filter(sa => !approvers.some(a => a.id === sa.id))]
 
   let sent = 0
   for (const person of recipients) {
-    const canApprove = APPROVER_ROLES.includes(person.role as never)
+    const canApprove = approvers.some(a => a.id === person.id)
     const sections: string[] = []
     let leaveCount = 0
     if (canApprove) {
       // Your own items only count if you're allowed to approve them yourself.
-      const mineLeave = leaveItems.filter(i => canSelfApprove(person.role ?? 'employee') || i.employeeId !== person.id)
+      const mineLeave = leaveItems.filter(i => canSelfApprove({ role: person.role ?? 'employee' }) || i.employeeId !== person.id)
       leaveCount = mineLeave.length
       if (mineLeave.length > 0) sections.push(`Leave requests to review (${mineLeave.length}):\n${mineLeave.map(i => `  • ${i.line}`).join('\n')}`)
       const other: string[] = []
       for (const g of groups) {
-        const mine = g.items.filter(i => canSelfApprove(person.role ?? 'employee') || i.employeeId !== person.id)
+        const mine = g.items.filter(i => canSelfApprove({ role: person.role ?? 'employee' }) || i.employeeId !== person.id)
         if (mine.length === 0) continue
         const oldest = mine.reduce((a, b) => (b.ageDays > a.ageDays ? b : a))
         other.push(`  • ${g.label}: ${mine.length} waiting more than ${REMINDER_AFTER_DAYS} days (oldest: ${oldest.name}, ${oldest.ageDays} days)`)

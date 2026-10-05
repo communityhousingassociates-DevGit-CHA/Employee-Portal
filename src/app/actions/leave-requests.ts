@@ -6,7 +6,8 @@ import { getCurrentEmployee, requireRole } from '@/lib/auth/session'
 import { applyLeaveToTimesheets, removeLeaveFromTimesheets, dailyLeaveOverage, loadRequestDays, type LeaveDay, type LeavePostingSummary } from '@/lib/leave-timesheet'
 import { notifyApprovers, notifyEmployee, getRecipient } from '@/lib/notifications'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
-import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
+import { LEAVE_EXPENSE_APPROVER_ROLES, TIMESHEET_APPROVER_ROLES, FINAL_APPROVER_ROLES, AUTO_APPROVED_LEAVE_TYPES, canSelfApprove } from '@/lib/constants/approvals'
+import { requireDecisionAuthority, assertMayDecide, delegatedFrom, onBehalfSuffix, announceDelegatedDecision } from '@/lib/approval-authority'
 import { REOPEN_OVERRIDE_ROLES } from '@/lib/constants/timesheet-reopen'
 import { firstEligibleDate } from '@/lib/constants/accrual'
 import { loadPolicy } from '@/lib/policy-server'
@@ -237,7 +238,7 @@ export async function createLeaveRequest(data: {
     })
   } else {
     const overBalance = col && AUTO_APPROVED_LEAVE_TYPES.includes(data.leave_type)
-    await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+    await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
       title: `Leave request from ${employee.name}${days.length > 1 ? ` (${days.length} days)` : ''}${onBehalf ? ' — submitted on their behalf' : ''}`,
       body: `${data.leave_type}\n${daysLabel(days)}${days.length > 1 ? `\nTotal: ${totalHours} hrs` : ''}${overBalance ? ` (exceeds available balance of ${balanceBefore} hrs — needs approval)` : ''}${data.note ? `\nNote: ${data.note}` : ''}${onBehalf ? `\nException: completed by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note}` : ''}`,
     })
@@ -414,12 +415,11 @@ export async function getPendingLeaveApprovals() {
     .select('*, employee:employees!leave_requests_employee_id_fkey(name, avatar_url), submitter:employees!leave_requests_submitted_by_fkey(name)')
     .eq('status', 'pending')
   // Your own request only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor anything you completed on someone's behalf
+  if (!canSelfApprove(actor)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor anything you completed on someone's behalf
   // Test-account submissions stay out of real approvers' queues (same reasoning as the approver digest) — unless the approver is themselves testing.
-  if (!actor.is_test_account) {
-    const testIds = await getTestAccountIds(admin)
-    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
-  }
+  // Test-account items stay out of real approvers' queues — unless the approver is a test account themselves.
+  const testIds = await getTestAccountIds(admin)
+  if (!actor.is_test_account && testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
   const { data, error } = await query.order('created_at')
   if (error) throw new Error(error.message)
 
@@ -503,14 +503,14 @@ export async function getCancelledLeaveRequests(limit = 100) {
 }
 
 export async function approveLeaveRequest(id: string) {
-  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const authority = await requireDecisionAuthority()
+  const actor = authority.actor
   const admin = createAdminClient()
 
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
-  if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't approve your own request — it needs another approver.")
-  if (request.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this request on the employee's behalf, so it needs another approver.")
+  const overrideUsed = await assertMayDecide(admin, authority, request, 'request')
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
   if (closedHit) {
     throw new Error(`This request falls in dates accounting has closed (${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}). Deny it, or ask the CEO to lift the closure first.`)
@@ -552,6 +552,7 @@ export async function approveLeaveRequest(id: string) {
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
     approver_signed_at: new Date().toISOString(),
+    delegated_from: delegatedFrom(authority),
   }).eq('id', id)
   if (error) throw new Error(error.message)
   await logLeaveEvent(admin, { requestId: id, action: 'approved', actor, attestation: APPROVER_APPROVE_ATTESTATION })
@@ -568,10 +569,11 @@ export async function approveLeaveRequest(id: string) {
   await notifyEmployee(admin, request.employee_id, {
     kind: 'approved',
     title: `Your ${request.leave_type} request was approved`,
-    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nApproved by ${actor.name}.`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nApproved by ${actor.name}${onBehalfSuffix(authority, overrideUsed)}.`,
     link: '/history',
     cta: 'View My Requests',
   })
+  await announceDelegatedDecision(admin, authority, `Approved: ${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs`, overrideUsed)
 
   revalidatePath('/approvals')
   revalidatePath('/history')
@@ -580,15 +582,15 @@ export async function approveLeaveRequest(id: string) {
 }
 
 export async function denyLeaveRequest(id: string, reason: string) {
-  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const authority = await requireDecisionAuthority()
+  const actor = authority.actor
   const reasonProblem = denyReasonProblem(reason)
   if (reasonProblem) throw new Error(reasonProblem)
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('status, employee_id, leave_type, start_date, end_date, hours, submitted_by').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
   if (request.status !== 'pending') throw new Error('This request has already been decided')
-  if (request.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't deny your own request — it needs another approver.")
-  if (request.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this request on the employee's behalf, so it needs another approver.")
+  const overrideUsed = await assertMayDecide(admin, authority, request, 'request')
 
   const { error } = await admin.from('leave_requests').update({
     status: 'denied',
@@ -596,6 +598,7 @@ export async function denyLeaveRequest(id: string, reason: string) {
     approved_at: new Date().toISOString(),
     approver_signed_at: new Date().toISOString(),
     deny_reason: reason.trim(),
+    delegated_from: delegatedFrom(authority),
   }).eq('id', id)
   if (error) throw new Error(error.message)
   await logLeaveEvent(admin, { requestId: id, action: 'denied', actor, note: reason.trim(), attestation: APPROVER_DENY_ATTESTATION })
@@ -603,10 +606,11 @@ export async function denyLeaveRequest(id: string, reason: string) {
   await notifyEmployee(admin, request.employee_id, {
     kind: 'denied',
     title: `Your ${request.leave_type} request was denied`,
-    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nDenied by ${actor.name}.\nReason: ${reason.trim()}`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nDenied by ${actor.name}${onBehalfSuffix(authority, overrideUsed)}.\nReason: ${reason.trim()}`,
     link: '/history',
     cta: 'View My Requests',
   })
+  await announceDelegatedDecision(admin, authority, `Denied: ${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs`, overrideUsed)
 
   revalidatePath('/approvals')
   revalidatePath('/history')
@@ -668,7 +672,7 @@ export async function cancelMyLeaveRequest(id: string) {
 
   // Tell the approvers (bell + email) so a withdrawn request never just disappears from their queue.
   const priorApprover = request.approver_id ? (await getRecipient(admin, request.approver_id))?.name : null
-  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+  await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
     kind: 'cancelled',
     title: `${employee.name} cancelled a ${request.leave_type} request`,
     body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\n` +

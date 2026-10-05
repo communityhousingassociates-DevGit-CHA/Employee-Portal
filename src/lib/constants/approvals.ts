@@ -1,8 +1,11 @@
 import type { LeaveType, Role } from '@/types'
 
-// Who may approve what (CHA policy, updated 2026-09-24). Leave requests, expenses, and timesheets are
-// all reviewed by the Accounting Manager / CEO / Admin roles (Carrileen Edwards holds `admin`, Nico
-// Sanders `ceo`). Change these lists to change policy.
+// Who may approve what (CHA policy, updated 2026-10-05). FINAL decisions on leave requests, expenses and
+// timesheets (approve / deny) belong to Nico Sanders (`ceo`) alone. He may name a backup (e.g. Carrileen) for
+// a date range while he's unavailable — see lib/approval-authority.ts and the approval_delegations table.
+// APPROVER_ROLES (the "reviewer" tier: Accounting Manager / CEO / Admin) can still open the Approvals area,
+// submit on someone's behalf, and send a timesheet back for correction or reopen it — but cannot approve or deny.
+export const FINAL_APPROVER_ROLES: Role[] = ['ceo']
 export const APPROVER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
 export const LEAVE_EXPENSE_APPROVER_ROLES: Role[] = APPROVER_ROLES
 export const TIMESHEET_APPROVER_ROLES: Role[] = APPROVER_ROLES
@@ -14,17 +17,28 @@ export const TIMESHEET_APPROVER_ROLES: Role[] = APPROVER_ROLES
 // appointment); if it starts beyond the two-pay-period window it is auto-approved but only reserved, like PTO.
 export const AUTO_APPROVED_LEAVE_TYPES: LeaveType[] = ['Sick']
 
-// Self-approval: after beta only the CEO may approve his own items; anyone else's own items route to
-// another approver (for the Accounting Manager, that means the CEO). While `betaOverride` is true,
-// every approver may approve their own items so Nico and Carrileen can test the full flow alone.
-// Set betaOverride to false when beta ends.
+// Self-approval: only the CEO may approve his own items (and ones he had someone submit for him). Anyone
+// else's own items — Carrileen's included, even while she is Nico's backup — route to the CEO. A backup can
+// never decide the CEO's own items either. `betaOverride` (every approver may approve their own, for testing)
+// was switched off 2026-10-05.
 export const SELF_APPROVAL: { betaOverride: boolean; rolesAfterBeta: Role[] } = {
-  betaOverride: true,
+  betaOverride: false,
   rolesAfterBeta: ['ceo'],
 }
 
-export function canSelfApprove(role: Role): boolean {
-  return SELF_APPROVAL.betaOverride || SELF_APPROVAL.rolesAfterBeta.includes(role)
+// Workflow TESTING and EMERGENCY OVERRIDE (exempt from the CEO-only rule above). Items submitted by a test account
+// (employees.is_test_account — e.g. Test User, advisor@globalist.pro) are decided ONLY by the test approver(s) below, who
+// must themselves be a test account; he may decide his own. Real approvers (the CEO, a backup) never see or decide test
+// items and are never notified about them. The test approver is also the system super admin and holds an EMERGENCY
+// OVERRIDE on real items: it is used only for corrections the client has authorized, and every use is reported to the CEO.
+export const TEST_APPROVER_EMAILS: string[] = ['johnnyrio22@gmail.com']
+
+export function isTestApprover(who: { email?: string | null; is_test_account?: boolean | null }): boolean {
+  return !!who.is_test_account && !!who.email && TEST_APPROVER_EMAILS.includes(who.email.toLowerCase())
+}
+
+export function canSelfApprove(who: { role: Role; email?: string | null; is_test_account?: boolean | null }): boolean {
+  return isTestApprover(who) || SELF_APPROVAL.betaOverride || SELF_APPROVAL.rolesAfterBeta.includes(who.role)
 }
 
 // Notification TEST MODE. Switched OFF 2026-09-25 — real submissions now alert the real approvers (Carrileen, Nico) by

@@ -15,7 +15,8 @@ import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
 import { creditHolidayFlex } from '@/lib/holiday-work'
 import { fmtDate, fmtDateRange } from '@/lib/format-date'
-import { TIMESHEET_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { TIMESHEET_APPROVER_ROLES, FINAL_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { requireDecisionAuthority, assertMayDecide, delegatedFrom, onBehalfSuffix, announceDelegatedDecision, type DecisionAuthority } from '@/lib/approval-authority'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import type { Role, Timesheet, TimesheetAudit, TimesheetEventAction, TimesheetForReview } from '@/types'
 
@@ -253,7 +254,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
     await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted', signature: { name: employee.name, employeeNumber: employee.employee_number, attestation: TIMESHEET_ATTESTATION } })
   }
 
-  await notifyApprovers(admin, employee.id, TIMESHEET_APPROVER_ROLES, {
+  await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
     title: `Timesheet from ${employee.name}${behalf ? ' — submitted on their behalf' : ''}`,
     body: `Pay period ${period} was submitted and is waiting for your review.${behalf ? `\nException: completed by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(behalf.reasonCode)} — ${behalf.note}` : ''}`,
   })
@@ -295,12 +296,11 @@ export async function getPendingTimesheetApprovals() {
   const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
   const admin = createAdminClient()
   let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'submitted')
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you completed on the employee's behalf
+  if (!canSelfApprove(actor)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you completed on the employee's behalf
   // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
-  if (!actor.is_test_account) {
-    const testIds = await getTestAccountIds(admin)
-    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
-  }
+  // Test-account items stay out of real approvers' queues — unless the approver is a test account themselves.
+  const testIds = await getTestAccountIds(admin)
+  if (!actor.is_test_account && testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
   const { data, error } = await query.order('employee_signed_at')
   if (error) throw new Error(error.message)
   const ranges = await loadClosedRanges(admin)
@@ -316,7 +316,7 @@ export async function getApprovedTimesheets() {
   const admin = createAdminClient()
   const since = shiftDate(todayET(), -90)
   let query = admin.from('timesheets').select(PENDING_SELECT).eq('status', 'approved').gte('period_end', since)
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id)
+  if (!canSelfApprove(actor)) query = query.neq('employee_id', actor.id)
   const { data, error } = await query.order('period_end', { ascending: false }).limit(60)
   if (error) throw new Error(error.message)
   const ranges = await loadClosedRanges(admin)
@@ -324,25 +324,27 @@ export async function getApprovedTimesheets() {
   return shaped.sort((a, b) => Number(!!b.correction_requested_at) - Number(!!a.correction_requested_at))
 }
 
-async function getReviewableTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }, expected: 'submitted' | 'approved') {
+async function getReviewableTimesheet(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }, expected: 'submitted' | 'approved', authority?: DecisionAuthority) {
   const { data, error } = await admin.from('timesheets').select('status, employee_id, period_start, period_end, submitted_by').eq('id', id).single()
   if (error) throw new Error(error.message)
-  if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't review your own timesheet — another approver needs to.")
-  if (data.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You completed this timesheet on the employee's behalf, so another approver needs to review it.")
+  const overrideUsed = authority ? await assertMayDecide(admin, authority, data, 'timesheet') : false
+  if (data.employee_id === actor.id && !canSelfApprove(actor)) throw new Error("You can't review your own timesheet — another approver needs to.")
+  if (data.submitted_by === actor.id && !canSelfApprove(actor)) throw new Error("You completed this timesheet on the employee's behalf, so another approver needs to review it.")
   if (data.status !== expected) throw new Error(expected === 'submitted' ? 'This timesheet is no longer awaiting review' : 'Only an approved timesheet can be reopened this way')
-  return data
+  return { ...data, overrideUsed }
 }
 
 export async function approveTimesheet(id: string) {
-  const actor = await requireRole(TIMESHEET_APPROVER_ROLES)
+  const authority = await requireDecisionAuthority()
+  const actor = authority.actor
   const admin = createAdminClient()
-  const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted')
+  const timesheet = await getReviewableTimesheet(admin, id, actor, 'submitted', authority)
   const { error } = await admin
     .from('timesheets')
-    .update({ status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null })
+    .update({ delegated_from: delegatedFrom(authority), status: 'approved', approver_id: actor.id, approved_at: new Date().toISOString(), return_reason: null, correction_requested_at: null, correction_note: null })
     .eq('id', id)
   if (error) throw new Error(error.message)
-  await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: 'approved' })
+  await logTimesheetEvent(admin, { timesheetId: id, actorId: actor.id, action: 'approved', note: timesheet.overrideUsed ? 'Approved under system emergency override' : authority.viaDelegation ? `Approved as backup for ${authority.delegatorName}` : null })
 
   // Holiday work earns exempt staff flex time. A failure here shouldn't undo the approval — tell the approvers instead.
   let flexNote = ''
@@ -358,10 +360,11 @@ export async function approveTimesheet(id: string) {
   await notifyEmployee(admin, timesheet.employee_id, {
     kind: 'approved',
     title: 'Your timesheet was approved',
-    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nApproved by ${actor.name}.${flexNote}`,
+    body: `Pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}\nApproved by ${actor.name}${onBehalfSuffix(authority, timesheet.overrideUsed)}.${flexNote}`,
     link: '/timesheet',
     cta: 'View Timesheet',
   })
+  await announceDelegatedDecision(admin, authority, `Approved a timesheet for pay period ${fmtDateRange(timesheet.period_start, timesheet.period_end)}`, timesheet.overrideUsed)
 
   revalidatePath('/approvals')
   revalidatePath('/timesheet')

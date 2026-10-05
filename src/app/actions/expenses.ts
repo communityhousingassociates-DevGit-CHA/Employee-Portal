@@ -11,7 +11,8 @@ import { RECEIPT_REQUIRED_OVER, receiptRequired, descriptionRequired } from '@/l
 import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
 import { logExpenseEvent, loadExpenseEvents } from '@/lib/expense-events'
 import { onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
-import { LEAVE_EXPENSE_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { LEAVE_EXPENSE_APPROVER_ROLES, FINAL_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
+import { requireDecisionAuthority, assertMayDecide, delegatedFrom, onBehalfSuffix, announceDelegatedDecision, type DecisionAuthority } from '@/lib/approval-authority'
 import { getTestAccountIds } from '@/lib/test-accounts'
 import type { ExpenseCategory, Role } from '@/types'
 
@@ -116,7 +117,7 @@ export async function submitExpense(data: {
       cta: 'View My Expenses',
     })
   }
-  await notifyApprovers(admin, employee.id, LEAVE_EXPENSE_APPROVER_ROLES, {
+  await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
     title: `Expense from ${employee.name}${onBehalf ? ' — entered on their behalf' : ''}`,
     body: `${summary}${onBehalf ? `\nException: entered by ${actor.name} for the employee. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note}` : ''}`,
   })
@@ -155,12 +156,11 @@ export async function getPendingExpenseApprovals() {
     .select('*, employee:employees!expenses_employee_id_fkey(name, avatar_url), submitter:employees!expenses_submitted_by_fkey(name)')
     .eq('status', 'pending')
   // Your own expense only shows in your queue if you're allowed to approve it yourself; otherwise it routes to another approver.
-  if (!canSelfApprove(actor.role)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you entered on someone's behalf
+  if (!canSelfApprove(actor)) query = query.neq('employee_id', actor.id).or(`submitted_by.is.null,submitted_by.neq.${actor.id}`) // …nor one you entered on someone's behalf
   // Test-account submissions stay out of real approvers' queues — unless the approver is themselves testing.
-  if (!actor.is_test_account) {
-    const testIds = await getTestAccountIds(admin)
-    if (testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
-  }
+  // Test-account items stay out of real approvers' queues — unless the approver is a test account themselves.
+  const testIds = await getTestAccountIds(admin)
+  if (!actor.is_test_account && testIds.size) query = query.not('employee_id', 'in', `(${[...testIds].join(',')})`)
   const { data, error } = await query.order('expense_date')
   if (error) throw new Error(error.message)
   const eventsByExpense = await loadExpenseEvents(admin, (data ?? []).map(e => e.id))
@@ -170,13 +170,12 @@ export async function getPendingExpenseApprovals() {
   })
 }
 
-async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string, actor: { id: string; role: Role }) {
+async function getPendingExpense(admin: ReturnType<typeof createAdminClient>, id: string, authority: DecisionAuthority) {
   const { data, error } = await admin.from('expenses').select('status, employee_id, category, amount, expense_date, submitted_by').eq('id', id).single()
   if (error) throw new Error(error.message)
   if (data.status !== 'pending') throw new Error('This expense has already been decided')
-  if (data.employee_id === actor.id && !canSelfApprove(actor.role)) throw new Error("You can't decide your own expense — it needs another approver.")
-  if (data.submitted_by === actor.id && !canSelfApprove(actor.role)) throw new Error("You entered this expense on the employee's behalf, so it needs another approver.")
-  return data
+  const overrideUsed = await assertMayDecide(admin, authority, data, 'expense')
+  return { ...data, overrideUsed }
 }
 
 function expenseSummary(e: { category: string; amount: number | string; expense_date: string }) {
@@ -184,10 +183,12 @@ function expenseSummary(e: { category: string; amount: number | string; expense_
 }
 
 export async function approveExpense(id: string) {
-  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const authority = await requireDecisionAuthority()
+  const actor = authority.actor
   const admin = createAdminClient()
-  const expense = await getPendingExpense(admin, id, actor)
+  const expense = await getPendingExpense(admin, id, authority)
   const { error } = await admin.from('expenses').update({
+    delegated_from: delegatedFrom(authority),
     status: 'approved',
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
@@ -198,22 +199,25 @@ export async function approveExpense(id: string) {
   await notifyEmployee(admin, expense.employee_id, {
     kind: 'approved',
     title: 'Your expense was approved',
-    body: `${expenseSummary(expense)}\nApproved by ${actor.name}.`,
+    body: `${expenseSummary(expense)}\nApproved by ${actor.name}${onBehalfSuffix(authority, expense.overrideUsed)}.`,
     link: '/expenses',
     cta: 'View My Expenses',
   })
+  await announceDelegatedDecision(admin, authority, `Approved expense: ${expenseSummary(expense)}`, expense.overrideUsed)
 
   revalidatePath('/approvals')
   revalidatePath('/expenses')
 }
 
 export async function denyExpense(id: string, reason: string) {
-  const actor = await requireRole(LEAVE_EXPENSE_APPROVER_ROLES)
+  const authority = await requireDecisionAuthority()
+  const actor = authority.actor
   const reasonProblem = denyReasonProblem(reason)
   if (reasonProblem) throw new Error(reasonProblem)
   const admin = createAdminClient()
-  const expense = await getPendingExpense(admin, id, actor)
+  const expense = await getPendingExpense(admin, id, authority)
   const { error } = await admin.from('expenses').update({
+    delegated_from: delegatedFrom(authority),
     status: 'denied',
     approver_id: actor.id,
     approved_at: new Date().toISOString(),
@@ -225,10 +229,11 @@ export async function denyExpense(id: string, reason: string) {
   await notifyEmployee(admin, expense.employee_id, {
     kind: 'denied',
     title: 'Your expense was denied',
-    body: `${expenseSummary(expense)}\nDenied by ${actor.name}.\nReason: ${reason.trim()}`,
+    body: `${expenseSummary(expense)}\nDenied by ${actor.name}${onBehalfSuffix(authority, expense.overrideUsed)}.\nReason: ${reason.trim()}`,
     link: '/expenses',
     cta: 'View My Expenses',
   })
+  await announceDelegatedDecision(admin, authority, `Denied expense: ${expenseSummary(expense)}`, expense.overrideUsed)
 
   revalidatePath('/approvals')
   revalidatePath('/expenses')

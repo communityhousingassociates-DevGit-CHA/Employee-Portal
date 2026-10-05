@@ -226,10 +226,10 @@ export default async function GuidePage() {
           </Section>
 
           {isManager && (
-            <Section id="approvers" title="9. For Approvers (Accounting Manager, CEO, Admin)">
+            <Section id="approvers" title="9. For Approvers (CEO, Accounting Manager, Admin)">
               <p><strong>Approvals</strong> appears in your sidebar, and a banner appears on your Dashboard whenever items are waiting.</p>
               <p>Every new item you need to review sends you an email alert and shows in the 🔔 in the top bar. Approving or denying must be done here in the portal — replying to the email isn&apos;t enough.</p>
-              <p><strong>Your own items:</strong> the Accounting Manager can&apos;t approve her own leave requests, expenses, or timesheets — they go to the President/CEO. The President/CEO can approve his own. (During beta testing, both can approve their own.)</p>
+              <p><strong>Who decides:</strong> final approval of leave requests, expenses, and timesheets belongs to the President/CEO (Nico Sanders). The Accounting Manager can complete items on an employee&apos;s behalf and can send a timesheet back for correction or reopen one, but cannot approve or deny. While the CEO is away he can name her (or another manager) as <strong>backup approver</strong> for a set date range from the top of the Approvals page; the backup&apos;s decisions are marked as made on his behalf and reported to him. Only the CEO can approve his own items, and a backup can never decide her own items or his.</p>
               <p>The Approvals page has three tabs — <strong>Leave Requests</strong>, <strong>Expenses</strong>, and <strong>Timesheets</strong>. Leave Requests is split into Pending and Reviewed.</p>
               <p className="font-semibold text-[#0b2b35]">Reviewing a leave request</p>
               <Bullets items={[
