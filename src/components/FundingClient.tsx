@@ -7,6 +7,7 @@ import {
   FUNDING_STAGES, OPEN_STAGES, STAGE_LABEL,
   type FundingActivity, type FundingInput, type FundingRow, type FundingStage,
 } from '@/lib/constants/funding'
+import FundingReference, { type ReferenceTab } from '@/components/FundingReference'
 
 const money = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'))
 const day = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
@@ -27,6 +28,14 @@ const PRIORITY_BADGE: Record<string, string> = { A: 'bg-emerald-100 text-emerald
 
 const EMPTY: FundingInput = { funder: '', priority: 'B', stage: 'research' }
 
+const TABS: { id: 'pipeline' | ReferenceTab; label: string }[] = [
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'finances', label: 'CHA finances' },
+  { id: 'leverage', label: 'Public leverage' },
+  { id: 'plan', label: '90-day plan' },
+]
+const SUBMITTED_STAGES: FundingStage[] = ['loi_submitted', 'invited_to_apply', 'proposal_submitted', 'awarded', 'reporting']
+
 export default function FundingClient({ initialRows }: { initialRows: FundingRow[] }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
@@ -36,6 +45,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
   const [editing, setEditing] = useState<{ id: string | null; form: FundingInput } | null>(null)
   const [activity, setActivity] = useState<FundingActivity[]>([])
   const [note, setNote] = useState('')
+  const [tab, setTab] = useState<'pipeline' | ReferenceTab>('pipeline')
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
 
@@ -50,6 +60,8 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
   const weighted = openRows.reduce((s, r) => s + (r.ask_amount ?? 0) * ((r.probability ?? 0) / 100), 0)
   const requested = openRows.reduce((s, r) => s + (r.ask_amount ?? 0), 0)
   const awarded = rows.filter(r => r.stage === 'awarded' || r.stage === 'reporting').reduce((s, r) => s + (r.awarded_amount ?? r.ask_amount ?? 0), 0)
+  const inConversation = rows.filter(r => r.stage !== 'research' && r.stage !== 'skipped').length
+  const submitted = rows.filter(r => SUBMITTED_STAGES.includes(r.stage)).length
   const dueSoon = rows.filter(r => r.next_step_due && OPEN_STAGES.concat('research').includes(r.stage) && r.next_step_due <= soonStr)
 
   const visible = rows.filter(r => {
@@ -122,16 +134,28 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Executive Funding</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Private grant prospects for permanent supportive housing · visible to Admin and CEO only</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">Private grant prospects for permanent supportive housing · super admin only while in testing</p>
         </div>
-        <button onClick={() => openEdit(null)} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
-          + Add Funder
-        </button>
+        {tab === 'pipeline' && (
+          <button onClick={() => openEdit(null)} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
+            + Add Funder
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-[#d4eef2] mb-5" role="tablist" aria-label="Executive Funding sections">
+        {TABS.map(t => (
+          <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
+            className={`whitespace-nowrap text-[13px] font-medium px-4 py-2.5 border-b-2 -mb-px transition-colors ${tab === t.id ? 'border-[#02ACC0] text-[#028a9e]' : 'border-transparent text-gray-500 hover:text-[#0b2b35]'}`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {toast && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-2.5 mb-4">{toast}</div>}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      {tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {[
           { label: 'Open requests', value: money(requested), sub: `${openRows.length} funders in motion` },
           { label: 'Weighted pipeline', value: money(weighted), sub: 'ask × probability' },
@@ -145,6 +169,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
           </div>
         ))}
       </div>
+      <p className="text-[12px] text-gray-500 mb-5">6-month goals: {inConversation} of 6+ funder conversations · {submitted} of 3+ LOIs or applications submitted</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={stageFilter} onChange={e => setStageFilter(e.target.value as typeof stageFilter)} className={inputCls + ' !w-auto'}>
@@ -199,6 +224,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
           </tbody>
         </table>
       </div>
+      </>)}
 
       {editing && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setEditing(null)}>
