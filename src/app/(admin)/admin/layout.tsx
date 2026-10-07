@@ -7,6 +7,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { canViewSalaries, hasPayrollAccess } from '@/lib/constants/salary-access'
 import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import IdleLogout from '@/components/IdleLogout'
+import ThemeToggle from '@/components/ThemeToggle'
+import { canAccessFunding } from '@/lib/constants/funding'
 
 const CONSOLE_ROLES = ['admin', 'ceo', 'accounting_manager']
 
@@ -15,6 +17,7 @@ const navItems = [
   { href: '/admin/users', icon: '👥', label: 'User Management', roles: ADMIN_ROLES },
   { href: '/admin/import', icon: '📥', label: 'Data Import', roles: ADMIN_ROLES },
   { href: '/admin/grants', icon: '🏷️', label: 'Grants', roles: ADMIN_ROLES },
+  { href: '/admin/funding', icon: '🤝', label: 'Executive Funding', roles: ADMIN_ROLES },
   { href: '/admin/salary', icon: '💰', label: 'Salary', roles: CONSOLE_ROLES },
   { href: '/admin/tags', icon: '🏷️', label: 'Timesheet Tags', roles: CONSOLE_ROLES },
   { href: '/admin/balances', icon: '⚖️', label: 'Leave Balances', roles: CONSOLE_ROLES },
@@ -31,7 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const displayName = employee.name || 'Admin'
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role) && (item.href !== '/admin/salary' || canViewSalaries(employee)) && (item.href !== '/admin/tags' || hasPayrollAccess(employee)) && (item.href !== '/admin/balances' || hasPayrollAccess(employee)))
+  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role) && (item.href !== '/admin/funding' || canAccessFunding(employee)) && (item.href !== '/admin/salary' || canViewSalaries(employee)) && (item.href !== '/admin/tags' || hasPayrollAccess(employee)) && (item.href !== '/admin/balances' || hasPayrollAccess(employee)))
   const roleBadge = ROLE_BADGE[employee.role] ?? employee.role.toUpperCase()
 
   // Only a superadmin can act on a pending import, so only they see the count.
@@ -46,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <ResponsiveShell
       topbarLeft={
         <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-white rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
+          <div className="bg-white keep-light rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
             <Image src="/cha-logo.png" alt="Community Housing Associates" width={160} height={26} className="object-contain" />
           </div>
           <span className="text-white/50 text-[12px] font-medium tracking-wide hidden sm:block">Admin Console</span>
@@ -54,6 +57,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       }
       topbarRight={
         <div className="flex items-center gap-3 min-w-0">
+          <ThemeToggle />
           <Link href="/dashboard"
             className="text-[12px] text-white/60 hover:text-white transition-colors items-center gap-1.5 hidden sm:flex flex-shrink-0">
             ← Back to Portal

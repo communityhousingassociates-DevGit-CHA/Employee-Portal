@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./dark-theme.css";
 
 :root {
   --teal: #02ACC0;

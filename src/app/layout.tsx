@@ -13,7 +13,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" suppressHydrationWarning>
+      <head>
+        {/* Apply the saved light/dark choice before first paint so there is no flash. */}
+        <script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('cha-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}" }} />
+      </head>
       <body className="h-full">{children}</body>
     </html>
   )

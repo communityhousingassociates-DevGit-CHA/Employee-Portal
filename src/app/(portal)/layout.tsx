@@ -10,6 +10,7 @@ import { getPendingApprovalCount } from '@/app/actions/approvals'
 import Image from 'next/image'
 import Link from 'next/link'
 import IdleLogout from '@/components/IdleLogout'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let displayName = 'User'
@@ -43,7 +44,7 @@ export default async function PortalLayout({ children }: { children: React.React
     <ResponsiveShell
       topbarLeft={
         <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-white rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
+          <div className="bg-white keep-light rounded-lg px-2.5 py-1.5 flex items-center flex-shrink-0">
             <Image src="/cha-logo.png" alt="Community Housing Associates" width={160} height={26} className="object-contain" />
           </div>
           <span className="text-white/50 text-[12px] font-medium tracking-wide hidden sm:block">Employee Portal</span>
@@ -51,6 +52,7 @@ export default async function PortalLayout({ children }: { children: React.React
       }
       topbarRight={
         <>
+        <ThemeToggle />
         <NotificationBell items={notifications.items} unreadCount={notifications.unreadCount} />
         <IssueAlertBell initialUnseenCount={unseenIssueCount} />
         <Link href="/profile" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-full px-3 py-1 transition-colors min-w-0">
