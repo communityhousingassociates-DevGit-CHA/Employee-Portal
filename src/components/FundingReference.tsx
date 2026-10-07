@@ -81,8 +81,8 @@ const CAUTIONS = [
 ]
 
 const money = (n: number) => '$' + Math.round(n).toLocaleString('en-US')
-const card = 'bg-white border border-[#d4eef2] rounded-xl'
-const h2 = 'text-[15px] font-bold text-[#0b2b35] mb-2'
+const card = 'bg-white border border-[#d4eef2] rounded-xl overflow-hidden shadow-sm'
+const h2 = 'text-[11px] uppercase tracking-widest font-bold text-[#028a9e] mb-2'
 
 function List({ items }: { items: string[] }) {
   return <ul className="list-disc pl-5 space-y-1 text-[13px] text-gray-700">{items.map(i => <li key={i}>{i}</li>)}</ul>
@@ -93,7 +93,7 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
     return (
       <div className="space-y-5">
         <p className="text-[13px] text-gray-500 max-w-[75ch]">From the Form 990 for the year ended 6/30/2024. Funders read 990s, so explain these numbers plainly before they ask.</p>
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-[13px] rounded-lg px-4 py-3 max-w-[85ch]">
+        <div className="bg-[#fff8e6] border border-amber-200 text-[#0b2b35] text-[13px] rounded-lg px-4 py-3 max-w-[85ch]">
           The reported $67,705 surplus includes $260,961 of one-time debt forgiveness. Without it the CHA-only year was roughly a $193K deficit. Private giving was $3,471 against about $366K of government grants.
         </div>
         <div className="grid md:grid-cols-2 gap-4">
@@ -108,7 +108,7 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
         </div>
         <div className={card}>
           {FINANCE.map(f => (
-            <div key={f.label} className="grid sm:grid-cols-[minmax(160px,1fr)_2fr] gap-x-5 gap-y-1 px-4 py-3 border-b border-[#eef7f9] last:border-0">
+            <div key={f.label} className="grid sm:grid-cols-[minmax(160px,1fr)_2fr] gap-x-5 gap-y-1 px-4 py-3 border-b border-[#f0f7f8] last:border-0">
               <div className="text-[13px] font-semibold text-[#0b2b35]">{f.label}</div>
               <div className="text-[13px] text-gray-800 break-words">{typeof f.value === 'number' ? money(f.value) : f.value}</div>
               {f.note && <div className="sm:col-start-2 text-[12px] text-gray-500 break-words">{f.note}</div>}
@@ -120,7 +120,7 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
           <div className="grid md:grid-cols-3 gap-4">
             {BUCKETS.map(b => (
               <div key={b.title} className={card + ' p-4'}>
-                <h3 className="text-[13px] font-bold text-[#0b2b35]">{b.title}</h3>
+                <h3 className="text-[13px] font-bold text-[#0b2b35] mb-0.5">{b.title}</h3>
                 <p className="text-[13px] text-gray-700 mt-1">{b.what}</p>
                 <p className="text-[11px] uppercase tracking-wide text-gray-500 mt-3">Best-fit funders</p>
                 <p className="text-[13px] text-gray-700">{b.who}</p>
@@ -142,7 +142,7 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
         <p className="text-[13px] text-gray-500 max-w-[75ch]">Private grants work best closing the gap that public dollars leave, not replacing the public base. Show committed public money next to every private ask.</p>
         <div className={card}>
           {LEVERAGE.map(l => (
-            <div key={l.name} className="px-4 py-3 border-b border-[#eef7f9] last:border-0">
+            <div key={l.name} className="px-4 py-3 border-b border-[#f0f7f8] last:border-0">
               <p className="text-[13px] font-semibold text-[#0b2b35]">{l.name}</p>
               <p className="text-[13px] text-gray-800 mt-0.5">{l.what}</p>
               <p className="text-[12px] text-gray-500 mt-1 break-words">Why it matters: {l.why} Status (2026-10-03): {l.status}{' '}
@@ -156,7 +156,7 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
           <div className="grid md:grid-cols-3 gap-4">
             {WANTS.map(w => (
               <div key={w.t} className={card + ' p-4'}>
-                <h3 className="text-[13px] font-bold text-[#0b2b35]">{w.t}</h3>
+                <h3 className="text-[13px] font-bold text-[#0b2b35] mb-0.5">{w.t}</h3>
                 <p className="text-[13px] text-gray-700 mt-1">{w.d}</p>
               </div>
             ))}
@@ -171,8 +171,8 @@ export default function FundingReference({ tab }: { tab: ReferenceTab }) {
       <p className="text-[13px] text-gray-500 max-w-[75ch]">Sequence: a small Abell grant or info session to start a relationship, then Weinberg and Abell/France-Merrick LOIs for a services-gap ask, with the hospital/ACIS route in parallel.</p>
       <div className={card}>
         {PLAN.map(([when, what]) => (
-          <div key={when} className="grid sm:grid-cols-[170px_1fr] gap-x-4 gap-y-1 px-4 py-3 border-b border-[#eef7f9] last:border-0">
-            <div className="text-[12px] font-semibold text-[#028a9e]">{when}</div>
+          <div key={when} className="grid sm:grid-cols-[170px_1fr] gap-x-4 gap-y-1 px-4 py-3 border-b border-[#f0f7f8] last:border-0">
+            <div><span className="inline-block text-[11px] font-bold bg-[#e0f5f8] text-[#028a9e] px-2.5 py-1 rounded-full">{when}</span></div>
             <div className="text-[13px] text-gray-800">{what}</div>
           </div>
         ))}

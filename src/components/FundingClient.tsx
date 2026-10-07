@@ -13,7 +13,7 @@ const money = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.
 const day = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
 
 const STAGE_BADGE: Record<FundingStage, string> = {
-  research: 'bg-gray-100 text-gray-600',
+  research: 'bg-[#e8f4f7] text-[#0b2b35]',
   intro_call: 'bg-sky-50 text-sky-700',
   loi_drafted: 'bg-sky-50 text-sky-700',
   loi_submitted: 'bg-indigo-50 text-indigo-700',
@@ -21,10 +21,10 @@ const STAGE_BADGE: Record<FundingStage, string> = {
   proposal_submitted: 'bg-violet-50 text-violet-700',
   awarded: 'bg-emerald-50 text-emerald-700',
   declined: 'bg-red-50 text-red-700',
-  reporting: 'bg-teal-50 text-teal-700',
-  skipped: 'bg-gray-100 text-gray-400',
+  reporting: 'bg-[#e0f5f8] text-[#028a9e]',
+  skipped: 'bg-[#f0f7f8] text-gray-400',
 }
-const PRIORITY_BADGE: Record<string, string> = { A: 'bg-emerald-100 text-emerald-800', B: 'bg-amber-100 text-amber-800', C: 'bg-gray-100 text-gray-600' }
+const PRIORITY_BADGE: Record<string, string> = { A: 'bg-[#02ACC0] text-white', B: 'bg-[#e0f5f8] text-[#028a9e]', C: 'bg-[#f0f7f8] text-gray-500' }
 
 const EMPTY: FundingInput = { funder: '', priority: 'B', stage: 'research' }
 
@@ -143,10 +143,10 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
         )}
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-[#d4eef2] mb-5" role="tablist" aria-label="Executive Funding sections">
+      <div className="inline-flex max-w-full gap-1 overflow-x-auto bg-white border border-[#d4eef2] rounded-lg p-1 mb-5" role="tablist" aria-label="Executive Funding sections">
         {TABS.map(t => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-            className={`whitespace-nowrap text-[13px] font-medium px-4 py-2.5 border-b-2 -mb-px transition-colors ${tab === t.id ? 'border-[#02ACC0] text-[#028a9e]' : 'border-transparent text-gray-500 hover:text-[#0b2b35]'}`}>
+            className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${tab === t.id ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
             {t.label}
           </button>
         ))}
@@ -157,19 +157,19 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
       {tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {[
-          { label: 'Open requests', value: money(requested), sub: `${openRows.length} funders in motion` },
-          { label: 'Weighted pipeline', value: money(weighted), sub: 'ask × probability' },
-          { label: 'Awarded', value: money(awarded), sub: 'awarded + reporting' },
-          { label: 'Due in 14 days', value: String(dueSoon.length), sub: dueSoon.length ? dueSoon.map(d => d.funder).slice(0, 2).join(', ') : 'nothing urgent' },
+          { label: 'Weighted pipeline', value: money(weighted), sub: 'ask × probability', cls: 'bg-[#02ACC0] border-[#02ACC0]', text: 'text-white', subText: 'text-white/80' },
+          { label: 'Open requests', value: money(requested), sub: `${openRows.length} funders in motion`, cls: 'bg-white border-[#d4eef2]', text: 'text-[#0b2b35]', subText: 'text-gray-400' },
+          { label: 'Awarded', value: money(awarded), sub: 'awarded + reporting', cls: 'bg-[#e0f5f8] border-[#b9dfe6]', text: 'text-[#0b2b35]', subText: 'text-[#028a9e]' },
+          { label: 'Due in 14 days', value: String(dueSoon.length), sub: dueSoon.length ? dueSoon.map(d => d.funder).slice(0, 2).join(', ') : 'nothing urgent', cls: 'bg-white border-[#d4eef2]', text: 'text-[#0b2b35]', subText: 'text-gray-400' },
         ].map(c => (
-          <div key={c.label} className="bg-white border border-[#d4eef2] rounded-xl p-4">
-            <p className="text-[11px] uppercase tracking-wide text-gray-500">{c.label}</p>
-            <p className="text-[22px] font-bold text-[#0b2b35] mt-1">{c.value}</p>
-            <p className="text-[12px] text-gray-400 truncate">{c.sub}</p>
+          <div key={c.label} className={`border rounded-xl p-4 ${c.cls}`}>
+            <p className={`text-[11px] uppercase tracking-wide font-semibold ${c.subText}`}>{c.label}</p>
+            <p className={`text-[22px] font-bold mt-1 ${c.text}`}>{c.value}</p>
+            <p className={`text-[12px] truncate ${c.subText}`}>{c.sub}</p>
           </div>
         ))}
       </div>
-      <p className="text-[12px] text-gray-500 mb-5">6-month goals: {inConversation} of 6+ funder conversations · {submitted} of 3+ LOIs or applications submitted</p>
+      <p className="text-[12px] text-[#028a9e] font-medium mb-5">6-month goals: {inConversation} of 6+ funder conversations · {submitted} of 3+ LOIs or applications submitted</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={stageFilter} onChange={e => setStageFilter(e.target.value as typeof stageFilter)} className={inputCls + ' !w-auto'}>
@@ -185,10 +185,10 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
         </select>
       </div>
 
-      <div className="bg-white border border-[#d4eef2] rounded-xl overflow-x-auto">
+      <div className="bg-white border border-[#d4eef2] rounded-xl overflow-x-auto shadow-sm">
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-[#d4eef2]">
+            <tr className="text-left text-[11px] uppercase tracking-wide bg-[#0b2b35] text-white/80">
               <th className="px-4 py-3">Funder</th>
               <th className="px-3 py-3">Pri</th>
               <th className="px-3 py-3">Stage</th>
@@ -203,7 +203,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
               <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No funders match these filters.</td></tr>
             )}
             {visible.map(r => (
-              <tr key={r.id} className="border-b border-[#eef7f9] hover:bg-[#f7fcfd] cursor-pointer" onClick={() => openEdit(r)}>
+              <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f0fafb] cursor-pointer transition-colors" onClick={() => openEdit(r)}>
                 <td className="px-4 py-3">
                   <p className="font-semibold text-[#0b2b35]">{r.funder}</p>
                   <p className="text-[11px] text-gray-400">{r.funder_type ?? ''}</p>
@@ -217,7 +217,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
                 </td>
                 <td className="px-3 py-3 text-right">{money(r.ask_amount)}</td>
                 <td className="px-3 py-3 text-right">{r.probability == null ? '—' : r.probability + '%'}</td>
-                <td className="px-3 py-3 max-w-[280px] truncate text-gray-600">{r.next_step ?? '—'}</td>
+                <td className="px-3 py-3 max-w-[280px] truncate text-gray-600" title={r.next_step ?? undefined}>{r.next_step ?? '—'}</td>
                 <td className={`px-3 py-3 whitespace-nowrap ${r.next_step_due && r.next_step_due < todayStr ? 'text-red-600 font-semibold' : 'text-gray-600'}`}>{day(r.next_step_due)}</td>
               </tr>
             ))}
