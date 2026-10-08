@@ -3,7 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { getCurrentEmployee } from '@/lib/auth/session'
-import { FUNDING_STAGES, canAccessFunding, type FundingActivity, type FundingInput, type FundingRow, type FundingStage } from '@/lib/constants/funding'
+import { FUNDING_STAGES, GEOGRAPHIES, PROFILE_KINDS, PROFILE_STATUSES, RELATIONSHIPS, canAccessFunding, type FundingActivity, type FundingInput, type FundingRow, type FundingStage, type ProfileField, type ProfileKind, type ProfileStatus } from '@/lib/constants/funding'
 
 /** Funding is limited to the CEO (and the super admin while testing) — see canAccessFunding. */
 async function requireFundingAccess() {
@@ -12,13 +12,15 @@ async function requireFundingAccess() {
   return employee!
 }
 
-const COLUMNS = 'id, funder, funder_type, fit_notes, ask_size_published, process_notes, eligibility_notes, priority, stage, ask_amount, probability, purpose, owner, next_step, next_step_due, loi_sent_on, proposal_due, decision_date, awarded_amount, source_url, verification, updated_at'
+const COLUMNS = 'id, funder, funder_type, geography, relationship, fit_notes, ask_size_published, process_notes, eligibility_notes, priority, stage, ask_amount, probability, purpose, owner, next_step, next_step_due, loi_sent_on, proposal_due, decision_date, awarded_amount, source_url, verification, updated_at'
 
 // Empty strings from form inputs become null so dates/numbers don't fail on insert.
 function clean(input: FundingInput) {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(input)) out[k] = v === '' ? null : v
   if (!FUNDING_STAGES.includes((out.stage ?? 'research') as FundingStage)) throw new Error('Invalid stage')
+  if (!GEOGRAPHIES.includes((out.geography ?? 'baltimore') as (typeof GEOGRAPHIES)[number])) throw new Error('Invalid geography')
+  if (!RELATIONSHIPS.includes((out.relationship ?? 'none') as (typeof RELATIONSHIPS)[number])) throw new Error('Invalid relationship')
   if (out.probability != null && (Number(out.probability) < 0 || Number(out.probability) > 100)) throw new Error('Probability must be 0-100')
   return out
 }
@@ -85,5 +87,54 @@ export async function addFundingNote(pipelineId: string, note: string) {
   const { error } = await admin.from('funding_activity').insert({ pipeline_id: pipelineId, note: note.trim(), author_id: employee.id })
   if (error) throw new Error(error.message)
   await admin.from('funding_pipeline').update({ updated_at: new Date().toISOString() }).eq('id', pipelineId)
+  revalidatePath('/admin/funding')
+}
+
+// ---- Grants Profile ----
+
+const PROFILE_COLUMNS = 'id, section, field_key, label, value, kind, status, source_note, sort, updated_at'
+
+export async function getProfile(): Promise<ProfileField[]> {
+  await requireFundingAccess()
+  const admin = createAdminClient()
+  const { data, error } = await admin.from('grants_profile').select(PROFILE_COLUMNS).order('section').order('sort').order('label')
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ProfileField[]
+}
+
+export async function saveProfileField(id: string, input: { value: string | null; status: ProfileStatus; source_note?: string | null }) {
+  const employee = await requireFundingAccess()
+  if (!PROFILE_STATUSES.includes(input.status)) throw new Error('Invalid status')
+  const value = input.value?.trim() ? input.value.trim() : null
+  // A field with no content cannot be draft or approved.
+  const status: ProfileStatus = value ? input.status : 'needed'
+  const admin = createAdminClient()
+  const update: Record<string, unknown> = { value, status, updated_by: employee.id, updated_at: new Date().toISOString() }
+  if (input.source_note !== undefined) update.source_note = input.source_note?.trim() || null
+  const { error } = await admin.from('grants_profile').update(update).eq('id', id)
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/funding')
+}
+
+export async function addProfileField(input: { section: string; label: string; kind: ProfileKind }) {
+  const employee = await requireFundingAccess()
+  const section = input.section.trim()
+  const label = input.label.trim()
+  if (!section || !label) throw new Error('Section and label are required')
+  if (!PROFILE_KINDS.includes(input.kind)) throw new Error('Invalid field type')
+  const admin = createAdminClient()
+  const { data: last } = await admin.from('grants_profile').select('sort').eq('section', section).order('sort', { ascending: false }).limit(1)
+  const sort = ((last?.[0]?.sort as number | undefined) ?? 0) + 10
+  const field_key = `custom_${Date.now().toString(36)}`
+  const { error } = await admin.from('grants_profile').insert({ section, label, kind: input.kind, field_key, sort, updated_by: employee.id })
+  if (error) throw new Error(error.message)
+  revalidatePath('/admin/funding')
+}
+
+export async function deleteProfileField(id: string) {
+  await requireFundingAccess()
+  const admin = createAdminClient()
+  const { error } = await admin.from('grants_profile').delete().eq('id', id)
+  if (error) throw new Error(error.message)
   revalidatePath('/admin/funding')
 }

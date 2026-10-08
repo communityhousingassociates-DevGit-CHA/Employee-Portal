@@ -4,10 +4,11 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addFundingNote, deleteFunding, getFundingActivity, saveFunding, setFundingStage } from '@/app/actions/funding'
 import {
-  FUNDING_STAGES, OPEN_STAGES, STAGE_LABEL,
-  type FundingActivity, type FundingInput, type FundingRow, type FundingStage,
+  FUNDING_STAGES, GEOGRAPHIES, GEO_LABEL, OPEN_STAGES, RELATIONSHIPS, REL_LABEL, STAGE_LABEL,
+  type FundingActivity, type FundingInput, type FundingRow, type FundingStage, type Geography, type ProfileField, type Relationship,
 } from '@/lib/constants/funding'
 import FundingReference, { type ReferenceTab } from '@/components/FundingReference'
+import GrantsProfile from '@/components/GrantsProfile'
 
 const money = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'))
 const day = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
@@ -26,17 +27,19 @@ const STAGE_BADGE: Record<FundingStage, string> = {
 }
 const PRIORITY_BADGE: Record<string, string> = { A: 'bg-[#02ACC0] text-white', B: 'bg-[#e0f5f8] text-[#028a9e]', C: 'bg-[#f0f7f8] text-gray-500' }
 
-const EMPTY: FundingInput = { funder: '', priority: 'B', stage: 'research' }
+const EMPTY: FundingInput = { funder: '', priority: 'B', stage: 'research', geography: 'baltimore', relationship: 'none' }
 
-const TABS: { id: 'pipeline' | ReferenceTab; label: string }[] = [
+type TabId = 'pipeline' | 'profile' | ReferenceTab
+const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline' },
+  { id: 'profile', label: 'Grants profile' },
   { id: 'finances', label: 'CHA finances' },
   { id: 'leverage', label: 'Public leverage' },
   { id: 'plan', label: '90-day plan' },
 ]
 const SUBMITTED_STAGES: FundingStage[] = ['loi_submitted', 'invited_to_apply', 'proposal_submitted', 'awarded', 'reporting']
 
-export default function FundingClient({ initialRows }: { initialRows: FundingRow[] }) {
+export default function FundingClient({ initialRows, initialProfile }: { initialRows: FundingRow[]; initialProfile: ProfileField[] }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [rows, setRows] = useState<FundingRow[]>(initialRows)
@@ -45,7 +48,9 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
   const [editing, setEditing] = useState<{ id: string | null; form: FundingInput } | null>(null)
   const [activity, setActivity] = useState<FundingActivity[]>([])
   const [note, setNote] = useState('')
-  const [tab, setTab] = useState<'pipeline' | ReferenceTab>('pipeline')
+  const [tab, setTab] = useState<TabId>('pipeline')
+  const [geoFilter, setGeoFilter] = useState<'all' | Geography>('all')
+  const [relFilter, setRelFilter] = useState<'all' | 'new' | Relationship>('all')
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
 
@@ -66,6 +71,9 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
 
   const visible = rows.filter(r => {
     if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false
+    if (geoFilter !== 'all' && r.geography !== geoFilter) return false
+    // 'new' hides funders CHA already has a relationship with, so the list shows only fresh prospects.
+    if (relFilter === 'new' ? r.relationship === 'existing' : relFilter !== 'all' && r.relationship !== relFilter) return false
     if (stageFilter === 'active') return r.stage !== 'skipped' && r.stage !== 'declined'
     if (stageFilter === 'all') return true
     return r.stage === stageFilter
@@ -134,7 +142,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Executive Funding</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Private grant prospects for permanent supportive housing · super admin only while in testing</p>
+          <p className="text-[13px] text-gray-500 mt-0.5">Grant prospects and a reusable grants profile for CHA · super admin only while in testing</p>
         </div>
         {tab === 'pipeline' && (
           <button onClick={() => openEdit(null)} className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors">
@@ -154,7 +162,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
 
       {toast && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-2.5 mb-4">{toast}</div>}
 
-      {tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
+      {tab === 'profile' ? <GrantsProfile initialFields={initialProfile} /> : tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {[
           { label: 'Weighted pipeline', value: money(weighted), sub: 'ask × probability', cls: 'bg-[#02ACC0] border-[#02ACC0]', text: 'text-white', subText: 'text-white/80' },
@@ -183,6 +191,15 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
           <option value="B">Priority B</option>
           <option value="C">Priority C</option>
         </select>
+        <select value={geoFilter} onChange={e => setGeoFilter(e.target.value as typeof geoFilter)} className={inputCls + ' !w-auto'}>
+          <option value="all">All regions</option>
+          {GEOGRAPHIES.map(g => <option key={g} value={g}>{GEO_LABEL[g]}</option>)}
+        </select>
+        <select value={relFilter} onChange={e => setRelFilter(e.target.value as typeof relFilter)} className={inputCls + ' !w-auto'}>
+          <option value="all">All relationships</option>
+          <option value="new">New prospects only</option>
+          {RELATIONSHIPS.map(r => <option key={r} value={r}>{REL_LABEL[r]}</option>)}
+        </select>
       </div>
 
       <div className="bg-white border border-[#d4eef2] rounded-xl overflow-x-auto shadow-sm">
@@ -206,7 +223,7 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
               <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f0fafb] cursor-pointer transition-colors" onClick={() => openEdit(r)}>
                 <td className="px-4 py-3">
                   <p className="font-semibold text-[#0b2b35]">{r.funder}</p>
-                  <p className="text-[11px] text-gray-400">{r.funder_type ?? ''}</p>
+                  <p className="text-[11px] text-gray-400">{[GEO_LABEL[r.geography], r.relationship === 'none' ? null : REL_LABEL[r.relationship], r.funder_type].filter(Boolean).join(' · ')}</p>
                 </td>
                 <td className="px-3 py-3"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_BADGE[r.priority]}`}>{r.priority}</span></td>
                 <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
@@ -243,6 +260,16 @@ export default function FundingClient({ initialRows }: { initialRows: FundingRow
                 <div><label className={labelCls}>Priority</label>
                   <select className={inputCls} value={editing.form.priority ?? 'B'} onChange={e => set('priority', e.target.value as 'A' | 'B' | 'C')}>
                     <option value="A">A: pursue now</option><option value="B">B: pursue next</option><option value="C">C: long shot</option>
+                  </select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className={labelCls}>Region</label>
+                  <select className={inputCls} value={editing.form.geography ?? 'baltimore'} onChange={e => set('geography', e.target.value as Geography)}>
+                    {GEOGRAPHIES.map(g => <option key={g} value={g}>{GEO_LABEL[g]}</option>)}
+                  </select></div>
+                <div><label className={labelCls}>Relationship</label>
+                  <select className={inputCls} value={editing.form.relationship ?? 'none'} onChange={e => set('relationship', e.target.value as Relationship)}>
+                    {RELATIONSHIPS.map(r => <option key={r} value={r}>{REL_LABEL[r]}</option>)}
                   </select></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
