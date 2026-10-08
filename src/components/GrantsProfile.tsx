@@ -25,13 +25,16 @@ export default function GrantsProfile({ initialFields }: { initialFields: Profil
   const [adding, setAdding] = useState<{ section: string; label: string; kind: ProfileKind } | null>(null)
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
 
   // Resync when the server sends fresh rows after router.refresh().
   const [seenInitial, setSeenInitial] = useState(initialFields)
   if (seenInitial !== initialFields) { setSeenInitial(initialFields); setFields(initialFields) }
 
   const bySection = new Map<string, ProfileField[]>()
-  for (const f of fields) bySection.set(f.section, [...(bySection.get(f.section) ?? []), f])
+  const q = query.trim().toLowerCase()
+  const matches = (f: ProfileField) => !q || [f.label, f.value, f.source_note, f.section].some(x => (x ?? '').toLowerCase().includes(q))
+  for (const f of fields.filter(matches)) bySection.set(f.section, [...(bySection.get(f.section) ?? []), f])
   const sections = [...SECTION_ORDER.filter(s => bySection.has(s)), ...[...bySection.keys()].filter(s => !SECTION_ORDER.includes(s))]
 
   const total = fields.length
@@ -89,10 +92,10 @@ export default function GrantsProfile({ initialFields }: { initialFields: Profil
 
   // Plain-text export of everything that has content, grouped by section, for pasting into an application or a doc.
   function exportText() {
-    return sections.map(s => {
-      const rows = (bySection.get(s) ?? []).filter(f => f.value)
-      return rows.length ? `${s.toUpperCase()}\n` + rows.map(f => `${f.label}: ${f.value}`).join('\n') : ''
-    }).filter(Boolean).join('\n\n')
+    const all = new Map<string, ProfileField[]>()
+    for (const f of fields) if (f.value) all.set(f.section, [...(all.get(f.section) ?? []), f])
+    const order = [...SECTION_ORDER.filter(s => all.has(s)), ...[...all.keys()].filter(s => !SECTION_ORDER.includes(s))]
+    return order.map(s => `${s.toUpperCase()}\n` + all.get(s)!.map(f => `${f.label}: ${f.value}`).join('\n')).join('\n\n')
   }
 
   return (
@@ -111,6 +114,7 @@ export default function GrantsProfile({ initialFields }: { initialFields: Profil
           <div className="h-2 bg-[#e0f5f8] rounded-full mt-2 overflow-hidden"><div className="h-full bg-[#02ACC0]" style={{ width: `${pct}%` }} /></div>
           <p className="text-[12px] text-gray-500 mt-1.5">{approved} approved · {drafted} draft · {needed} still needed</p>
         </div>
+        <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search profile" aria-label="Search profile" className={inputCls + ' !w-full sm:!w-[220px]'} />
         <div className="flex gap-2">
           <button onClick={() => copy(exportText(), 'Profile')} className="text-[13px] font-semibold px-3 py-2 rounded-lg border border-[#02ACC0] text-[#02ACC0] hover:bg-[#f0fafb]">Copy all as text</button>
           <button onClick={() => { setError(''); setAdding({ section: SECTION_ORDER[0], label: '', kind: 'long' }) }} className="text-[13px] font-semibold px-3 py-2 rounded-lg bg-[#02ACC0] text-white hover:bg-[#028a9e]">+ Add field</button>

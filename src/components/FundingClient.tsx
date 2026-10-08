@@ -29,6 +29,19 @@ const PRIORITY_BADGE: Record<string, string> = { A: 'bg-[#02ACC0] text-white', B
 
 const EMPTY: FundingInput = { funder: '', priority: 'B', stage: 'research', geography: 'baltimore', relationship: 'none' }
 
+type SortKey = 'funder' | 'priority' | 'region' | 'stage' | 'ask' | 'prob' | 'next' | 'due'
+const SORT_VALUE: Record<SortKey, (r: FundingRow) => string | number | null> = {
+  funder: r => r.funder.toLowerCase(),
+  priority: r => r.priority,
+  region: r => GEOGRAPHIES.indexOf(r.geography),
+  stage: r => FUNDING_STAGES.indexOf(r.stage),
+  ask: r => r.ask_amount,
+  prob: r => r.probability,
+  next: r => r.next_step?.toLowerCase() ?? null,
+  due: r => r.next_step_due,
+}
+const SEARCH_FIELDS: (keyof FundingRow)[] = ['funder', 'funder_type', 'fit_notes', 'process_notes', 'eligibility_notes', 'purpose', 'owner', 'next_step', 'ask_size_published']
+
 type TabId = 'pipeline' | 'profile' | ReferenceTab
 const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline' },
@@ -50,6 +63,8 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
   const [note, setNote] = useState('')
   const [tab, setTab] = useState<TabId>('pipeline')
   const [geoFilter, setGeoFilter] = useState<'all' | Geography>('all')
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null)
   const [relFilter, setRelFilter] = useState<'all' | 'new' | Relationship>('all')
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
@@ -71,6 +86,8 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
 
   const visible = rows.filter(r => {
     if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false
+    const q = query.trim().toLowerCase()
+    if (q && !SEARCH_FIELDS.some(f => String(r[f] ?? '').toLowerCase().includes(q)) && !GEO_LABEL[r.geography].toLowerCase().includes(q)) return false
     if (geoFilter !== 'all' && r.geography !== geoFilter) return false
     // 'new' hides funders CHA already has a relationship with, so the list shows only fresh prospects.
     if (relFilter === 'new' ? r.relationship === 'existing' : relFilter !== 'all' && r.relationship !== relFilter) return false
@@ -78,6 +95,20 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
     if (stageFilter === 'all') return true
     return r.stage === stageFilter
   })
+
+  // Empty values always sort last, whichever direction is chosen.
+  const sorted = sort ? [...visible].sort((a, b) => {
+    const x = SORT_VALUE[sort.key](a), y = SORT_VALUE[sort.key](b)
+    if (x == null && y == null) return 0
+    if (x == null) return 1
+    if (y == null) return -1
+    const c = x < y ? -1 : x > y ? 1 : 0
+    return sort.dir === 'asc' ? c : -c
+  }) : visible
+
+  function toggleSort(key: SortKey) {
+    setSort(cur => (!cur || cur.key !== key ? { key, dir: 'asc' } : cur.dir === 'asc' ? { key, dir: 'desc' } : null))
+  }
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
@@ -180,6 +211,8 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
       <p className="text-[12px] text-[#028a9e] font-medium mb-5">6-month goals: {inConversation} of 6+ funder conversations · {submitted} of 3+ LOIs or applications submitted</p>
 
       <div className="flex flex-wrap gap-2 mb-4">
+        <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search funders, notes, next steps"
+          aria-label="Search funders" className={inputCls + ' !w-full sm:!w-[260px]'} />
         <select value={stageFilter} onChange={e => setStageFilter(e.target.value as typeof stageFilter)} className={inputCls + ' !w-auto'}>
           <option value="active">Active (hide declined / not pursuing)</option>
           <option value="all">All stages</option>
@@ -206,26 +239,30 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
         <table className="w-full text-[13px]">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide bg-[#0b2b35] text-white/80">
-              <th className="px-4 py-3">Funder</th>
-              <th className="px-3 py-3">Pri</th>
-              <th className="px-3 py-3">Stage</th>
-              <th className="px-3 py-3 text-right">Ask</th>
-              <th className="px-3 py-3 text-right">Prob.</th>
-              <th className="px-3 py-3">Next step</th>
-              <th className="px-3 py-3">Due</th>
+              {([
+                ['funder', 'Funder', 'px-4 py-3'], ['priority', 'Pri', 'px-3 py-3'], ['region', 'Region', 'px-3 py-3'], ['stage', 'Stage', 'px-3 py-3'],
+                ['ask', 'Ask', 'px-3 py-3 text-right'], ['prob', 'Prob.', 'px-3 py-3 text-right'], ['next', 'Next step', 'px-3 py-3'], ['due', 'Due', 'px-3 py-3'],
+              ] as [SortKey, string, string][]).map(([key, label, cls]) => (
+                <th key={key} className={cls} aria-sort={sort?.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button onClick={() => toggleSort(key)} className="uppercase tracking-wide hover:text-white inline-flex items-center gap-1">
+                    {label}<span aria-hidden className={sort?.key === key ? 'text-white' : 'text-white/30'}>{sort?.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                  </button>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No funders match these filters.</td></tr>
+            {sorted.length === 0 && (
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No funders match these filters.</td></tr>
             )}
-            {visible.map(r => (
+            {sorted.map(r => (
               <tr key={r.id} className="border-b border-[#f0f7f8] last:border-0 hover:bg-[#f0fafb] cursor-pointer transition-colors" onClick={() => openEdit(r)}>
                 <td className="px-4 py-3">
                   <p className="font-semibold text-[#0b2b35]">{r.funder}</p>
-                  <p className="text-[11px] text-gray-400">{[GEO_LABEL[r.geography], r.relationship === 'none' ? null : REL_LABEL[r.relationship], r.funder_type].filter(Boolean).join(' · ')}</p>
+                  <p className="text-[11px] text-gray-400">{[r.relationship === 'none' ? null : REL_LABEL[r.relationship], r.funder_type].filter(Boolean).join(' · ')}</p>
                 </td>
                 <td className="px-3 py-3"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_BADGE[r.priority]}`}>{r.priority}</span></td>
+                <td className="px-3 py-3 whitespace-nowrap text-gray-600">{GEO_LABEL[r.geography]}</td>
                 <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                   <select value={r.stage} onChange={e => handleStage(r, e.target.value as FundingStage)}
                     className={`text-[12px] font-medium rounded-full px-2 py-1 border-0 ${STAGE_BADGE[r.stage]}`}>
