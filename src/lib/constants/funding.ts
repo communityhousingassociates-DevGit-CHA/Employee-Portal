@@ -57,6 +57,8 @@ export type FundingRow = {
   proposal_due: string | null
   decision_date: string | null
   awarded_amount: number | null
+  website_url: string | null
+  application_url: string | null
   source_url: string | null
   verification: string | null
   updated_at: string
@@ -90,4 +92,32 @@ export type ProfileField = {
   source_note: string | null
   sort: number
   updated_at: string
+}
+
+// AI funder search: proposals wait in a review queue until a super admin adds or dismisses them.
+export type FundingSuggestion = {
+  id: string
+  funder: string
+  funder_type: string | null
+  geography: Geography
+  priority: 'A' | 'B' | 'C'
+  fit_notes: string | null
+  ask_size_published: string | null
+  process_notes: string | null
+  eligibility_notes: string | null
+  next_step: string | null
+  next_step_due: string | null
+  website_url: string | null
+  application_url: string | null
+  source_url: string | null
+  verification: string | null
+  created_at: string
+}
+export type SearchStatus = { configured: boolean; runsToday: number; dailyLimit: number; lastRunAt: string | null }
+export const SEARCH_DAILY_LIMIT = 5
+
+// Only http(s) links are ever rendered as hrefs or stored, so a pasted javascript: or data: URL cannot become a clickable link.
+export function safeUrl(u: string | null | undefined): string | null {
+  const t = (u ?? '').trim()
+  return /^https?:\/\/\S+$/i.test(t) ? t : null
 }

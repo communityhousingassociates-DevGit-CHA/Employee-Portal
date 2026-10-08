@@ -4,11 +4,12 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { addFundingNote, deleteFunding, getFundingActivity, saveFunding, setFundingStage } from '@/app/actions/funding'
 import {
-  FUNDING_STAGES, GEOGRAPHIES, GEO_LABEL, OPEN_STAGES, RELATIONSHIPS, REL_LABEL, STAGE_LABEL,
-  type FundingActivity, type FundingInput, type FundingRow, type FundingStage, type Geography, type ProfileField, type Relationship,
+  FUNDING_STAGES, GEOGRAPHIES, safeUrl, GEO_LABEL, OPEN_STAGES, RELATIONSHIPS, REL_LABEL, STAGE_LABEL,
+  type FundingActivity, type FundingInput, type FundingRow, type FundingStage, type Geography, type FundingSuggestion, type ProfileField, type Relationship, type SearchStatus,
 } from '@/lib/constants/funding'
 import FundingReference, { type ReferenceTab } from '@/components/FundingReference'
 import GrantsProfile from '@/components/GrantsProfile'
+import FundingSuggestions from '@/components/FundingSuggestions'
 
 const money = (n: number | null | undefined) => (n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'))
 const day = (d: string | null) => (d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
@@ -42,9 +43,10 @@ const SORT_VALUE: Record<SortKey, (r: FundingRow) => string | number | null> = {
 }
 const SEARCH_FIELDS: (keyof FundingRow)[] = ['funder', 'funder_type', 'fit_notes', 'process_notes', 'eligibility_notes', 'purpose', 'owner', 'next_step', 'ask_size_published']
 
-type TabId = 'pipeline' | 'profile' | ReferenceTab
+type TabId = 'pipeline' | 'suggested' | 'profile' | ReferenceTab
 const TABS: { id: TabId; label: string }[] = [
   { id: 'pipeline', label: 'Pipeline' },
+  { id: 'suggested', label: 'Suggested' },
   { id: 'profile', label: 'Grants profile' },
   { id: 'finances', label: 'CHA finances' },
   { id: 'leverage', label: 'Public leverage' },
@@ -52,7 +54,7 @@ const TABS: { id: TabId; label: string }[] = [
 ]
 const SUBMITTED_STAGES: FundingStage[] = ['loi_submitted', 'invited_to_apply', 'proposal_submitted', 'awarded', 'reporting']
 
-export default function FundingClient({ initialRows, initialProfile }: { initialRows: FundingRow[]; initialProfile: ProfileField[] }) {
+export default function FundingClient({ initialRows, initialProfile, initialSuggestions, searchStatus }: { initialRows: FundingRow[]; initialProfile: ProfileField[]; initialSuggestions: FundingSuggestion[]; searchStatus: SearchStatus }) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [rows, setRows] = useState<FundingRow[]>(initialRows)
@@ -186,14 +188,14 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
         {TABS.map(t => (
           <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
             className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${tab === t.id ? 'bg-[#0b2b35] text-white' : 'text-gray-500 hover:bg-[#f0f7f8]'}`}>
-            {t.label}
+            {t.label}{t.id === 'suggested' && initialSuggestions.length > 0 && <span className="ml-1.5 text-[11px] font-bold bg-[#02ACC0] text-white rounded-full px-1.5 py-0.5">{initialSuggestions.length}</span>}
           </button>
         ))}
       </div>
 
       {toast && <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-2.5 mb-4">{toast}</div>}
 
-      {tab === 'profile' ? <GrantsProfile initialFields={initialProfile} /> : tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
+      {tab === 'suggested' ? <FundingSuggestions initialSuggestions={initialSuggestions} status={searchStatus} /> : tab === 'profile' ? <GrantsProfile initialFields={initialProfile} /> : tab !== 'pipeline' ? <FundingReference tab={tab} /> : (<>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {[
           { label: 'Weighted pipeline', value: money(weighted), sub: 'ask × probability', cls: 'bg-[#02ACC0] border-[#02ACC0]', text: 'text-white', subText: 'text-white/80' },
@@ -260,6 +262,12 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
                 <td className="px-4 py-3">
                   <p className="font-semibold text-[#0b2b35]">{r.funder}</p>
                   <p className="text-[11px] text-gray-400">{[r.relationship === 'none' ? null : REL_LABEL[r.relationship], r.funder_type].filter(Boolean).join(' · ')}</p>
+                  {(safeUrl(r.website_url) || safeUrl(r.application_url)) && (
+                    <p className="text-[11px] mt-0.5 space-x-3" onClick={e => e.stopPropagation()}>
+                      {safeUrl(r.website_url) && <a href={safeUrl(r.website_url)!} target="_blank" rel="noopener noreferrer" className="text-[#02ACC0] hover:underline">Website ↗</a>}
+                      {safeUrl(r.application_url) && <a href={safeUrl(r.application_url)!} target="_blank" rel="noopener noreferrer" className="text-[#02ACC0] hover:underline">Apply ↗</a>}
+                    </p>
+                  )}
                 </td>
                 <td className="px-3 py-3"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${PRIORITY_BADGE[r.priority]}`}>{r.priority}</span></td>
                 <td className="px-3 py-3 whitespace-nowrap text-gray-600">{GEO_LABEL[r.geography]}</td>
@@ -332,13 +340,18 @@ export default function FundingClient({ initialRows, initialProfile }: { initial
               <div><label className={labelCls}>Fit for CHA</label><textarea rows={3} className={inputCls} value={editing.form.fit_notes ?? ''} onChange={e => set('fit_notes', e.target.value)} /></div>
               <div><label className={labelCls}>Process and timing</label><textarea rows={3} className={inputCls} value={editing.form.process_notes ?? ''} onChange={e => set('process_notes', e.target.value)} /></div>
               <div><label className={labelCls}>Eligibility flags</label><textarea rows={2} className={inputCls} value={editing.form.eligibility_notes ?? ''} onChange={e => set('eligibility_notes', e.target.value)} /></div>
+              <div><label className={labelCls}>Funder website</label><input className={inputCls} value={editing.form.website_url ?? ''} onChange={e => set('website_url', e.target.value)} placeholder="https://" /></div>
+              <div><label className={labelCls}>Grant / application page</label><input className={inputCls} value={editing.form.application_url ?? ''} onChange={e => set('application_url', e.target.value)} placeholder="https://  (guidelines, LOI form or portal)" /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className={labelCls}>Source link</label><input className={inputCls} value={editing.form.source_url ?? ''} onChange={e => set('source_url', e.target.value)} /></div>
+                <div><label className={labelCls}>Research source</label><input className={inputCls} value={editing.form.source_url ?? ''} onChange={e => set('source_url', e.target.value)} placeholder="https://" /></div>
                 <div><label className={labelCls}>Verification</label><input className={inputCls} value={editing.form.verification ?? ''} onChange={e => set('verification', e.target.value)} /></div>
               </div>
-              {editing.form.source_url && /^https?:\/\//.test(editing.form.source_url) && (
-                <a href={editing.form.source_url} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#02ACC0] hover:underline">Open funder page ↗</a>
-              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {([['Open website', editing.form.website_url], ['Open application page', editing.form.application_url], ['Open research source', editing.form.source_url]] as [string, string | null | undefined][])
+                  .filter(([, u]) => safeUrl(u)).map(([label, u]) => (
+                    <a key={label} href={safeUrl(u)!} target="_blank" rel="noopener noreferrer" className="text-[12px] text-[#02ACC0] hover:underline">{label} ↗</a>
+                  ))}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 mt-5">
