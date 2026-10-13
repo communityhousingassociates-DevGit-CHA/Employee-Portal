@@ -12,6 +12,7 @@ const KIND_STYLE: Record<NotificationKind, { icon: string; cls: string }> = {
   returned: { icon: '↩', cls: 'bg-amber-100 text-amber-700' },
   cancelled: { icon: '⊘', cls: 'bg-gray-100 text-gray-600' },
   on_behalf: { icon: '✎', cls: 'bg-amber-100 text-amber-700' },
+  submitted: { icon: '➤', cls: 'bg-[#e0f5f8] text-[#028a9e]' },
 }
 
 function timeAgo(iso: string) {
@@ -64,6 +65,11 @@ export default function NotificationBell({ items, unreadCount }: { items: Portal
     refresh()
   }
 
+  async function markOneRead(id: string) {
+    try { await markNotificationsRead([id]) } catch { /* best-effort */ }
+    refresh()
+  }
+
   return (
     <div ref={ref} className="relative mr-1 flex-shrink-0">
       <button
@@ -95,8 +101,8 @@ export default function NotificationBell({ items, unreadCount }: { items: Portal
               {items.map(n => {
                 const st = KIND_STYLE[n.kind] ?? KIND_STYLE.approval_needed
                 return (
-                  <li key={n.id}>
-                    <button onClick={() => openItem(n)} className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-[#f8fcfd] transition-colors ${n.read_at ? '' : 'bg-[#f5fbfc]'}`}>
+                  <li key={n.id} className={`flex items-start hover:bg-[#f8fcfd] transition-colors ${n.read_at ? '' : 'bg-[#f5fbfc]'}`}>
+                    <button onClick={() => openItem(n)} className="flex-1 min-w-0 text-left pl-4 pr-2 py-3 flex gap-3">
                       <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0 ${st.cls}`}>{st.icon}</span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start justify-between gap-2">
@@ -107,6 +113,16 @@ export default function NotificationBell({ items, unreadCount }: { items: Portal
                         <span className="block text-[11px] text-gray-400 mt-1">{timeAgo(n.created_at)}</span>
                       </span>
                     </button>
+                    {!n.read_at && (
+                      <button
+                        onClick={() => markOneRead(n.id)}
+                        aria-label={`Mark "${n.title}" as read`}
+                        title="Mark as read"
+                        className="flex-shrink-0 mt-3 mr-3 px-2 py-1 rounded-md text-[11px] font-semibold text-[#02ACC0] hover:bg-[#e0f5f8] transition-colors"
+                      >
+                        Mark read
+                      </button>
+                    )}
                   </li>
                 )
               })}

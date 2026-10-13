@@ -253,6 +253,13 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
     })
   } else {
     await logTimesheetEvent(admin, { timesheetId, actorId: employee.id, action: 'submitted', signature: { name: employee.name, employeeNumber: employee.employee_number, attestation: TIMESHEET_ATTESTATION } })
+    await notifyEmployee(admin, employee.id, {
+      kind: 'submitted',
+      title: 'Your timesheet was submitted',
+      body: `Pay period ${period} was submitted and is waiting for approval. You'll be notified when it's approved or returned.`,
+      link: '/timesheet',
+      cta: 'View Timesheet',
+    })
   }
 
   await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
