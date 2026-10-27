@@ -51,7 +51,7 @@ function individualEmail(firstName: string, period: PayPeriod, due: string, link
     </div>`
 }
 
-function summaryEmail(period: PayPeriod, due: string, missing: { name: string; status: string }[], alerted: Set<string>, link: string) {
+export function summaryEmail(period: PayPeriod, due: string, missing: { name: string; status: string }[], alerted: Set<string>, link: string) {
   const rows = missing.map(m => `
         <tr><td style="padding:6px 8px;border-bottom:1px solid #f0f7f8"><strong>${esc(m.name)}</strong></td><td style="padding:6px 8px;border-bottom:1px solid #f0f7f8;color:#6b7280">${esc(m.status)}</td><td style="padding:6px 8px;border-bottom:1px solid #f0f7f8;text-align:right;color:${alerted.has(m.name) ? '#059669' : '#dc2626'}">${alerted.has(m.name) ? 'Alert sent' : 'Alert NOT sent'}</td></tr>`).join('')
   return `
