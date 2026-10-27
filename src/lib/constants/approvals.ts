@@ -71,6 +71,11 @@ export const TRACKING_DIGEST_INCLUDE_ACTIVITY = false
 // nothing to report.
 export const TRACKING_DIGEST_TO: string[] = ['communityhousingassociates@gmail.com']
 
+// On every pay date the daily job emails each person whose timesheet for the period being paid is still not submitted, and sends this
+// summary (to + cc). Carrileen gets the report; Nico is copied. See lib/payday-timesheet-alerts.ts.
+export const PAYDAY_REPORT_TO: string[] = ['cedwards@communityhousingmd.org']
+export const PAYDAY_REPORT_CC: string[] = ['nsanders@communityhousingmd.org']
+
 // Closing a date range for accounting (see closed_periods). Lifting a closure is restricted to the CEO override role.
 export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES
 

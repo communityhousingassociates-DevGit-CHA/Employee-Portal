@@ -8,6 +8,7 @@ import { populateDraftTimesheets } from '@/lib/leave-timesheet'
 import { sendApprovalDigest } from '@/lib/approval-digest'
 import { sendTrackingDigest } from '@/lib/tracking-digest'
 import { sendInviteReminders } from '@/lib/invite-reminders'
+import { sendPaydayTimesheetAlerts } from '@/lib/payday-timesheet-alerts'
 
 // Daily job (vercel.json), in two steps:
 //  0. Year-end carryover — in January only (from the 2027 year-end on), trims each employee's combined annual + personal +
@@ -20,6 +21,7 @@ import { sendInviteReminders } from '@/lib/invite-reminders'
 //     its start date arrives. Runs regardless of the accrual switch, after accruals so a shortfall isn't overstated.
 //  5. Invite reminders — staff who were invited but never set a password get a reminder with a fresh link each day (max 7).
 //  4. Tracking digest — a daily record for CHA (TRACKING_DIGEST_TO) of what was submitted and what is still waiting.
+//  6. Payday timesheet alerts — on a pay date, emails each person with an unsubmitted timesheet for the period being paid and sends Carrileen (cc Nico) a summary.
 //  3. Approver digest — a weekday reminder of anything that's been waiting on approval longer than REMINDER_AFTER_DAYS.
 export async function GET(request: NextRequest) {
   const auth = request.headers.get('authorization')
@@ -44,6 +46,7 @@ export async function GET(request: NextRequest) {
   const timesheetFill = await populateDraftTimesheets(admin).catch(e => ({ timesheets: 0, error: e instanceof Error ? e.message : String(e) }))
   const digest = await sendApprovalDigest(admin).catch(e => ({ error: e instanceof Error ? e.message : String(e) }))
   const inviteReminders = await sendInviteReminders(admin).catch(e => ({ reminded: [] as string[], failed: [{ name: 'Invite reminders', error: e instanceof Error ? e.message : String(e) }], skipped: 0 }))
+  const paydayAlerts = await sendPaydayTimesheetAlerts(admin).catch(e => ({ ran: false, error: e instanceof Error ? e.message : String(e), failed: [] as { name: string; error: string }[] }))
   // Anything the daily job hit that needs a person to look at it goes into the tracking digest's "Needs attention" box.
   const issues: string[] = []
   const errs = (label: string, r: unknown) => {
@@ -51,7 +54,8 @@ export async function GET(request: NextRequest) {
     for (const m of e.errors ?? []) issues.push(`${label}: ${m}`)
     if (e.error) issues.push(`${label}: ${e.error}`)
   }
-  errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest); errs('Timesheet fill', timesheetFill)
+  errs('Year-end carryover', carryover); errs('Personal Days grant', personalGrant); errs('Accruals', accruals); errs('Leave deductions', deductions); errs('Approver reminders', digest); errs('Timesheet fill', timesheetFill); errs('Payday timesheet alerts', paydayAlerts)
+  for (const f of paydayAlerts.failed ?? []) issues.push(`Payday timesheet alert for ${f.name}: ${f.error}`)
   // Sign-ins the location rule refused in the last 24 hours (someone traveling, a VPN, or a real attempt) — worth a look.
   const { data: blocks } = await admin.from('geofence_blocks').select('employee_id, region, country, city, employee:employees(name)').gte('created_at', new Date(Date.now() - 86400000).toISOString())
   const byPerson = new Map<string, { name: string; where: string; n: number }>()
@@ -64,5 +68,5 @@ export async function GET(request: NextRequest) {
   for (const f of inviteReminders.failed) issues.push(`Invite reminder for ${f.name}: ${f.error}`)
   if ((deductions as { shortfalls?: number }).shortfalls) issues.push(`${(deductions as { shortfalls?: number }).shortfalls} approved leave request(s) came due with an insufficient balance — see the notices to approvers.`)
   const tracking = await sendTrackingDigest(admin, issues).catch(e => ({ sent: false, reason: e instanceof Error ? e.message : String(e) }))
-  return NextResponse.json({ inviteReminders, tracking, carryover, personalGrant, accruals, deductions, timesheetFill, digest })
+  return NextResponse.json({ paydayAlerts, inviteReminders, tracking, carryover, personalGrant, accruals, deductions, timesheetFill, digest })
 }
