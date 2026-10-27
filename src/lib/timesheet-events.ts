@@ -3,15 +3,16 @@
 
 import { headers } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { TimesheetEventAction } from '@/types'
+import type { TimesheetChange, TimesheetEventAction } from '@/types'
 
 /**
  * Appends a row to timesheet_events. Best-effort: the state change it describes has already happened, so a
  * logging failure is reported to the server log rather than thrown (which would make a successful action look failed).
+ * Returns whether the row was written — a caller whose change must never go unlogged (manual edits) checks it BEFORE changing anything.
  */
 export async function logTimesheetEvent(
   admin: SupabaseClient,
-  e: { timesheetId: string; actorId: string | null; action: TimesheetEventAction; reasonCode?: string | null; note?: string | null; signature?: { name: string; employeeNumber?: number; attestation: string } },
+  e: { timesheetId: string; actorId: string | null; action: TimesheetEventAction; reasonCode?: string | null; note?: string | null; changes?: TimesheetChange[]; signature?: { name: string; employeeNumber?: number; attestation: string } },
 ) {
   // A signature carries where it came from. Best-effort: outside a request there are no headers.
   let ip: string | null = null
@@ -24,7 +25,9 @@ export async function logTimesheetEvent(
     action: e.action,
     reason_code: e.reasonCode ?? null,
     note: e.note ?? null,
+    ...(e.changes?.length ? { changes: e.changes } : {}),
     ...(e.signature ? { signature_name: e.signature.name, signer_employee_number: e.signature.employeeNumber ?? null, attestation: e.signature.attestation, signed_ip: ip } : {}),
   })
   if (error) console.error('logTimesheetEvent failed', e.action, error.message)
+  return !error
 }

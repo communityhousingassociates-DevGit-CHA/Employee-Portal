@@ -3,7 +3,8 @@
 import { errMsg } from '@/lib/user-error'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { getOrCreateTimesheet, saveTimesheetDraft, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
+import { useRouter } from 'next/navigation'
+import { getOrCreateTimesheet, saveTimesheetDraft, manualEditTimesheet, viewTimesheet, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
 import OnBehalfPanel from '@/components/OnBehalfPanel'
 import { onBehalfProblem } from '@/lib/constants/on-behalf'
 import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
@@ -15,7 +16,7 @@ import RowTags from '@/components/RowTags'
 import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetAudit, TimesheetRow as TimesheetRowType, Expense, TimesheetTag } from '@/types'
-import TimesheetSignatures from '@/components/TimesheetSignatures'
+import TimesheetSignatures, { TimesheetHistory } from '@/components/TimesheetSignatures'
 import { getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod, todayET } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
@@ -61,7 +62,19 @@ function normalizeRows(rows: TimesheetRowType[], salaried: boolean): EditableRow
   })
 }
 
+const EMPTY_AUDIT: TimesheetAudit = { submitted_by_name: null, submitted_by_role: null, approver_name: null, approver_role: null, events: [] }
+
+/** Stand-in shown while a period has no timesheet yet (nothing exists in the database until someone presses Create). */
+function placeholderSheet(employeeId: string, p: PayPeriod): Timesheet {
+  return { id: '', employee_id: employeeId, period_start: p.start, period_end: p.end, status: 'draft', employee_signed_at: null, approver_id: null, approved_at: null, return_reason: null, correction_requested_at: null, correction_note: null, created_at: '' }
+}
+
 export default function TimesheetClient({
+  selfId,
+  people,
+  canEditClosed,
+  initialPeriodIdx,
+  employeeId,
   employeeName,
   employeeNumber,
   employeeType,
@@ -77,14 +90,23 @@ export default function TimesheetClient({
   closedRanges,
   customTags,
 }: {
+  /** The signed-in employee, and (for Nico, Carrileen and the super admin only) everyone they may open from the picker. */
+  selfId: string
+  people: { id: string; name: string; employee_number: number }[]
+  /** May override a pay period accounting has closed (the CEO / super admin). */
+  canEditClosed: boolean
+  initialPeriodIdx: number
+  /** Whose timesheet this is. */
+  employeeId: string
   employeeName: string
   employeeNumber: number
   employeeType: string
   yearEnd?: YearEndChoice | null
   periods: PayPeriod[]
-  initialTimesheet: Timesheet
+  /** Null when viewing someone else's timesheet for a period in which none exists yet. */
+  initialTimesheet: Timesheet | null
   initialRows: TimesheetRowType[]
-  initialAudit: TimesheetAudit
+  initialAudit: TimesheetAudit | null
   initialExpenses: Expense[]
   salary: Salary
   /** Whether this employee is salaried (hours auto-fill to 8/day). Separate from `salary` so an admin acting for them never receives the amount. */
@@ -96,10 +118,16 @@ export default function TimesheetClient({
 }) {
   const isSalaried = salaried
 
-  const [periodIdx, setPeriodIdx] = useState(0)
-  const [timesheet, setTimesheet] = useState<Timesheet>(initialTimesheet)
-  const [audit, setAudit] = useState<TimesheetAudit>(initialAudit)
-  const [rows, setRows] = useState<EditableRow[]>(() => normalizeRows(initialRows, isSalaried))
+  const router = useRouter()
+  // Another employee's sheet shows the values actually stored (never recomputed), so a manual override is what you see after a reload.
+  const normalizeFor = (r: TimesheetRowType[]) => normalizeRows(r, isSalaried && !onBehalf)
+  const [periodIdx, setPeriodIdx] = useState(initialPeriodIdx)
+  const [timesheet, setTimesheet] = useState<Timesheet>(() => initialTimesheet ?? placeholderSheet(employeeId, periods[initialPeriodIdx]))
+  const [audit, setAudit] = useState<TimesheetAudit>(initialAudit ?? EMPTY_AUDIT)
+  const [missing, setMissing] = useState(!initialTimesheet)
+  // Someone else's timesheet is READ-ONLY until Override / Edit is pressed; every save is then logged to the audit trail.
+  const [editing, setEditing] = useState(false)
+  const [rows, setRows] = useState<EditableRow[]>(() => normalizeRows(initialRows, isSalaried && !onBehalf))
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
@@ -113,7 +141,7 @@ export default function TimesheetClient({
   const savingRef = useRef(false)
   const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
   // On behalf of an employee the sheet stays read-only until a reason code and notes are given (the server re-checks).
-  const behalfIssue = onBehalf ? onBehalfProblem(behalf) : null
+  const behalfIssue = onBehalf && editing ? onBehalfProblem(behalf) : null
 
   const period = periods[periodIdx]
   const dueDate = getTimesheetDueDate(period)
@@ -121,6 +149,11 @@ export default function TimesheetClient({
   // Accounting closed dates in this period: a never-submitted draft can't be edited or submitted (a deliberately reopened one can — that's the CEO override).
   const closedHit = closedRangeOverlapping(period.start, period.end, closedRanges)
   const closedForEdit = !!closedHit && timesheet.status === 'draft' && !timesheet.return_reason
+  // An override of a closed period is the CEO's (or super admin's) alone — the server enforces it too.
+  const closedBlocksOverride = !!onBehalf && !!closedHit && !timesheet.return_reason && !canEditClosed
+  /** Whether the grid is locked: someone else's sheet until Override / Edit is on (and a reason is given); your own once submitted or closed. */
+  const readOnly = onBehalf ? !editing || !!behalfIssue || closedBlocksOverride : closedForEdit || submitted
+  const canSubmitOnBehalf = !!onBehalf && editing && timesheet.status === 'draft' && !closedBlocksOverride
 
   const totalReg = rows.reduce((s, r) => s + Number(r.regular_hours), 0)
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
@@ -141,14 +174,22 @@ export default function TimesheetClient({
     savingRef.current = true
     setSaveStatus('saving')
     try {
-      await saveTimesheetDraft(timesheet.id, rowsSnapshot.map(r => ({
+      const payload = rowsSnapshot.map(r => ({
         id: r.id,
         description: r.description,
         regular_hours: Number(r.regular_hours),
         leave_hours: Number(r.leave_hours),
         holiday_worked_hours: Number(r.holiday_worked_hours ?? 0),
         tag_ids: r.tag_ids ?? [],
-      })), onBehalf ? behalf : undefined)
+      }))
+      if (onBehalf) {
+        // A manual override: one explicit save = one audit event with the before/after of every field changed.
+        await manualEditTimesheet(timesheet.id, payload, behalf)
+        const fresh = await viewTimesheet(onBehalf.employeeId, period.start)
+        if (fresh.audit) setAudit(fresh.audit)
+      } else {
+        await saveTimesheetDraft(timesheet.id, payload)
+      }
       setRows(rs => rs.map(r => ({ ...r, dirty: false })))
       setSaveStatus('idle')
     } catch (e: unknown) {
@@ -164,7 +205,7 @@ export default function TimesheetClient({
   // clears the pending timer) on every keystroke, so only a pause in typing
   // actually triggers a save.
   useEffect(() => {
-    if (!rows.some(r => r.dirty)) return
+    if (onBehalf || !rows.some(r => r.dirty)) return
     const t = setTimeout(() => { void persist(rows) }, AUTOSAVE_DELAY_MS)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,23 +233,59 @@ export default function TimesheetClient({
       // Flush pending edits before navigating away — otherwise an in-flight
       // debounce for the old period would fire after `rows` has already
       // been replaced with the new period's data.
-      if (rows.some(r => r.dirty)) await persist(rows)
+      if (rows.some(r => r.dirty)) {
+        if (onBehalf) { setError('Save your changes (or exit edit mode) before switching pay periods.'); return }
+        await persist(rows)
+      }
 
       const p = periods[newIdx]
-      const [{ timesheet: ts, rows: r, audit: au }, exp] = await Promise.all([
-        getOrCreateTimesheet(p.start, p.end, onBehalf?.employeeId),
-        getExpensesForPeriod(timesheet.employee_id, p.start, p.end).catch(() => []),
+      const [view, exp] = await Promise.all([
+        onBehalf ? viewTimesheet(onBehalf.employeeId, p.start) : getOrCreateTimesheet(p.start, p.end),
+        getExpensesForPeriod(employeeId, p.start, p.end).catch(() => []),
       ])
       setPeriodIdx(newIdx)
-      setTimesheet(ts)
-      setAudit(au)
-      setRows(normalizeRows(r, isSalaried))
+      setEditing(false)
+      setBehalf({ reasonCode: '', note: '' })
+      setMissing(!view.timesheet)
+      setTimesheet(view.timesheet ?? placeholderSheet(employeeId, p))
+      setAudit(view.audit ?? EMPTY_AUDIT)
+      setRows(normalizeFor(view.rows))
       setExpenses(exp)
     } catch (e: unknown) {
       setError(errMsg(e, 'Failed to load period'))
     } finally {
       setLoading(false)
     }
+  }
+
+  /** Open another employee's timesheet (same pay period), or go back to your own. */
+  function openPerson(id: string) {
+    if (id === employeeId) return
+    if (rows.some(r => r.dirty)) { setError('Save your changes (or exit edit mode) before switching employees.'); return }
+    router.push(`/timesheet?${id === selfId ? '' : `for=${id}&`}period=${period.start}`)
+  }
+
+  /** Leave edit mode; unsaved edits are discarded by reloading what is stored. */
+  async function exitEdit() {
+    setError('')
+    if (rows.some(r => r.dirty) && onBehalf) {
+      setLoading(true)
+      try {
+        const v = await viewTimesheet(onBehalf.employeeId, period.start)
+        if (v.timesheet) { setTimesheet(v.timesheet); setRows(normalizeFor(v.rows)); if (v.audit) setAudit(v.audit) }
+      } catch (e: unknown) { setError(errMsg(e, 'Failed to reload')) } finally { setLoading(false) }
+    }
+    setEditing(false); setSigned(false); setBehalf({ reasonCode: '', note: '' })
+  }
+
+  /** The period has no timesheet yet: create the (draft) timesheet so it can be completed on the employee's behalf. */
+  async function createSheet() {
+    if (!onBehalf) return
+    setLoading(true); setError('')
+    try {
+      const r = await getOrCreateTimesheet(period.start, period.end, onBehalf.employeeId)
+      setTimesheet(r.timesheet); setAudit(r.audit); setRows(normalizeFor(r.rows)); setMissing(false)
+    } catch (e: unknown) { setError(errMsg(e, 'Failed to create timesheet')) } finally { setLoading(false) }
   }
 
   function updateRow(id: string, patch: Partial<EditableRow>) {
@@ -234,8 +311,9 @@ export default function TimesheetClient({
       const fresh = await getOrCreateTimesheet(period.start, period.end, onBehalf?.employeeId)
       setTimesheet(fresh.timesheet)
       setAudit(fresh.audit)
-      setRows(normalizeRows(fresh.rows, isSalaried))
+      setRows(normalizeFor(fresh.rows))
       setSigned(false)
+      setEditing(false)
     } catch (e: unknown) {
       setError(errMsg(e, 'Failed to submit timesheet'))
     } finally {
@@ -285,7 +363,9 @@ export default function TimesheetClient({
           <h2 className="text-[16px] font-bold text-[#0b2b35]">{timesheet.status === 'approved' ? 'Timesheet approved' : 'Timesheet submitted'} — {formatPeriodLabel(period)}</h2>
           <p className="text-[13px] text-gray-600 mt-0.5">
             {onBehalf
-              ? `Submitted on ${employeeName}\u2019s behalf and recorded as an exception. ${employeeName} has been notified${timesheet.status === 'approved' ? '.' : ', and the approvers will review it.'}`
+              ? audit.submitted_by_name
+                ? `Submitted on ${employeeName}\u2019s behalf by ${audit.submitted_by_name} (an exception \u2014 see the signatures below). ${timesheet.status === 'approved' ? 'It has been approved.' : 'It is waiting for the approver\u2019s review.'}`
+                : `${employeeName} submitted this timesheet. ${timesheet.status === 'approved' ? 'It has been approved.' : 'It is waiting for the approver\u2019s review.'}`
               : audit.submitted_by_name
               ? `Submitted on your behalf by ${audit.submitted_by_name} (an exception — see the signatures below). ${timesheet.status === 'approved' ? 'Your approver has reviewed and approved it.' : 'It is waiting for your approver\u2019s review.'}`
               : timesheet.status === 'approved'
@@ -355,13 +435,35 @@ export default function TimesheetClient({
         </p>
       </div>
 
-      {onBehalf && !submitted && (
-        <div className="no-print"><OnBehalfPanel employeeName={employeeName} actorName={onBehalf.actorName} what="timesheet" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} /></div>
+      {onBehalf && editing && !missing && (
+        <div className="no-print"><OnBehalfPanel edit employeeName={employeeName} actorName={onBehalf.actorName} what="timesheet" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} /></div>
       )}
 
-      {submittedBanner}
+      {onBehalf && !missing && !editing && (
+        <div className="mb-6 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 no-print">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold text-sky-900">Read-only — you are viewing {employeeName}&rsquo;s timesheet</p>
+            <p className="text-[12px] text-sky-800 mt-0.5">Nothing here changes unless you press <strong>Override / Edit</strong>. You will be asked for a reason, and every change is saved to the audit trail below{timesheet.status === 'draft' ? '. A draft can also be submitted on their behalf from edit mode' : ''}.</p>
+          </div>
+          <button onClick={() => setEditing(true)} disabled={loading}
+            className="bg-amber-500 text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-40">✎ Override / Edit</button>
+        </div>
+      )}
+      {onBehalf && editing && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 no-print">
+          <p className="text-[12px] text-amber-800 font-semibold">Edit mode is on{hasUnsaved ? ' — you have unsaved changes' : ''}.</p>
+          <button onClick={exitEdit} disabled={loading} className="text-[13px] font-semibold px-4 py-2 rounded-lg border border-[#d4eef2] text-gray-600 hover:bg-white">{hasUnsaved ? 'Discard changes & exit' : 'Exit edit mode'}</button>
+        </div>
+      )}
+      {closedBlocksOverride && editing && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-5 py-4 no-print">
+          <p className="text-[13px] font-semibold text-red-800">This pay period is closed</p>
+          <p className="text-[13px] text-red-700 mt-1">Accounting closed {closedHit ? fmtDateRange(closedHit.start, closedHit.end) : 'this period'}, so only the CEO can override it. Ask Nico to make the change or reopen the timesheet.</p>
+        </div>
+      )}
+      {!missing && submittedBanner}
 
-      {closedForEdit && closedHit && (
+      {!onBehalf && closedForEdit && closedHit && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-xl px-5 py-4 no-print">
           <p className="text-[13px] font-semibold text-red-800">This pay period is closed</p>
           <p className="text-[13px] text-red-700 mt-1">
@@ -380,12 +482,23 @@ export default function TimesheetClient({
 
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6 no-print">
         <div>
+          {people.length > 0 && (
+            <div className="flex items-center gap-2 mb-2 no-print">
+              <label htmlFor="ts-person" className="text-[11px] uppercase tracking-wide font-semibold text-gray-400">Employee</label>
+              <select id="ts-person" value={employeeId} onChange={e => openPerson(e.target.value)} disabled={loading}
+                className="text-[13px] text-[#0b2b35] font-semibold bg-white border border-[#d4eef2] rounded-lg px-2 py-1 focus:outline-none focus:border-[#02ACC0] disabled:opacity-50">
+                <option value={selfId}>My timesheet</option>
+                {people.filter(p => p.id !== selfId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          )}
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet{onBehalf ? ` — for ${employeeName}` : ''}</h1>
           <p className="text-[12px] text-gray-400 mt-0.5">{employeeName} · Employee ID {employeeIdLabel}</p>
           <div className="flex items-center gap-2 mt-1">
-            <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading}
+            <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading} aria-label="Previous (older) pay period" title="Previous pay period"
               className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">‹</button>
             <select
+              aria-label="Pay period"
               value={periodIdx}
               onChange={e => switchPeriod(Number(e.target.value))}
               disabled={loading}
@@ -394,7 +507,7 @@ export default function TimesheetClient({
                 <option key={p.start} value={i}>{formatPeriodLabel(p)}{i === 0 ? ' (current)' : ''}</option>
               ))}
             </select>
-            <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading}
+            <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading} aria-label="Next (newer) pay period" title="Next pay period"
               className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">›</button>
             <span className="text-[11px] text-amber-600 bg-amber-50 font-semibold px-2 py-0.5 rounded-full ml-1">
               Due {formatShort(dueDate)}
@@ -411,17 +524,17 @@ export default function TimesheetClient({
             className="border border-[#d4eef2] text-[#0b2b35] text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#f0f7f8] transition-colors">
             ⬇ Export PDF
           </button>
-          {!submitted && <button
+          {(onBehalf ? editing && !missing : !submitted) && <button
             onClick={saveDraft}
-            disabled={saveStatus === 'saving'}
+            disabled={saveStatus === 'saving' || (!!onBehalf && (!hasUnsaved || !!behalfIssue || closedBlocksOverride))}
             className={`text-[13px] font-semibold px-4 py-2 rounded-lg transition-colors border disabled:opacity-60 disabled:cursor-not-allowed ${
               saveStatus === 'error' ? 'border-red-200 text-red-500 hover:bg-red-50'
               : hasUnsaved ? 'border-amber-200 text-amber-700 hover:bg-amber-50'
               : 'border-[#d4eef2] text-[#0b2b35] hover:bg-[#f0f7f8]'
             }`}>
-            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Retry Save' : hasUnsaved ? 'Save Now' : '✓ All changes saved'}
+            {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Retry Save' : hasUnsaved ? (onBehalf ? 'Save changes' : 'Save Now') : '✓ All changes saved'}
           </button>}
-          {!submitted && <button
+          {(onBehalf ? canSubmitOnBehalf : !submitted) && <button
             disabled={!signed || submitting || closedForEdit || !!behalfIssue}
             onClick={handleSubmit}
             className="bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -434,7 +547,14 @@ export default function TimesheetClient({
         <div className="bg-red-50 border border-red-200 text-red-600 text-[13px] rounded-lg px-4 py-2.5 mb-4">{error}</div>
       )}
 
-      {isSalaried && (
+      {missing ? (
+        <div className="bg-white rounded-xl border border-[#d4eef2] p-6 max-w-2xl no-print">
+          <p className="text-[14px] font-bold text-[#0b2b35]">No timesheet for this pay period</p>
+          <p className="text-[13px] text-gray-500 mt-1">{employeeName} has no timesheet for {formatPeriodLabel(period)} yet. Creating one makes an empty draft you can then complete on their behalf (Override / Edit → sign → submit).</p>
+          <button onClick={createSheet} disabled={loading} className="mt-4 bg-[#02ACC0] text-white text-[13px] font-semibold px-4 py-2 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{loading ? 'Creating…' : 'Create timesheet'}</button>
+        </div>
+      ) : (<>
+      {isSalaried && !onBehalf && (
         <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
           Regular hours fill in as each workday arrives (8 a day, up to today — future days stay empty); scheduled holidays show right away as <strong>Holiday</strong> hours instead, so a complete pay period totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
         </div>
@@ -478,7 +598,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 1</span>
         </div>
-        {week1.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit || !!behalfIssue || submitted} leaveForEmployeeId={onBehalf?.employeeId} />)}
+        {week1.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={readOnly} overrideRegular={!!onBehalf && !readOnly} leaveForEmployeeId={onBehalf?.employeeId} />)}
         <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-b-2 border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 1 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -490,7 +610,7 @@ export default function TimesheetClient({
         <div className="px-5 py-2 bg-[#fafefe] border-b border-[#e8f4f7]">
           <span className="text-[10px] uppercase tracking-widest text-[#02ACC0] font-bold">Week 2</span>
         </div>
-        {week2.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={closedForEdit || !!behalfIssue || submitted} leaveForEmployeeId={onBehalf?.employeeId} />)}
+        {week2.map(row => <TimesheetRowView key={row.id} row={row} tags={tagsById.get(row.id) ?? []} allTags={customTags} onUpdate={updateRow} isSalaried={isSalaried} locked={readOnly} overrideRegular={!!onBehalf && !readOnly} leaveForEmployeeId={onBehalf?.employeeId} />)}
         <div className="grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2 bg-[#f9fefe] border-t border-[#d4eef2] text-[12px]">
           <span className="text-gray-400 col-span-6 text-right font-semibold">
             Week 2 subtotal{weeklyGross !== null && <span className="text-gray-400 font-normal"> · {currency(weeklyGross)} gross</span>}
@@ -522,9 +642,9 @@ export default function TimesheetClient({
         {!onBehalf && <Link href="/expenses" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">+ Add Expense</Link>}
       </div>
 
-      {submitted && <TimesheetSignatures timesheet={timesheet} audit={audit} employeeName={employeeName} employeeIdLabel={employeeIdLabel} />}
+      {submitted ? <TimesheetSignatures timesheet={timesheet} audit={audit} employeeName={employeeName} employeeIdLabel={employeeIdLabel} /> : audit.events.length > 0 && <TimesheetHistory audit={audit} title="Audit trail" />}
 
-      {!submitted && <div className="bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-2xl">
+      {(onBehalf ? canSubmitOnBehalf : !submitted) && <div className="bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-2xl">
         <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">{onBehalf ? `Administrator Certification & Signature (on behalf of ${employeeName})` : 'Employee Certification & Signature'}</p>
         <p className="text-[12px] text-gray-400 mb-5">
           {onBehalf ? timesheetOnBehalfAttestation(employeeName) : TIMESHEET_ATTESTATION}
@@ -565,11 +685,12 @@ export default function TimesheetClient({
         </div>
         {error && <p className="mt-3 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
       </div>}
+      </>)}
     </div>
   )
 }
 
-function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, leaveForEmployeeId }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean; leaveForEmployeeId?: string }) {
+function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, overrideRegular, leaveForEmployeeId }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean; /** A manual override: Regular hours can be typed even for salaried staff. */ overrideRegular?: boolean; leaveForEmployeeId?: string }) {
   const isLeave = Number(row.leave_hours) > 0
   const isHoliday = tags.some(t => t.key === 'holiday')
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
@@ -604,7 +725,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, le
         )}
       </div>
       <div className="flex items-center"><TagsCell tags={tags} allTags={allTags} selectedIds={row.tag_ids ?? []} editable={!locked} onChange={ids => onUpdate(row.id, { tag_ids: ids })} /></div>
-      {isSalaried ? (
+      {isSalaried && !overrideRegular ? (
         <div
           title="Calculated automatically as 8 minus Leave hours"
           className="w-full text-center px-1 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">

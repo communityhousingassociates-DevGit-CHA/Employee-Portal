@@ -243,7 +243,7 @@ export interface PortalNotification {
   read_at: string | null
 }
 
-export type TimesheetEventAction = 'submitted' | 'submitted_on_behalf' | 'edited_on_behalf' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held' | 'tags_changed'
+export type TimesheetEventAction = 'submitted' | 'submitted_on_behalf' | 'edited_on_behalf' | 'manual_edit' | 'approved' | 'returned' | 'reopened' | 'override_reopened' | 'correction_requested' | 'leave_reopened' | 'leave_held' | 'tags_changed'
 
 export interface TimesheetEvent {
   id: string
@@ -252,8 +252,12 @@ export interface TimesheetEvent {
   action: TimesheetEventAction
   reason_code: string | null
   note: string | null
+  changes?: TimesheetChange[] | null
   created_at: string
 }
+
+/** One field changed by a manual edit, as stored on the audit event. `from`/`to` are display strings. */
+export interface TimesheetChange { date: string; field: string; from: string; to: string }
 
 /** Who signed a timesheet and what happened to it — for the signatures section at the bottom of a submitted timesheet. */
 export interface TimesheetAudit {
@@ -262,7 +266,7 @@ export interface TimesheetAudit {
   submitted_by_role: string | null
   approver_name: string | null
   approver_role: string | null
-  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; created_at: string; actor_name: string | null; actor_role: string | null; signature_name: string | null; attestation: string | null }[]
+  events: { id: string; action: TimesheetEventAction; reason_code: string | null; note: string | null; changes?: TimesheetChange[] | null; created_at: string; actor_name: string | null; actor_role: string | null; signature_name: string | null; attestation: string | null }[]
 }
 
 /** A timesheet as shown to an approver: with its daily rows, audit history, and lock state. */

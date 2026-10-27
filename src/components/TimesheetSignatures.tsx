@@ -1,6 +1,7 @@
 import type { Timesheet, TimesheetAudit, TimesheetEventAction } from '@/types'
 import { onBehalfReasonLabel } from '@/lib/constants/on-behalf'
 import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
+import { fmtDate } from '@/lib/format-date'
 import { reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 
 const ROLE_LABEL: Record<string, string> = { accounting_manager: 'Accounting Manager', ceo: 'President / CEO', admin: 'Administrator' }
@@ -17,6 +18,7 @@ const EVENT_LABELS: Record<TimesheetEventAction, string> = {
   leave_reopened: 'Reopened — leave added',
   leave_held: 'Leave held — period closed',
   tags_changed: 'Tags adjusted',
+  manual_edit: 'Manually edited (override)',
 }
 
 const EVENT_COLOR: Partial<Record<TimesheetEventAction, string>> = {
@@ -99,6 +101,15 @@ export default function TimesheetSignatures({
         </div>
       </div>
 
+      <TimesheetHistory audit={audit} />
+    </section>
+  )
+}
+
+/** The full history of a timesheet, oldest first. A manual edit lists the exact before/after of every field it changed. */
+export function TimesheetHistory({ audit, title }: { audit: TimesheetAudit; title?: string }) {
+  const list = (
+    <>
       <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mt-5 mb-2">History</p>
       {audit.events.length === 0 ? (
         <p className="text-[12px] text-gray-400">No history recorded yet.</p>
@@ -112,13 +123,28 @@ export default function TimesheetSignatures({
               </p>
               {(e.reason_code || e.note) && (
                 <p className="text-gray-500 mt-0.5 whitespace-pre-line">
-                  {e.reason_code ? `${e.action.endsWith('_on_behalf') ? onBehalfReasonLabel(e.reason_code) : reopenReasonLabel(e.reason_code)}${e.note ? ' — ' : ''}` : ''}{e.note}
+                  {e.reason_code ? `${e.action.endsWith('_on_behalf') || e.action === 'manual_edit' ? onBehalfReasonLabel(e.reason_code) : reopenReasonLabel(e.reason_code)}${e.note ? ' — ' : ''}` : ''}{e.note}
                 </p>
+              )}
+              {e.changes && e.changes.length > 0 && (
+                <ul className="mt-1 space-y-0.5 text-gray-600">
+                  {e.changes.map((c, i) => (
+                    <li key={i}><span className="text-gray-400">{fmtDate(c.date)} · {c.field}:</span> <span className="line-through text-gray-400">{c.from}</span> → <strong className="text-[#0b2b35]">{c.to}</strong></li>
+                  ))}
+                </ul>
               )}
             </li>
           ))}
         </ul>
       )}
+    </>
+  )
+  if (!title) return list
+  return (
+    <section aria-label={title} className="mt-6 bg-white border border-[#d4eef2] rounded-xl p-4 sm:p-6 max-w-4xl">
+      <p className="text-[14px] font-bold text-[#0b2b35] mb-0.5">{title}</p>
+      <p className="text-[12px] text-gray-400">Changes made to this timesheet, and why.</p>
+      {list}
     </section>
   )
 }

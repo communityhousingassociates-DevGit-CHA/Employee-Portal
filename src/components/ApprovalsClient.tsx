@@ -326,6 +326,7 @@ const EVENT_LABELS: Record<string, string> = {
   leave_reopened: 'Reopened — leave added',
   leave_held: 'Leave held — period closed',
   tags_changed: 'Tags adjusted',
+  manual_edit: 'Manually edited (override)',
 }
 
 function TimesheetCard({ item, mode, viewerRole, canDecide, customTags, onDecided }: { item: TimesheetForReview; mode: 'pending' | 'approved'; viewerRole: Role; canDecide: boolean; customTags: TimesheetTag[]; onDecided: () => void }) {

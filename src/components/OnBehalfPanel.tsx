@@ -10,6 +10,7 @@ export default function OnBehalfPanel({
   employeeName,
   actorName,
   what,
+  edit = false,
   reasonCode,
   note,
   onChange,
@@ -17,6 +18,8 @@ export default function OnBehalfPanel({
   employeeName: string
   actorName: string
   what: 'leave request' | 'timesheet' | 'expense'
+  /** A manual override of an existing entry (every save is logged with before/after) rather than completing a new one. */
+  edit?: boolean
   reasonCode: string
   note: string
   onChange: (v: { reasonCode: string; note: string }) => void
@@ -28,10 +31,11 @@ export default function OnBehalfPanel({
       <div className="flex items-start gap-2.5 mb-3">
         <span className="text-[18px] leading-none mt-0.5">⚠️</span>
         <div>
-          <p className="text-[14px] font-bold text-amber-900">Exception — completing this {what} on behalf of {employeeName}</p>
+          <p className="text-[14px] font-bold text-amber-900">{edit ? `Manual override — editing ${employeeName}’s ${what}` : `Exception — completing this ${what} on behalf of ${employeeName}`}</p>
           <p className="text-[12px] text-amber-800 mt-0.5">
-            This is not the employee submitting directly. It will be recorded as submitted by <strong>{actorName}</strong> on {employeeName}&rsquo;s behalf,
-            with the reason below, and {employeeName} will be notified.
+            {edit
+              ? <>Every change <strong>{actorName}</strong> saves is recorded in the audit trail — who, when, the reason below, and the before/after of each field — and {employeeName} will be notified. Submitting a draft for them is recorded as an exception.</>
+              : <>This is not the employee submitting directly. It will be recorded as submitted by <strong>{actorName}</strong> on {employeeName}&rsquo;s behalf, with the reason below, and {employeeName} will be notified.</>}
           </p>
         </div>
       </div>

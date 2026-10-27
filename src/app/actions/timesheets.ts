@@ -19,7 +19,8 @@ import { fmtDate, fmtDateRange } from '@/lib/format-date'
 import { TIMESHEET_APPROVER_ROLES, FINAL_APPROVER_ROLES, canSelfApprove } from '@/lib/constants/approvals'
 import { requireDecisionAuthority, assertMayDecide, delegatedFrom, onBehalfSuffix, announceDelegatedDecision, type DecisionAuthority } from '@/lib/approval-authority'
 import { getTestAccountIds } from '@/lib/test-accounts'
-import type { Role, Timesheet, TimesheetAudit, TimesheetEventAction, TimesheetForReview } from '@/types'
+import { canActOnBehalf } from '@/lib/constants/on-behalf'
+import type { Role, Timesheet, TimesheetAudit, TimesheetChange, TimesheetEventAction, TimesheetForReview } from '@/types'
 
 
 async function requireOwnTimesheet(timesheetId: string) {
@@ -48,7 +49,7 @@ async function loadTimesheetAudit(admin: ReturnType<typeof createAdminClient>, t
   const people = [timesheet.submitted_by, timesheet.approver_id].filter((x): x is string => !!x)
   const [{ data: ppl }, { data: events, error }] = await Promise.all([
     people.length ? admin.from('employees').select('id, name, role').in('id', people) : Promise.resolve({ data: [] as { id: string; name: string; role: string }[] }),
-    admin.from('timesheet_events').select('id, action, reason_code, note, created_at, signature_name, attestation, actor:employees(name, role)').eq('timesheet_id', timesheet.id).order('created_at'),
+    admin.from('timesheet_events').select('id, action, reason_code, note, changes, created_at, signature_name, attestation, actor:employees(name, role)').eq('timesheet_id', timesheet.id).order('created_at'),
   ])
   if (error) throw new Error(error.message)
   const byId = new Map((ppl ?? []).map(p => [p.id, p]))
@@ -62,7 +63,7 @@ async function loadTimesheetAudit(admin: ReturnType<typeof createAdminClient>, t
     events: (events ?? []).map(e => {
       const a = e.actor as unknown as { name: string; role: string } | { name: string; role: string }[] | null
       const actor = Array.isArray(a) ? a[0] : a
-      return { id: e.id, action: e.action as TimesheetEventAction, reason_code: e.reason_code, note: e.note, created_at: e.created_at, actor_name: actor?.name ?? null, actor_role: actor?.role ?? null, signature_name: (e.signature_name as string | null) ?? null, attestation: (e.attestation as string | null) ?? null }
+      return { id: e.id, action: e.action as TimesheetEventAction, reason_code: e.reason_code, note: e.note, changes: (e.changes as TimesheetChange[] | null) ?? null, created_at: e.created_at, actor_name: actor?.name ?? null, actor_role: actor?.role ?? null, signature_name: (e.signature_name as string | null) ?? null, attestation: (e.attestation as string | null) ?? null }
     }),
   }
 }
@@ -198,6 +199,133 @@ export async function saveTimesheetDraft(
     if (!recent || recent.length === 0) await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'edited_on_behalf', reasonCode: behalf.reasonCode, note: behalf.note })
   }
   revalidatePath('/timesheet')
+}
+
+/** Active staff a payroll viewer (Nico, Carrileen, the super admin) can open in the Timesheet picker. Everyone else gets an empty list. */
+export async function getTimesheetPeople() {
+  const viewer = await getCurrentEmployee()
+  if (!viewer || !canActOnBehalf(viewer)) return []
+  const { data, error } = await createAdminClient()
+    .from('employees')
+    .select('id, name, employee_number, is_test_account')
+    .eq('is_active', true)
+    .order('name')
+  if (error) throw new Error(error.message)
+  return (data ?? []).filter(e => !e.is_test_account || e.id === viewer.id).map(e => ({ id: e.id as string, name: e.name as string, employee_number: e.employee_number as number }))
+}
+
+/**
+ * READ-ONLY look at an employee's timesheet for one pay period (Nico, Carrileen, the super admin — or the employee themself).
+ * Never creates anything: a period with no timesheet comes back as `timesheet: null`, and the viewer decides whether to create it.
+ */
+export async function viewTimesheet(employeeId: string, periodStart: string) {
+  const viewer = await getCurrentEmployee()
+  if (!viewer || (viewer.id !== employeeId && !canActOnBehalf(viewer))) throw new UserError('Forbidden')
+  const admin = createAdminClient()
+  const { data: timesheet, error } = await admin.from('timesheets').select('*').eq('employee_id', employeeId).eq('period_start', periodStart).maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!timesheet) return { timesheet: null, rows: [], audit: null }
+  const { data: rows, error: rowsError } = await admin.from('timesheet_rows').select('*').eq('timesheet_id', timesheet.id).order('work_date')
+  if (rowsError) throw new Error(rowsError.message)
+  return { timesheet: timesheet as Timesheet, rows: rows ?? [], audit: await loadTimesheetAudit(admin, timesheet) }
+}
+
+const fmtHours = (n: unknown) => String(Number(n) || 0)
+
+/**
+ * A MANUAL EDIT (override) of another employee's timesheet by Nico, Carrileen or the super admin — draft, submitted or approved.
+ * Requires a reason code and notes (re-validated here). One save = one 'manual_edit' audit event holding the reason plus the exact
+ * before/after of every field that changed. Only Regular hours, description, tags and holiday-worked hours can be changed by hand:
+ * leave and holiday hours still come from leave requests and the holiday calendar. A pay period closed by accounting can only be
+ * edited by the CEO override role (or a timesheet deliberately reopened). The employee is told; if it was already submitted or
+ * approved and the editor isn't the CEO, the CEO is told too.
+ */
+export async function manualEditTimesheet(
+  timesheetId: string,
+  rows: { id: string; description: string | null; regular_hours: number; holiday_worked_hours?: number; tag_ids?: string[] }[],
+  onBehalf: OnBehalf,
+) {
+  const { actor, subject: employee, onBehalf: behalf } = await requireTimesheetAccess(timesheetId, onBehalf)
+  if (!behalf) throw new UserError('Manual edits are for other employees’ timesheets. Edit your own from your Timesheet page.')
+  const admin = createAdminClient()
+
+  const { data: sheet, error: sheetError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
+  if (sheetError) throw new Error(sheetError.message)
+  if (!sheet.return_reason && closedRangeOverlapping(sheet.period_start, sheet.period_end, await loadClosedRanges(admin)) && !(actor.is_super_admin || REOPEN_OVERRIDE_ROLES.includes(actor.role))) {
+    throw new UserError('Accounting has closed this pay period, so only the CEO can edit it. Ask Nico to make the change or reopen the timesheet.')
+  }
+
+  const ids = rows.map(r => r.id)
+  const [{ data: current, error: curError }, { data: tagRows, error: tagError }] = await Promise.all([
+    admin.from('timesheet_rows').select('id, work_date, description, regular_hours, holiday_worked_hours, tag_ids').eq('timesheet_id', timesheetId).in('id', ids),
+    admin.from('timesheet_tags').select('id, name'),
+  ])
+  if (curError) throw new Error(curError.message)
+  if (tagError) throw new Error(tagError.message)
+  const byId = new Map((current ?? []).map(r => [r.id as string, r]))
+  const tagName = new Map((tagRows ?? []).map(t => [t.id as string, t.name as string]))
+  const tagsLabel = (ids: string[]) => ids.map(i => tagName.get(i) ?? 'removed tag').sort().join(', ') || 'none'
+  const cleanedTags = await validateRowTags(admin, timesheetId, rows.filter(r => r.tag_ids).map(r => ({ id: r.id, tag_ids: r.tag_ids! })))
+
+  const changes: TimesheetChange[] = []
+  const updates: { id: string; patch: Record<string, unknown> }[] = []
+  for (const r of rows) {
+    const cur = byId.get(r.id)
+    if (!cur) throw new UserError('A row does not belong to this timesheet')
+    const regular = Number(r.regular_hours)
+    if (!Number.isFinite(regular) || regular < 0 || regular > 24) throw new UserError('Regular hours must be between 0 and 24')
+    const patch: Record<string, unknown> = {}
+    const date = cur.work_date as string
+    const desc = (r.description ?? '').trim()
+    if (desc !== ((cur.description as string | null) ?? '').trim()) { patch.description = desc || null; changes.push({ date, field: 'Description', from: (cur.description as string | null) || '(blank)', to: desc || '(blank)' }) }
+    if (regular !== Number(cur.regular_hours)) { patch.regular_hours = regular; changes.push({ date, field: 'Regular hours', from: fmtHours(cur.regular_hours), to: fmtHours(regular) }) }
+    if (r.holiday_worked_hours !== undefined) {
+      const worked = Math.max(0, Math.min(24, Number(r.holiday_worked_hours) || 0))
+      if (worked !== Number(cur.holiday_worked_hours ?? 0)) { patch.holiday_worked_hours = worked; changes.push({ date, field: 'Holiday hours worked', from: fmtHours(cur.holiday_worked_hours), to: fmtHours(worked) }) }
+    }
+    const newTags = cleanedTags.get(r.id)
+    if (newTags) {
+      const oldTags = ((cur.tag_ids ?? []) as string[])
+      if ([...newTags].sort().join() !== [...oldTags].sort().join()) { patch.tag_ids = newTags; changes.push({ date, field: 'Tags', from: tagsLabel(oldTags), to: tagsLabel(newTags) }) }
+    }
+    if (Object.keys(patch).length) updates.push({ id: r.id, patch })
+  }
+  if (updates.length === 0) return { changed: 0 }
+
+  // The audit entry is written FIRST and is mandatory: if it can't be recorded, nothing is changed.
+  changes.sort((a, b) => a.date.localeCompare(b.date))
+  const logged = await logTimesheetEvent(admin, { timesheetId, actorId: actor.id, action: 'manual_edit', reasonCode: behalf.reasonCode, note: behalf.note, changes })
+  if (!logged) throw new UserError('The audit trail could not be written, so no change was made. Try again, or contact support.')
+  for (const u of updates) {
+    const { error } = await admin.from('timesheet_rows').update(u.patch).eq('id', u.id).eq('timesheet_id', timesheetId)
+    if (error) throw new Error(`${error.message} — the audit trail already shows this edit; check the timesheet before retrying.`)
+  }
+
+  // Approved sheets already credited flex time for holiday work; keep that in step with the new hours (idempotent).
+  if (sheet.status === 'approved' && changes.some(c => c.field === 'Holiday hours worked')) {
+    try { await creditHolidayFlex(admin, timesheetId, employee.id) } catch (e) { console.error('creditHolidayFlex after manual edit failed', timesheetId, e) }
+  }
+
+  const period = fmtDateRange(sheet.period_start, sheet.period_end)
+  const summary = changes.slice(0, 12).map(c => `${fmtDate(c.date)} · ${c.field}: ${c.from} → ${c.to}`).join('\n') + (changes.length > 12 ? `\n…and ${changes.length - 12} more (see the audit trail on the timesheet).` : '')
+  await notifyEmployee(admin, employee.id, {
+    kind: 'on_behalf',
+    title: `${actor.name} edited your timesheet`,
+    body: `Pay period ${period} (${sheet.status})\nReason: ${onBehalfReasonLabel(behalf.reasonCode)}\nNotes: ${behalf.note}\n\n${summary}`,
+    link: '/timesheet',
+    cta: 'View Timesheet',
+  })
+  if (sheet.status !== 'draft' && actor.role !== 'ceo') {
+    await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
+      kind: 'on_behalf',
+      title: `${actor.name} manually edited ${employee.name}'s ${sheet.status} timesheet`,
+      body: `Pay period ${period}\nReason: ${onBehalfReasonLabel(behalf.reasonCode)} — ${behalf.note}\n\n${summary}`,
+      cta: 'Open Approvals',
+    })
+  }
+  revalidatePath('/timesheet')
+  revalidatePath('/approvals')
+  return { changed: changes.length }
 }
 
 export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) {
