@@ -175,7 +175,6 @@ export async function loadHealth(admin: Admin) {
   const active = rows.filter(r => r.is_active && !r.is_test_account)
   const authByEmail = new Map((authUsers.data?.users ?? []).map(u => [u.email?.toLowerCase() ?? '', u]))
   const neverSignedIn = active.filter(p => { const u = authByEmail.get(p.email.toLowerCase()); return !u || !u.last_sign_in_at })
-  const inactive30 = active.filter(p => { const u = authByEmail.get(p.email.toLowerCase()); return u?.last_sign_in_at && Date.parse(u.last_sign_in_at) < Date.now() - 30 * DAY })
   const blockRows = ((blocks.data ?? []) as { employee_id: string | null; city: string | null; region: string | null; created_at: string }[]).filter(b => !b.employee_id || !testIds.has(b.employee_id))
 
   return {
@@ -186,7 +185,6 @@ export async function loadHealth(admin: Admin) {
     emailFailed7d: emailStatuses.filter(e => e.status === 'failed').length,
     geofenceBlocks7d: blockRows.length,
     neverSignedIn: neverSignedIn.map(p => p.name),
-    inactive30: inactive30.map(p => p.name),
   }
 }
 
@@ -199,14 +197,13 @@ export async function loadOverview(admin: Admin) {
   const periods = getPeriodsSince('2026-09-13')
   const lastDue = periods.find(p => getTimesheetDueDate(p) < today) ?? null
 
-  const [{ rows }, issues, errors, health, tsAll, onBehalf30, manual30, pendLeave, pendExp, pendTs] = await Promise.all([
+  const [{ rows }, issues, errors, health, tsAll, events30, pendLeave, pendExp, pendTs] = await Promise.all([
     people(admin),
     loadIssueStats(admin),
     loadErrors(admin),
     loadHealth(admin),
     lastDue ? admin.from('timesheets').select('employee_id, status').eq('period_start', lastDue.start) : Promise.resolve({ data: [] as { employee_id: string; status: string }[] }),
-    admin.from('timesheet_events').select('id', { count: 'exact', head: true }).in('action', ['submitted_on_behalf', 'edited_on_behalf']).gte('created_at', daysAgo(30)),
-    admin.from('timesheet_events').select('id', { count: 'exact', head: true }).eq('action', 'manual_edit').gte('created_at', daysAgo(30)),
+    admin.from('timesheet_events').select('action, ts:timesheets(employee_id)').in('action', ['submitted_on_behalf', 'edited_on_behalf', 'manual_edit']).gte('created_at', daysAgo(30)).limit(5000),
     notTest(admin.from('leave_requests').select('created_at').eq('status', 'pending').order('created_at').limit(1)),
     notTest(admin.from('expenses').select('created_at').eq('status', 'pending').order('created_at').limit(1)),
     notTest(admin.from('timesheets').select('employee_signed_at').eq('status', 'submitted').order('employee_signed_at').limit(1)),
@@ -215,12 +212,13 @@ export async function loadOverview(admin: Admin) {
   const eligible = lastDue ? rows.filter(r => r.is_active && !r.is_test_account && r.hire_date <= lastDue.end) : []
   const doneIds = new Set(((tsAll.data ?? []) as { employee_id: string; status: string }[]).filter(t => t.status !== 'draft').map(t => t.employee_id))
   const submitted = eligible.filter(e => doneIds.has(e.id)).length
+  const real30 = ((events30.data ?? []) as unknown as { action: string; ts: { employee_id: string } | { employee_id: string }[] | null }[]).filter(e => { const id = one(e.ts)?.employee_id; return !id || !testIds.has(id) })
   const oldest = (r: { data: { [k: string]: string }[] | null }, key: string) => ageDays(r.data?.[0]?.[key])
 
   return {
     issues, errors, health,
     compliance: lastDue ? { period: `${lastDue.start} – ${lastDue.end}`, submitted, total: eligible.length, missing: eligible.filter(e => !doneIds.has(e.id)).map(e => e.name) } : null,
-    onBehalf30: onBehalf30.count ?? 0, manual30: manual30.count ?? 0,
+    onBehalf30: real30.filter(e => e.action !== 'manual_edit').length, manual30: real30.filter(e => e.action === 'manual_edit').length,
     oldestPending: { leave: oldest(pendLeave as never, 'created_at'), expenses: oldest(pendExp as never, 'created_at'), timesheets: oldest(pendTs as never, 'employee_signed_at') },
   }
 }

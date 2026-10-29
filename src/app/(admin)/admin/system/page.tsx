@@ -97,7 +97,6 @@ async function Overview({ admin }: A) {
         <Stat label="Emails failed (7d)" value={o.health.emailFailed7d} sub={`${o.health.emailSent7d} sent`} tone={o.health.emailFailed7d ? 'bad' : 'ok'} />
         <Stat label="Location blocks (7d)" value={o.health.geofenceBlocks7d} sub="Sign-ins refused by the location rule" tone={o.health.geofenceBlocks7d ? 'warn' : 'ok'} />
         <Stat label="Never signed in" value={o.health.neverSignedIn.length} sub="Active accounts" tone={o.health.neverSignedIn.length ? 'warn' : 'ok'} />
-        <Stat label="No sign-in for 30 days" value={o.health.inactive30.length} sub="Active accounts" tone="muted" />
       </div>
     </div>
   )
@@ -212,10 +211,7 @@ async function Health({ admin }: A) {
         <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35] mb-3">Email delivery (7 days): {h.emailSent7d} sent, {h.emailFailed7d} failed</h3>
         {h.emailFailed.length === 0 ? <Empty>No failed sends.</Empty> : <table className="w-full"><tbody>{h.emailFailed.map((e, n) => <tr key={n}><td className={`${td} whitespace-nowrap`}>{ts(e.created_at)}</td><td className={td}>{e.recipient_email}</td><td className={td}>{e.subject}</td><td className={`${td} text-red-500`}>{e.error ?? 'failed'}</td></tr>)}</tbody></table>}
       </div>
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className={card}><h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35] mb-2">Never signed in ({h.neverSignedIn.length})</h3>{h.neverSignedIn.length === 0 ? <Empty>Everyone active has signed in.</Empty> : <p className="text-[13px]">{h.neverSignedIn.join(', ')}</p>}</div>
-        <div className={card}><h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35] mb-2">No sign-in for 30+ days ({h.inactive30.length})</h3>{h.inactive30.length === 0 ? <Empty>Nobody is inactive.</Empty> : <p className="text-[13px]">{h.inactive30.join(', ')}</p>}</div>
-      </div>
+      <div className={card}><h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35] mb-2">Never signed in ({h.neverSignedIn.length})</h3>{h.neverSignedIn.length === 0 ? <Empty>Everyone active has signed in.</Empty> : <p className="text-[13px]">{h.neverSignedIn.join(', ')}</p>}</div>
       <p className="text-[12px] text-gray-400">Location-rule blocks in the last 7 days: <strong>{h.geofenceBlocks7d}</strong> (details are in the daily tracking email).</p>
     </div>
   )
