@@ -4,7 +4,7 @@ import { errMsg } from '@/lib/user-error'
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getOrCreateTimesheet, saveTimesheetDraft, manualEditTimesheet, viewTimesheet, submitTimesheet, requestTimesheetCorrection } from '@/app/actions/timesheets'
+import { getOrCreateTimesheet, saveTimesheetDraft, manualEditTimesheet, viewTimesheet, submitTimesheet, requestTimesheetCorrection, getPeriodSummaries, addWeekendRows, type PeriodSummary } from '@/app/actions/timesheets'
 import OnBehalfPanel from '@/components/OnBehalfPanel'
 import { onBehalfProblem } from '@/lib/constants/on-behalf'
 import { TIMESHEET_ATTESTATION, timesheetOnBehalfAttestation } from '@/lib/constants/timesheet-signature'
@@ -53,6 +53,8 @@ function fmtDayLong(iso: string): string {
   return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
 }
 
+const isWeekendDate = (iso: string) => { const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); return dow === 0 || dow === 6 }
+
 const SALARIED_DAILY_HOURS = 8
 
 /**
@@ -67,6 +69,7 @@ function normalizeRows(rows: TimesheetRowType[], salaried: boolean): EditableRow
   // Regular hours are only populated up to today (Eastern Time); holidays and approved leave show on their day even in the future.
   const today = todayET()
   return rows.map(r => {
+    if (isWeekendDate(r.work_date)) return r // weekend hours are entered by hand, never calculated
     const future = r.work_date > today
     const holiday = Math.max(0, Math.min(SALARIED_DAILY_HOURS, Number(r.holiday_hours ?? 0)))
     const leave = Math.max(0, Math.min(SALARIED_DAILY_HOURS - holiday, Number(r.leave_hours)))
@@ -144,9 +147,23 @@ export default function TimesheetClient({
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [summaries, setSummaries] = useState<PeriodSummary[] | null>(null)
+  // Weekend days only show when someone toggles them on (or already has hours logged on one).
+  const [weekendsOn, setWeekendsOn] = useState(() => initialRows.some(r => isWeekendDate(r.work_date) && Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0) > 0))
+  const [weekendBusy, setWeekendBusy] = useState(false)
   const [stuck, setStuck] = useState(false)
   const headerRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  // Status + hours for every period, refreshed each time the picker opens.
+  useEffect(() => {
+    if (!pickerOpen) return
+    let cancelled = false
+    getPeriodSummaries(periods.map(p => p.start), onBehalf?.employeeId)
+      .then(r => { if (!cancelled) setSummaries(r) })
+      .catch(() => { if (!cancelled) setSummaries(null) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerOpen])
   // Close the period picker on outside click / Escape.
   useEffect(() => {
     if (!pickerOpen) return
@@ -191,9 +208,12 @@ export default function TimesheetClient({
   const totalLeave = rows.reduce((s, r) => s + Number(r.leave_hours), 0)
   const totalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
   const total = totalReg + totalLeave + totalHoliday
-  const pct = Math.min(Math.round((total / TARGET_HOURS) * 100), 100)
-  const remaining = Math.max(TARGET_HOURS - total, 0)
-  const over = total > TARGET_HOURS
+  // The 80-hour target is for the regular Monday–Friday schedule; weekend hours are extra and tracked on their own.
+  const weekendTotal = rows.filter(r => isWeekendDate(r.work_date)).reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
+  const weekdayTotal = total - weekendTotal
+  const pct = Math.min(Math.round((weekdayTotal / TARGET_HOURS) * 100), 100)
+  const remaining = Math.max(TARGET_HOURS - weekdayTotal, 0)
+  const over = weekdayTotal > TARGET_HOURS
 
   const employeeIdLabel = formatEmployeeId(employeeNumber)
   const weeklyGross = salary ? Number(salary.annual_salary) / 52 : null
@@ -282,6 +302,7 @@ export default function TimesheetClient({
       setTimesheet(view.timesheet ?? placeholderSheet(employeeId, p))
       setAudit(view.audit ?? EMPTY_AUDIT)
       setRows(normalizeFor(view.rows))
+      setWeekendsOn(view.rows.some(r => isWeekendDate(r.work_date) && Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0) > 0))
       setExpenses(exp)
     } catch (e: unknown) {
       setError(errMsg(e, 'Failed to load period'))
@@ -440,10 +461,27 @@ export default function TimesheetClient({
   const dayTags = tagRows(rows, { fullTime: employeeType === 'full-time', customTags, yearEnd })
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
   const sheetTags = timesheetTags({ status: timesheet.status, return_reason: timesheet.return_reason, correction_requested_at: timesheet.correction_requested_at, lock_reason: periodLockReason(period, closedRanges) })
-  const week1 = rows.slice(0, 5)
-  const week2 = rows.slice(5, 10)
+  // Weeks split by date (the period starts on a Sunday); weekend rows are listed only when switched on.
+  const weekEnd1 = addDays(period.start, 6)
+  const listed = rows.filter(r => weekendsOn || !isWeekendDate(r.work_date))
+  const week1 = listed.filter(r => r.work_date <= weekEnd1)
+  const week2 = listed.filter(r => r.work_date > weekEnd1)
   const week1Total = week1.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
   const week2Total = week2.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
+  const weekendRowsExist = rows.some(r => isWeekendDate(r.work_date))
+  const canAddWeekend = !readOnly && timesheet.status === 'draft' && !missing
+  async function toggleWeekends() {
+    if (weekendsOn) { setWeekendsOn(false); return }
+    setWeekendsOn(true)
+    if (weekendRowsExist || !canAddWeekend) return
+    setWeekendBusy(true); setError('')
+    try {
+      // Flush edits first so the refreshed rows can't overwrite what was just typed.
+      if (rows.some(r => r.dirty) && !onBehalf) await persist(rows)
+      const fresh = await addWeekendRows(timesheet.id, onBehalf ? behalf : undefined)
+      setRows(rs => { const have = new Set(rs.map(r => r.id)); return [...rs, ...(fresh as TimesheetRowType[]).filter(r => !have.has(r.id))].sort((a, b) => a.work_date.localeCompare(b.work_date)) })
+    } catch (e: unknown) { setWeekendsOn(false); setError(errMsg(e, 'Could not add weekend days')) } finally { setWeekendBusy(false) }
+  }
   const expenseTotal = expenses.reduce((s, e) => s + Number(e.amount), 0)
   const payDate = getPayDate(period)
   const today = todayET()
@@ -453,11 +491,19 @@ export default function TimesheetClient({
     : timesheet.status === 'submitted' ? { label: '⏳ Submitted', cls: 'bg-blue-100 text-blue-700' }
     : missing ? null : { label: '● Draft', cls: 'bg-slate-100 text-slate-600' }
   const daysLeft = Math.round((new Date(`${dueDate}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000)
-  const due: { headline: string; detail: string; cls: string } =
-    submitted ? { headline: 'Submitted ✓', detail: timesheet.status === 'approved' ? 'Approved' : 'Waiting on approval', cls: 'text-emerald-700' }
-    : daysLeft < 0 ? { headline: `Overdue by ${-daysLeft} day${daysLeft === -1 ? '' : 's'}`, detail: `Was due ${fmtDayLong(dueDate)}`, cls: 'text-red-700' }
-    : daysLeft <= 3 ? { headline: daysLeft === 0 ? 'Due today' : `Due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, detail: fmtDayLong(dueDate), cls: 'text-amber-700' }
-    : { headline: `Due ${fmtDayLong(dueDate)}`, detail: `in ${daysLeft} days`, cls: 'text-emerald-700' }
+  const due: { headline: string; detail: string; cls: string; chip: string } =
+    submitted ? { headline: 'Submitted ✓', detail: timesheet.status === 'approved' ? 'Approved' : 'Waiting on approval', cls: 'text-blue-700', chip: 'bg-blue-100 text-blue-800' }
+    : daysLeft < 0 ? { headline: `Overdue by ${-daysLeft} day${daysLeft === -1 ? '' : 's'}`, detail: `Was due ${fmtDayLong(dueDate)}`, cls: 'text-red-700', chip: 'bg-red-100 text-red-800' }
+    : daysLeft <= 3 ? { headline: daysLeft === 0 ? 'Due today' : `Due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, detail: fmtDayLong(dueDate), cls: 'text-amber-700', chip: 'bg-amber-100 text-amber-800' }
+    : { headline: `Due ${fmtDayLong(dueDate)}`, detail: `in ${daysLeft} days`, cls: 'text-teal-700', chip: 'bg-[#e0f5f8] text-[#028a9e]' }
+  /** Colour for one period's timesheet due date in the picker, from that period's own status. */
+  function dueTone(periodDue: string, status: PeriodSummary['status'] | undefined) {
+    if (status === 'submitted' || status === 'approved') return { text: 'text-blue-700', note: 'Submitted' }
+    const left = Math.round((new Date(`${periodDue}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000)
+    if (left < 0) return { text: 'text-red-700', note: 'Overdue' }
+    if (left <= 3) return { text: 'text-amber-700', note: left === 0 ? 'Today' : `${left}d` }
+    return { text: 'text-teal-700', note: '' }
+  }
   const rowByDate = new Map(rows.map(r => [r.work_date, r]))
   const stripDays = Array.from({ length: 14 }, (_, i) => {
     const date = addDays(period.start, i)
@@ -466,8 +512,9 @@ export default function TimesheetClient({
     const hrs = row ? Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0) : 0
     const isHoliday = !!row && Number(row.holiday_hours ?? 0) > 0
     const isLeave = !!row && Number(row.leave_hours) > 0
-    const missingHours = !!row && !isHoliday && hrs === 0 && date < today
-    const cls = !row ? 'bg-[#f7fafb] border-[#e8f4f7]' // weekends have no row on the timesheet
+    const missingHours = !!row && !isWeekendDate(date) && !isHoliday && hrs === 0 && date < today
+    const weekendHidden = !!row && isWeekendDate(date) && !weekendsOn
+    const cls = !row || weekendHidden ? 'bg-[#f7fafb] border-[#e8f4f7]' // weekends have no row on the timesheet until switched on
       : isHoliday ? 'bg-rose-50 border-rose-200 [&>span:last-child]:text-rose-600'
       : isLeave ? 'bg-violet-50 border-violet-200 [&>span:last-child]:text-violet-600'
       : hrs > 0 ? 'bg-[#e6f7fa] border-[#b9e6ee] [&>span:last-child]:text-[#028a9e]'
@@ -609,14 +656,14 @@ export default function TimesheetClient({
         </div>
       </div>
 
-      <div ref={headerRef} className="relative bg-white rounded-2xl border border-[#d4eef2] mb-6 no-print">
+      <div ref={headerRef} className="relative bg-white rounded-2xl border border-[#d4eef2] mb-6 no-print max-w-[1010px]">
         <div className="flex flex-wrap items-center gap-3.5 px-4 py-3.5">
           <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading} aria-label="Previous (older) pay period" title="Previous pay period"
             className="w-10 h-10 rounded-[10px] border border-[#d4eef2] text-[20px] text-[#0b2b35] hover:bg-[#f0f7f8] hover:border-[#02ACC0] disabled:opacity-30 disabled:hover:bg-transparent transition-colors">‹</button>
           <button onClick={() => setPickerOpen(o => !o)} aria-haspopup="listbox" aria-expanded={pickerOpen} disabled={loading}
             className="text-left px-2.5 py-1 rounded-[10px] hover:bg-[#f0f7f8] transition-colors disabled:opacity-50">
             <span className="flex items-center gap-2 text-[18px] font-extrabold text-[#0b2b35]">{fmtPeriodTitle(period)}<span className="text-[10px] text-gray-400">▼</span></span>
-            <span className="block text-[11px] text-gray-500 mt-px">{periodIdx === 0 ? '' : `${periodIdx} period${periodIdx > 1 ? 's' : ''} ago · `}Pay date {fmtDayLong(payDate)}</span>
+            <span className="block text-[11px] text-gray-500 mt-px">{periodIdx === 0 ? 'This pay period' : `${periodIdx} pay period${periodIdx > 1 ? 's' : ''} ago`}</span>
           </button>
           <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading} aria-label="Next (newer) pay period" title="Next pay period"
             className="w-10 h-10 rounded-[10px] border border-[#d4eef2] text-[20px] text-[#0b2b35] hover:bg-[#f0f7f8] hover:border-[#02ACC0] disabled:opacity-30 disabled:hover:bg-transparent transition-colors">›</button>
@@ -627,14 +674,21 @@ export default function TimesheetClient({
             {statusBadge && <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge.cls}`}>{statusBadge.label}</span>}
             <RowTags tags={sheetTags} dashWhenEmpty={false} />
           </div>
-          <div className={`ml-auto text-right max-sm:ml-0 max-sm:text-left max-sm:w-full ${due.cls}`}>
-            <p className="text-[14px] font-extrabold">{due.headline}</p>
-            <p className="text-[11px] text-gray-500">{due.detail}</p>
+          <div className="ml-auto flex flex-col gap-1.5 items-end max-sm:ml-0 max-sm:items-start max-sm:w-full">
+            <span className={`inline-flex items-baseline gap-1.5 rounded-lg px-2.5 py-1 ${due.chip}`} title="Timesheet due date">
+              <span className="text-[10px] uppercase tracking-wide font-bold opacity-70">Timesheet</span>
+              <span className="text-[13px] font-extrabold">{due.headline}</span>
+              {due.detail && <span className="text-[11px] opacity-80">· {due.detail}</span>}
+            </span>
+            <span className="inline-flex items-baseline gap-1.5 rounded-lg px-2.5 py-1 bg-emerald-100 text-emerald-800" title="Direct deposit date">
+              <span className="text-[10px] uppercase tracking-wide font-bold opacity-70">💵 Pay date</span>
+              <span className="text-[13px] font-extrabold">{fmtDayLong(payDate)}</span>
+            </span>
           </div>
         </div>
         <div className="px-4 pb-3.5">
           <div className="flex justify-between text-[12px] mb-1.5">
-            <span><strong>{total}</strong> of {TARGET_HOURS} expected hours logged</span>
+            <span><strong>{weekdayTotal}</strong> of {TARGET_HOURS} expected hours logged{weekendTotal > 0 && <span className="text-indigo-600 font-semibold"> · +{weekendTotal} weekend</span>}</span>
             <span className="text-gray-400 font-semibold">{pct}%</span>
           </div>
           <div className="h-2 bg-[#e8f4f7] rounded-full overflow-hidden">
@@ -643,7 +697,7 @@ export default function TimesheetClient({
         </div>
         <div className="grid grid-cols-7 sm:grid-cols-14 gap-1 px-4 pt-3 pb-4 border-t border-[#eef6f8]">
           {stripDays.map(d => (
-            <button type="button" key={d.date} onClick={() => jumpToDay(d.date)} disabled={!d.row} title={`${fmtDayLong(d.date)}${d.label ? ` · ${d.label}` : ''}`}
+            <button type="button" key={d.date} onClick={() => jumpToDay(d.date)} disabled={!d.row || (isWeekendDate(d.date) && !weekendsOn)} title={`${fmtDayLong(d.date)}${d.label ? ` · ${d.label}` : ''}`}
               className={`rounded-lg border py-1.5 text-center text-[10px] text-gray-500 transition-colors enabled:hover:border-[#02ACC0] ${d.cls} ${d.date === todayET() ? 'ring-2 ring-[#02ACC0]/30 !border-[#02ACC0]' : ''}`}>
               {d.dow}
               <span className="block text-[13px] font-bold text-[#0b2b35] my-px">{d.day}</span>
@@ -659,16 +713,30 @@ export default function TimesheetClient({
               {periodIdx !== 0 && <button onClick={() => { setPickerOpen(false); switchPeriod(0) }} className="text-[12px] font-bold text-[#028a9e] hover:underline">Jump to current</button>}
             </div>
             <div className="max-h-[360px] overflow-y-auto">
-              {periods.map((p, i) => (
-                <button key={p.start} role="option" aria-selected={i === periodIdx} onClick={() => { setPickerOpen(false); switchPeriod(i) }}
-                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[#f0f7f8] text-left hover:bg-[#f0fbfc] ${i === periodIdx ? 'bg-[#f0fbfc]' : ''}`}>
-                  <span className="flex-1">
-                    <span className="block text-[13px] font-bold text-[#0b2b35]">{fmtPeriodTitle(p)}{i === 0 ? ' · current' : ''}</span>
-                    <span className="block text-[11px] text-gray-500">Paid {fmtDayLong(getPayDate(p))}</span>
-                  </span>
-                  {i === periodIdx && statusBadge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusBadge.cls}`}>{statusBadge.label}</span>}
-                </button>
-              ))}
+              {periods.map((p, i) => {
+                // The period on screen uses its live state; the others come from the summary query.
+                const sm = summaries?.find(x => x.start === p.start)
+                const live: PeriodSummary['status'] | undefined = i === periodIdx ? (missing ? 'none' : timesheet.status === 'draft' && timesheet.return_reason ? 'returned' : timesheet.status as PeriodSummary['status']) : sm?.status
+                const hrs = i === periodIdx ? total : sm?.hours
+                const tone = dueTone(getTimesheetDueDate(p), live)
+                const needsAttention = live === 'returned' || tone.note === 'Overdue'
+                const pill = live === 'approved' ? ['✓ Approved', 'bg-emerald-100 text-emerald-700'] : live === 'submitted' ? ['⏳ Submitted', 'bg-blue-100 text-blue-700'] : live === 'returned' ? ['↩ Returned', 'bg-amber-100 text-amber-700'] : live === 'draft' ? ['● Draft', 'bg-slate-100 text-slate-600'] : live === 'none' ? ['Not started', 'bg-gray-100 text-gray-500'] : ['…', 'bg-gray-100 text-gray-400']
+                return (
+                  <button key={p.start} role="option" aria-selected={i === periodIdx} onClick={() => { setPickerOpen(false); switchPeriod(i) }}
+                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[#f0f7f8] text-left hover:bg-[#f0fbfc] ${i === periodIdx ? 'bg-[#f0fbfc]' : ''}`}>
+                    <span className={`w-[92px] flex-shrink-0 text-center text-[10px] font-bold px-2 py-1 rounded-full ${pill[1]}`}>{pill[0]}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[13px] font-bold text-[#0b2b35]">{fmtPeriodTitle(p)}{i === 0 ? ' · current' : ''}</span>
+                      <span className="flex flex-wrap gap-x-2.5 text-[11px]">
+                        <span className={`font-semibold ${tone.text}`}>Due {fmtDayLong(getTimesheetDueDate(p))}{tone.note && ` · ${tone.note}`}</span>
+                        <span className="font-semibold text-emerald-700">💵 {fmtDayLong(getPayDate(p))}</span>
+                      </span>
+                    </span>
+                    {needsAttention && <span className="text-[10px] font-bold text-red-600 whitespace-nowrap">⚠ Needs attention</span>}
+                    <span className="w-10 text-right text-[12px] font-bold text-[#0b2b35]">{hrs === undefined ? '' : `${hrs}h`}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -686,18 +754,19 @@ export default function TimesheetClient({
         </div>
       ) : (<>
       {isSalaried && !onBehalf && (
-        <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print">
+        <div className="bg-[#f8fcfd] border border-[#d4eef2] text-[#0b2b35] text-[12px] rounded-lg px-4 py-2.5 mb-4 no-print max-w-[1010px]">
           Regular hours fill in as each workday arrives (8 a day, up to today — future days stay empty); scheduled holidays show right away as <strong>Holiday</strong> hours instead, so a complete pay period totals {TARGET_HOURS} hrs. The <strong>Leave</strong> column fills in automatically from your leave requests — <Link href="/request" className="text-[#028a9e] font-semibold hover:underline">request leave</Link> to take time off (sick leave is approved instantly when your balance covers it), and <strong>Regular</strong> adjusts so each day still totals 8.
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 max-w-[1010px]">
         {[
           { label: 'Regular', value: `${totalReg} hrs`, color: 'text-[#0b2b35]' },
           { label: 'Leave', value: `${totalLeave} hrs`, color: 'text-violet-600' },
           { label: 'Holiday', value: `${totalHoliday} hrs`, color: 'text-rose-500' },
-          { label: 'Total', value: `${total} / ${TARGET_HOURS}`, color: over ? 'text-red-500' : 'text-[#0b2b35]' },
-          { label: 'Remaining', value: over ? 'Over by ' + (total - TARGET_HOURS) + ' hrs' : `${remaining} hrs`, color: over ? 'text-red-500' : remaining === 0 ? 'text-emerald-600' : 'text-amber-600' },
+          { label: 'Total', value: weekendTotal > 0 ? `${total}` : `${total} / ${TARGET_HOURS}`, color: over ? 'text-red-500' : 'text-[#0b2b35]' },
+          { label: 'Remaining', value: over ? 'Over by ' + (weekdayTotal - TARGET_HOURS) + ' hrs' : `${remaining} hrs`, color: over ? 'text-red-500' : remaining === 0 ? 'text-emerald-600' : 'text-amber-600' },
+          ...(weekendTotal > 0 ? [{ label: 'Weekend', value: `${weekendTotal} hrs`, color: 'text-indigo-600' }] : []),
           ...(weeklyGross !== null ? [{ label: 'Weekly Gross Wages', value: currency(weeklyGross), color: 'text-[#0b2b35]' }] : []),
         ].map(s => (
           <div key={s.label} className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4">
@@ -705,6 +774,17 @@ export default function TimesheetClient({
             <p className={`text-[22px] font-black leading-none ${s.color}`}>{s.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="flex items-center gap-3 mb-2 no-print max-w-[1010px]">
+        <button type="button" role="switch" aria-checked={weekendsOn} onClick={toggleWeekends} disabled={weekendBusy || loading || (!weekendsOn && !weekendRowsExist && !canAddWeekend)}
+          className="inline-flex items-center gap-2 text-[12px] font-semibold text-[#0b2b35] disabled:opacity-40">
+          <span className={`relative w-9 h-5 rounded-full transition-colors ${weekendsOn ? 'bg-[#02ACC0]' : 'bg-gray-300'}`}>
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${weekendsOn ? 'left-[18px]' : 'left-0.5'}`} />
+          </span>
+          {weekendBusy ? 'Adding weekend days…' : 'Show weekend days'}
+        </button>
+        <span className="text-[11px] text-gray-400">{weekendsOn ? 'Enter hours for any weekend day you worked. Unused weekend days are removed when you submit.' : 'Turn on if you worked a Saturday or Sunday this period.'}</span>
       </div>
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 max-w-[1010px]">
@@ -748,7 +828,7 @@ export default function TimesheetClient({
           <span className="text-center font-bold text-[#0b2b35]">{totalReg}</span>
           <span className="text-center font-bold text-violet-600">{totalLeave}</span>
           <span className="text-center font-bold text-rose-500">{totalHoliday}</span>
-          <span className="text-center font-bold text-[#0b2b35]">{total} / {TARGET_HOURS}</span>
+          <span className="text-center font-bold text-[#0b2b35]">{weekendTotal > 0 ? total : `${total} / ${TARGET_HOURS}`}</span>
           <span />
         </div>
         </div>
@@ -756,12 +836,12 @@ export default function TimesheetClient({
       </div>
 
       {/* Expenses this period */}
-      <div className="bg-white rounded-xl border border-[#d4eef2] p-5 mb-6 no-print flex items-center justify-between flex-wrap gap-3">
-        <div>
+      <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-3.5 mb-6 no-print flex items-center gap-4 flex-wrap max-w-[1010px]">
+        <div className="mr-auto">
           <p className="text-[13px] font-bold text-[#0b2b35]">Expenses this period</p>
           <p className="text-[12px] text-gray-400">{expenses.length} submitted · ${expenseTotal.toFixed(2)} total</p>
         </div>
-        {!onBehalf && <Link href="/expenses" className="text-[#02ACC0] text-[13px] font-semibold hover:underline">+ Add Expense</Link>}
+        {!onBehalf && <Link href="/expenses" className="border border-[#d4eef2] text-[#028a9e] text-[12px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-[#e0f5f8] transition-colors whitespace-nowrap">+ Add Expense</Link>}
       </div>
 
       {submitted ? <TimesheetSignatures timesheet={timesheet} audit={audit} employeeName={employeeName} employeeIdLabel={employeeIdLabel} /> : audit.events.length > 0 && <TimesheetHistory audit={audit} title="Audit trail" />}
@@ -817,18 +897,19 @@ export default function TimesheetClient({
 function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, overrideRegular, leaveForEmployeeId }: { row: EditableRow; tags: RowTag[]; allTags: TimesheetTag[]; onUpdate: (id: string, patch: Partial<EditableRow>) => void; isSalaried: boolean; locked: boolean; /** A manual override: Regular hours can be typed even for salaried staff. */ overrideRegular?: boolean; leaveForEmployeeId?: string }) {
   const isLeave = Number(row.leave_hours) > 0
   const isHoliday = tags.some(t => t.key === 'holiday')
+  const isWeekend = isWeekendDate(row.work_date)
   const rowTotal = Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0)
-  const isEmpty = rowTotal === 0 && !isHoliday
+  const isEmpty = rowTotal === 0 && !isHoliday && !isWeekendDate(row.work_date)
   const d = new Date(`${row.work_date}T00:00:00`)
   const dayName = d.toLocaleDateString('en-US', { weekday: 'short' })
   const dayShort = fmtDateShort(d)
 
   return (
     <div id={`ts-row-${row.work_date}`} className={`grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
-      isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
+      isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isWeekend ? 'bg-indigo-50/40' : isEmpty ? 'bg-amber-50/30' : ''
     }`}>
       <div>
-        <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}</p>
+        <p className="font-semibold text-[#0b2b35] text-[12px]">{dayName}{isWeekend && <span className="ml-1 text-[9px] font-bold text-indigo-600 uppercase">wknd</span>}</p>
         <p className="text-[10px] text-gray-400">{dayShort}</p>
       </div>
       <div className="flex flex-col gap-1">
@@ -849,7 +930,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, ov
         )}
       </div>
       <div className="flex items-center"><TagsCell tags={tags} allTags={allTags} selectedIds={row.tag_ids ?? []} editable={!locked} onChange={ids => onUpdate(row.id, { tag_ids: ids })} /></div>
-      {isSalaried && !overrideRegular ? (
+      {isSalaried && !overrideRegular && !isWeekend ? (
         <div
           title="Calculated automatically as 8 minus Leave hours"
           className="w-full text-center px-1 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
@@ -868,11 +949,11 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, ov
         className="w-full text-center px-1 py-1.5 border border-[#e8f4f7] rounded-lg text-[13px] bg-[#f9fefe] text-gray-500 cursor-default">
         {Number(row.holiday_hours ?? 0)}
       </div>
-      <div className={`text-center font-bold ${rowTotal === 8 ? 'text-emerald-600' : rowTotal === 0 ? 'text-gray-300' : 'text-amber-600'}`}>
+      <div className={`text-center font-bold ${rowTotal === 0 ? 'text-gray-300' : isWeekend ? 'text-indigo-600' : rowTotal === 8 ? 'text-emerald-600' : 'text-amber-600'}`}>
         {rowTotal > 0 ? rowTotal : '—'}
       </div>
       <div className="flex justify-end">
-        {!locked && !isHoliday && (
+        {!locked && !isHoliday && !isWeekend && (
           <Link href={`/request?${leaveForEmployeeId ? `for=${leaveForEmployeeId}&` : ''}date=${row.work_date}`} title="Request leave for this day — approved leave fills in the Leave column"
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold text-[#028a9e] border border-[#d4eef2] rounded-full pl-2.5 pr-1 py-0.5 hover:bg-[#e0f5f8] transition-colors">
             Add Leave

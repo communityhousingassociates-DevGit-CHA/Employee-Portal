@@ -116,7 +116,9 @@ export async function applyDayDefaults(admin: AdminClient, employeeId: string, r
   const yearEnd = await getYearEndChoice(admin, employeeId)
   const salaried = await isSalariedEmployee(admin, employeeId)
   const today = todayET()
-  const wanted = (r: TimesheetRow) => salaried ? salariedDayHours({ date: r.work_date, today, scheduledHoliday: !!holidayOn(r.work_date, yearEnd), leaveHours: Number(r.leave_hours) }) : null
+  // Weekend rows (added by hand when someone works a weekend) are never auto-filled — their hours are whatever was entered.
+  const isWeekend = (date: string) => { const dow = new Date(`${date}T00:00:00Z`).getUTCDay(); return dow === 0 || dow === 6 }
+  const wanted = (r: TimesheetRow) => salaried && !isWeekend(r.work_date) ? salariedDayHours({ date: r.work_date, today, scheduledHoliday: !!holidayOn(r.work_date, yearEnd), leaveHours: Number(r.leave_hours) }) : null
 
   const needs = rows.some(r => {
     const holiday = holidayOn(r.work_date, yearEnd)

@@ -201,6 +201,61 @@ export async function saveTimesheetDraft(
   revalidatePath('/timesheet')
 }
 
+export type PeriodSummary = { start: string; status: 'none' | 'draft' | 'returned' | 'submitted' | 'approved'; hours: number }
+
+/** Status and total hours for each of the given pay periods (the period picker). Yourself always; someone else only via the same on-behalf rule as the timesheet itself. */
+export async function getPeriodSummaries(periodStarts: string[], forEmployeeId?: string): Promise<PeriodSummary[]> {
+  const subjectId = await resolveSubjectId(forEmployeeId)
+  if (periodStarts.length === 0 || periodStarts.length > 60) return []
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('timesheets')
+    .select('period_start, status, return_reason, timesheet_rows(regular_hours, leave_hours, holiday_hours)')
+    .eq('employee_id', subjectId)
+    .in('period_start', periodStarts)
+  if (error) throw new Error(error.message)
+  const byStart = new Map((data ?? []).map(t => [t.period_start as string, t]))
+  return periodStarts.map(start => {
+    const t = byStart.get(start)
+    if (!t) return { start, status: 'none' as const, hours: 0 }
+    const rows = (t.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number | null }[]
+    const hours = rows.reduce((sum, r) => sum + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
+    const status = t.status === 'draft' && t.return_reason ? 'returned' : (t.status as 'draft' | 'submitted' | 'approved')
+    return { start, status, hours }
+  })
+}
+
+/**
+ * Weekends have no row by default (a normal pay period is Monday–Friday). When someone works a weekend, this adds the missing
+ * Saturday/Sunday rows (at 0 hours, never auto-filled) to a DRAFT timesheet so the hours can be entered. Unused weekend rows
+ * are cleaned out again on submit.
+ */
+export async function addWeekendRows(timesheetId: string, onBehalf?: OnBehalf) {
+  await requireTimesheetAccess(timesheetId, onBehalf)
+  const admin = createAdminClient()
+  const { data: current, error: curError } = await admin.from('timesheets').select('status, period_start, period_end, return_reason').eq('id', timesheetId).single()
+  if (curError) throw new Error(curError.message)
+  if (current.status !== 'draft') throw new UserError('This timesheet has been submitted and can no longer be edited')
+  await assertNotClosed(admin, current)
+  const { data: existing, error: exError } = await admin.from('timesheet_rows').select('work_date').eq('timesheet_id', timesheetId)
+  if (exError) throw new Error(exError.message)
+  const have = new Set((existing ?? []).map(r => r.work_date as string))
+  const missing: string[] = []
+  for (let d = current.period_start as string; d <= (current.period_end as string); d = shiftDate(d, 1)) {
+    const dow = new Date(`${d}T00:00:00Z`).getUTCDay()
+    if ((dow === 0 || dow === 6) && !have.has(d)) missing.push(d)
+  }
+  if (missing.length > 0) {
+    const { error } = await admin.from('timesheet_rows').insert(missing.map(work_date => ({
+      timesheet_id: timesheetId, work_date, description: 'Weekend Hours', regular_hours: 0, leave_hours: 0, holiday_hours: 0, leave_type: null,
+    })))
+    if (error) throw new Error(error.message)
+  }
+  const { data: rows, error } = await admin.from('timesheet_rows').select('*').eq('timesheet_id', timesheetId).order('work_date')
+  if (error) throw new Error(error.message)
+  return rows ?? []
+}
+
 /** Active staff a payroll viewer (Nico, Carrileen, the super admin) can open in the Timesheet picker. Everyone else gets an empty list. */
 export async function getTimesheetPeople() {
   const viewer = await getCurrentEmployee()
@@ -354,6 +409,17 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
       `${behalf ? `${employee.name} has` : 'You have'} ${pendingLeave.length === 1 ? 'a pending leave request' : `${pendingLeave.length} pending leave requests`} in this pay period (${first.leave_type}, ${range}). ` +
       `Ask your approver to decide ${pendingLeave.length === 1 ? 'it' : 'them'} first so the leave appears on this timesheet, then submit.`,
     )
+  }
+
+  // Weekend rows that were added but never used are dropped, so a normal Monday–Friday sheet stays exactly that.
+  const { data: weekendRows, error: weekendError } = await admin.from('timesheet_rows').select('id, work_date, regular_hours, leave_hours, holiday_hours').eq('timesheet_id', timesheetId)
+  if (weekendError) throw new Error(weekendError.message)
+  const unusedWeekend = (weekendRows ?? [])
+    .filter(r => { const dow = new Date(`${r.work_date}T00:00:00Z`).getUTCDay(); return (dow === 0 || dow === 6) && Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0) === 0 })
+    .map(r => r.id as string)
+  if (unusedWeekend.length > 0) {
+    const { error: delError } = await admin.from('timesheet_rows').delete().in('id', unusedWeekend)
+    if (delError) throw new Error(delError.message)
   }
 
   const { data: timesheet, error } = await admin

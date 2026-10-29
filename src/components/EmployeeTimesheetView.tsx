@@ -64,8 +64,12 @@ export default function EmployeeTimesheetView({
   const total = totalReg + totalLeave + totalHoliday
   const dayTags = tagRows(rows, { customTags, yearEnd })
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
-  const week1 = rows.slice(0, 5)
-  const week2 = rows.slice(5, 10)
+  // Split by date (the period starts on a Sunday) so weekend rows, when someone logged weekend hours, land in the right week.
+  const weekEnd1 = new Date(`${period.start}T00:00:00Z`)
+  weekEnd1.setUTCDate(weekEnd1.getUTCDate() + 6)
+  const week1End = weekEnd1.toISOString().slice(0, 10)
+  const week1 = rows.filter(r => r.work_date <= week1End)
+  const week2 = rows.filter(r => r.work_date > week1End)
 
   return (
     <div>
