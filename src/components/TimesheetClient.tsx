@@ -17,7 +17,7 @@ import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetAudit, TimesheetRow as TimesheetRowType, Expense, TimesheetTag } from '@/types'
 import TimesheetSignatures, { TimesheetHistory } from '@/components/TimesheetSignatures'
-import { getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod, todayET } from '@/lib/pay-periods'
+import { getTimesheetDueDate, getPayDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod, todayET } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
 const AUTOSAVE_DELAY_MS = 1500
@@ -33,12 +33,24 @@ function addDays(d: string, days: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-function formatShort(d: string): string {
-  return fmtDateShort(d)
-}
-
 function formatPeriodLabel(p: PayPeriod): string {
   return fmtDateRange(p.start, p.end)
+}
+
+const DOW_SHORT = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** "Oct 25 – Nov 7, 2026" — the year is shown once, on the end date. */
+function fmtPeriodTitle(p: PayPeriod): string {
+  const [, sm, sd] = p.start.split('-').map(Number)
+  const [ey, em, ed] = p.end.split('-').map(Number)
+  return `${MONTHS[sm - 1]} ${sd} – ${MONTHS[em - 1]} ${ed}, ${ey}`
+}
+
+/** "Mon, Nov 9" */
+function fmtDayLong(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
 }
 
 const SALARIED_DAILY_HOURS = 8
@@ -131,6 +143,26 @@ export default function TimesheetClient({
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
   const [loading, setLoading] = useState(false)
   const [signed, setSigned] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [stuck, setStuck] = useState(false)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  // Close the period picker on outside click / Escape.
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onDown = (e: MouseEvent) => { if (!pickerRef.current?.contains(e.target as Node) && !headerRef.current?.querySelector('[aria-haspopup]')?.contains(e.target as Node)) setPickerOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPickerOpen(false) }
+    document.addEventListener('mousedown', onDown); document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [pickerOpen])
+  // Show the compact bar once the period header has scrolled out of view.
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => setStuck(!e.isIntersecting && e.boundingClientRect.top < 0))
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle')
   const [submitting, setSubmitting] = useState(false)
   const [showCorrection, setShowCorrection] = useState(false)
@@ -413,9 +445,61 @@ export default function TimesheetClient({
   const week1Total = week1.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
   const week2Total = week2.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
   const expenseTotal = expenses.reduce((s, e) => s + Number(e.amount), 0)
+  const payDate = getPayDate(period)
+  const today = todayET()
+  const statusBadge: { label: string; cls: string } | null =
+    sheetTags.length > 0 ? null // Returned / Closed etc. already show as tags next to it
+    : timesheet.status === 'approved' ? { label: '✓ Approved', cls: 'bg-emerald-100 text-emerald-700' }
+    : timesheet.status === 'submitted' ? { label: '⏳ Submitted', cls: 'bg-blue-100 text-blue-700' }
+    : missing ? null : { label: '● Draft', cls: 'bg-slate-100 text-slate-600' }
+  const daysLeft = Math.round((new Date(`${dueDate}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000)
+  const due: { headline: string; detail: string; cls: string } =
+    submitted ? { headline: 'Submitted ✓', detail: timesheet.status === 'approved' ? 'Approved' : 'Waiting on approval', cls: 'text-emerald-700' }
+    : daysLeft < 0 ? { headline: `Overdue by ${-daysLeft} day${daysLeft === -1 ? '' : 's'}`, detail: `Was due ${fmtDayLong(dueDate)}`, cls: 'text-red-700' }
+    : daysLeft <= 3 ? { headline: daysLeft === 0 ? 'Due today' : `Due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, detail: fmtDayLong(dueDate), cls: 'text-amber-700' }
+    : { headline: `Due ${fmtDayLong(dueDate)}`, detail: `in ${daysLeft} days`, cls: 'text-emerald-700' }
+  const rowByDate = new Map(rows.map(r => [r.work_date, r]))
+  const stripDays = Array.from({ length: 14 }, (_, i) => {
+    const date = addDays(period.start, i)
+    const row = rowByDate.get(date)
+    const dow = new Date(`${date}T00:00:00Z`).getUTCDay()
+    const hrs = row ? Number(row.regular_hours) + Number(row.leave_hours) + Number(row.holiday_hours ?? 0) : 0
+    const isHoliday = !!row && Number(row.holiday_hours ?? 0) > 0
+    const isLeave = !!row && Number(row.leave_hours) > 0
+    const missingHours = !!row && !isHoliday && hrs === 0 && date < today
+    const cls = !row ? 'bg-[#f7fafb] border-[#e8f4f7]' // weekends have no row on the timesheet
+      : isHoliday ? 'bg-rose-50 border-rose-200 [&>span:last-child]:text-rose-600'
+      : isLeave ? 'bg-violet-50 border-violet-200 [&>span:last-child]:text-violet-600'
+      : hrs > 0 ? 'bg-[#e6f7fa] border-[#b9e6ee] [&>span:last-child]:text-[#028a9e]'
+      : missingHours ? 'bg-red-50/60 border-dashed border-red-200' : 'bg-white border-[#e8f4f7]'
+    const label = isHoliday ? 'HOL' : isLeave ? 'Leave' : hrs > 0 ? `${hrs}h` : missingHours ? '—' : ''
+    return { date, row, cls, label, dow: DOW_SHORT[dow], day: Number(date.slice(8)) }
+  })
+  function jumpToDay(date: string) {
+    const el = document.getElementById(`ts-row-${date}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add('!bg-[#d6f3f7]')
+    window.setTimeout(() => el.classList.remove('!bg-[#d6f3f7]'), 1400)
+  }
+  const canSubmitNow = (onBehalf ? canSubmitOnBehalf : !submitted) && !closedForEdit
+  function stickySubmit() {
+    if (!signed) document.getElementById('ts-signature')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    else handleSubmit()
+  }
+
 
   return (
     <div>
+      {stuck && !missing && (
+        <div className="sticky top-0 z-30 h-0 no-print">
+          <div className="absolute inset-x-0 top-0 flex items-center gap-3 bg-white/95 backdrop-blur border-b border-[#d4eef2] px-4 py-2 shadow-sm">
+            <span className="flex-1 min-w-0 truncate text-[13px] font-bold text-[#0b2b35]">{fmtPeriodTitle(period)} · {total} / {TARGET_HOURS} hrs</span>
+            <span className={`text-[12px] font-semibold hidden sm:inline ${due.cls}`}>{due.headline}</span>
+            {canSubmitNow && <button onClick={stickySubmit} disabled={submitting} className="bg-[#02ACC0] text-white text-[12px] font-semibold px-3.5 py-1.5 rounded-lg hover:bg-[#028a9e] disabled:opacity-40">{signed ? 'Submit & Sign' : 'Sign to submit'}</button>}
+          </div>
+        </div>
+      )}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -496,26 +580,6 @@ export default function TimesheetClient({
           )}
           <h1 className="text-[22px] font-bold text-[#0b2b35]">Timesheet{onBehalf ? ` — for ${employeeName}` : ''}</h1>
           <p className="text-[12px] text-gray-400 mt-0.5">{employeeName} · Employee ID {employeeIdLabel}</p>
-          <div className="flex items-center gap-2 mt-1">
-            <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading} aria-label="Previous (older) pay period" title="Previous pay period"
-              className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">‹</button>
-            <select
-              aria-label="Pay period"
-              value={periodIdx}
-              onChange={e => switchPeriod(Number(e.target.value))}
-              disabled={loading}
-              className="text-[13px] text-gray-600 font-medium bg-transparent border border-[#d4eef2] rounded-lg px-2 py-1 focus:outline-none focus:border-[#02ACC0] disabled:opacity-50">
-              {periods.map((p, i) => (
-                <option key={p.start} value={i}>{formatPeriodLabel(p)}{i === 0 ? ' (current)' : ''}</option>
-              ))}
-            </select>
-            <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading} aria-label="Next (newer) pay period" title="Next pay period"
-              className="text-gray-400 hover:text-[#0b2b35] disabled:opacity-30 text-[14px] transition-colors">›</button>
-            <span className="text-[11px] text-amber-600 bg-amber-50 font-semibold px-2 py-0.5 rounded-full ml-1">
-              Due {formatShort(dueDate)}
-            </span>
-            <RowTags tags={sheetTags} dashWhenEmpty={false} />
-          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={exportCsv}
@@ -543,6 +607,71 @@ export default function TimesheetClient({
             {submitting ? 'Submitting…' : 'Submit & Sign'}
           </button>}
         </div>
+      </div>
+
+      <div ref={headerRef} className="relative bg-white rounded-2xl border border-[#d4eef2] mb-6 no-print">
+        <div className="flex flex-wrap items-center gap-3.5 px-4 py-3.5">
+          <button onClick={() => switchPeriod(periodIdx + 1)} disabled={periodIdx >= periods.length - 1 || loading} aria-label="Previous (older) pay period" title="Previous pay period"
+            className="w-10 h-10 rounded-[10px] border border-[#d4eef2] text-[20px] text-[#0b2b35] hover:bg-[#f0f7f8] hover:border-[#02ACC0] disabled:opacity-30 disabled:hover:bg-transparent transition-colors">‹</button>
+          <button onClick={() => setPickerOpen(o => !o)} aria-haspopup="listbox" aria-expanded={pickerOpen} disabled={loading}
+            className="text-left px-2.5 py-1 rounded-[10px] hover:bg-[#f0f7f8] transition-colors disabled:opacity-50">
+            <span className="flex items-center gap-2 text-[18px] font-extrabold text-[#0b2b35]">{fmtPeriodTitle(period)}<span className="text-[10px] text-gray-400">▼</span></span>
+            <span className="block text-[11px] text-gray-500 mt-px">{periodIdx === 0 ? '' : `${periodIdx} period${periodIdx > 1 ? 's' : ''} ago · `}Pay date {fmtDayLong(payDate)}</span>
+          </button>
+          <button onClick={() => switchPeriod(periodIdx - 1)} disabled={periodIdx === 0 || loading} aria-label="Next (newer) pay period" title="Next pay period"
+            className="w-10 h-10 rounded-[10px] border border-[#d4eef2] text-[20px] text-[#0b2b35] hover:bg-[#f0f7f8] hover:border-[#02ACC0] disabled:opacity-30 disabled:hover:bg-transparent transition-colors">›</button>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {periodIdx === 0
+              ? <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#e0f5f8] text-[#028a9e]">Current period</span>
+              : <button onClick={() => switchPeriod(0)} className="text-[12px] font-bold text-[#028a9e] hover:underline">Jump to current →</button>}
+            {statusBadge && <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${statusBadge.cls}`}>{statusBadge.label}</span>}
+            <RowTags tags={sheetTags} dashWhenEmpty={false} />
+          </div>
+          <div className={`ml-auto text-right max-sm:ml-0 max-sm:text-left max-sm:w-full ${due.cls}`}>
+            <p className="text-[14px] font-extrabold">{due.headline}</p>
+            <p className="text-[11px] text-gray-500">{due.detail}</p>
+          </div>
+        </div>
+        <div className="px-4 pb-3.5">
+          <div className="flex justify-between text-[12px] mb-1.5">
+            <span><strong>{total}</strong> of {TARGET_HOURS} expected hours logged</span>
+            <span className="text-gray-400 font-semibold">{pct}%</span>
+          </div>
+          <div className="h-2 bg-[#e8f4f7] rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${over ? 'bg-red-400' : pct === 100 ? 'bg-emerald-500' : 'bg-[#02ACC0]'}`} style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <div className="grid grid-cols-7 sm:grid-cols-14 gap-1 px-4 pt-3 pb-4 border-t border-[#eef6f8]">
+          {stripDays.map(d => (
+            <button type="button" key={d.date} onClick={() => jumpToDay(d.date)} disabled={!d.row} title={`${fmtDayLong(d.date)}${d.label ? ` · ${d.label}` : ''}`}
+              className={`rounded-lg border py-1.5 text-center text-[10px] text-gray-500 transition-colors enabled:hover:border-[#02ACC0] ${d.cls} ${d.date === todayET() ? 'ring-2 ring-[#02ACC0]/30 !border-[#02ACC0]' : ''}`}>
+              {d.dow}
+              <span className="block text-[13px] font-bold text-[#0b2b35] my-px">{d.day}</span>
+              <span className="block h-[13px] text-[10px] font-bold">{d.label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="px-4 pb-3 -mt-1 text-[11px] text-gray-400">Filled = hours logged · purple = leave · rose = holiday · dashed = no hours yet. Click a day to jump to it.</p>
+        {pickerOpen && (
+          <div ref={pickerRef} role="listbox" className="absolute left-4 top-[72px] z-20 w-[min(420px,calc(100%-2rem))] bg-white border border-[#d4eef2] rounded-xl shadow-xl overflow-hidden">
+            <div className="flex justify-between items-center px-3.5 py-2.5 border-b border-[#d4eef2]">
+              <span className="text-[11px] uppercase tracking-wide font-bold text-gray-400">Pay periods</span>
+              {periodIdx !== 0 && <button onClick={() => { setPickerOpen(false); switchPeriod(0) }} className="text-[12px] font-bold text-[#028a9e] hover:underline">Jump to current</button>}
+            </div>
+            <div className="max-h-[360px] overflow-y-auto">
+              {periods.map((p, i) => (
+                <button key={p.start} role="option" aria-selected={i === periodIdx} onClick={() => { setPickerOpen(false); switchPeriod(i) }}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 border-b border-[#f0f7f8] text-left hover:bg-[#f0fbfc] ${i === periodIdx ? 'bg-[#f0fbfc]' : ''}`}>
+                  <span className="flex-1">
+                    <span className="block text-[13px] font-bold text-[#0b2b35]">{fmtPeriodTitle(p)}{i === 0 ? ' · current' : ''}</span>
+                    <span className="block text-[11px] text-gray-500">Paid {fmtDayLong(getPayDate(p))}</span>
+                  </span>
+                  {i === periodIdx && statusBadge && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusBadge.cls}`}>{statusBadge.label}</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -576,15 +705,6 @@ export default function TimesheetClient({
             <p className={`text-[22px] font-black leading-none ${s.color}`}>{s.value}</p>
           </div>
         ))}
-      </div>
-
-      <div className="bg-white rounded-xl border border-[#d4eef2] px-5 py-4 mb-6 flex items-center gap-4 no-print">
-        <div className="flex-1 h-2.5 bg-[#f0f7f8] rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${over ? 'bg-red-400' : pct === 100 ? 'bg-emerald-500' : 'bg-[#02ACC0]'}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className={`text-[13px] font-bold flex-shrink-0 ${over ? 'text-red-500' : pct === 100 ? 'text-emerald-600' : 'text-[#0b2b35]'}`}>
-          {pct}% complete
-        </span>
       </div>
 
       <div className="bg-white rounded-xl border border-[#d4eef2] overflow-hidden mb-6 max-w-[1010px]">
@@ -652,6 +772,7 @@ export default function TimesheetClient({
           {onBehalf ? timesheetOnBehalfAttestation(employeeName) : TIMESHEET_ATTESTATION}
         </p>
 
+        <div id="ts-signature" />
         {!signed && <div role="alert" className="text-[13px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-2.5 mb-3"><strong>Electronic signature required.</strong> Click the box below to sign before this timesheet can be submitted. The Submit button stays disabled until you do.</div>}
         <div
           onClick={() => setSigned(true)}
@@ -703,7 +824,7 @@ function TimesheetRowView({ row, tags, allTags, onUpdate, isSalaried, locked, ov
   const dayShort = fmtDateShort(d)
 
   return (
-    <div className={`grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
+    <div id={`ts-row-${row.work_date}`} className={`grid grid-cols-[90px_260px_180px_56px_56px_56px_60px_100px] gap-2 px-5 py-2.5 border-b border-[#f0f7f8] items-center text-[13px] transition-colors ${
       isHoliday ? 'bg-rose-50/40' : isLeave ? 'bg-violet-50/40' : isEmpty ? 'bg-amber-50/30' : ''
     }`}>
       <div>
