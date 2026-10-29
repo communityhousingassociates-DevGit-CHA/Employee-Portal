@@ -36,6 +36,7 @@ function reminderEmail(firstName: string, link: string) {
         <p style="font-size:12px;line-height:1.6;color:#6b7280;margin:0 0 8px">This link is valid for ${INVITE_VALID_HOURS} hours. If you get another reminder, use the newest email &mdash; older links stop working.</p>
         <p style="font-size:12px;line-height:1.6;color:#6b7280;margin:0">Button not working? Copy this link into your browser:<br><span style="word-break:break-all">${esc(link)}</span></p>
         <p style="font-size:12px;color:#6b7280;margin:16px 0 0">Questions? Email <a href="mailto:support@globalist.pro" style="color:#028a9e">support@globalist.pro</a>.</p>
+        <p style="font-size:11px;color:#9ca3af;margin:12px 0 0">This email address is send-only and does not receive incoming messages. Please email support@globalist.pro instead, or submit a ticket from the portal once you're signed in.</p>
       </div>
     </div>`
 }

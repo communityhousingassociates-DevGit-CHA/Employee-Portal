@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { NotificationKind, Role } from '@/types'
 import { NOTIFICATION_TEST_MODE, APPROVER_ALERT_COPY_TO, FINAL_APPROVER_ROLES } from '@/lib/constants/approvals'
 import { todayET } from '@/lib/pay-periods'
-import { PORTAL_REPLY_TO } from '@/lib/constants/email'
+import { PORTAL_REPLY_TO, SUPPORT_EMAIL } from '@/lib/constants/email'
 
 const FROM = 'CHA Employee Portal <portal@communityhousingassociates.org>'
 
@@ -42,6 +42,7 @@ function renderEmail(recipient: Pick<Recipient, 'name'>, n: { kind: Notification
         <div style="background:#f9fefe;border:1px solid #f0f7f8;border-radius:8px;padding:12px 14px;font-size:13px;white-space:pre-wrap">${escapeHtml(n.body)}</div>
         <p style="margin:20px 0 0"><a href="${siteUrl()}${n.link}" style="background:#02ACC0;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;display:inline-block">${escapeHtml(n.cta)}</a></p>
         <p style="font-size:11px;color:#9ca3af;margin-top:20px">You're receiving this because of activity on your Community Housing Associates employee portal account.</p>
+        <p style="font-size:11px;color:#9ca3af;margin:8px 0 0">This email address is send-only and does not receive incoming messages. If you need help, email <a href="mailto:${SUPPORT_EMAIL}" style="color:#9ca3af">${SUPPORT_EMAIL}</a> or <a href="${siteUrl()}/report-issue" style="color:#9ca3af">submit a ticket</a> in the portal.</p>
       </div>
     </div>`
 }
