@@ -1,9 +1,8 @@
 'use client'
 
 import { errMsg } from '@/lib/user-error'
-import { useState, useRef } from 'react'
-import Image from 'next/image'
-import { updateProfile, updateAvatarUrl, getSignedUploadUrl, getPublicAvatarUrl } from '@/app/actions/profile'
+import { useState } from 'react'
+import { updateProfile } from '@/app/actions/profile'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { buildFullName } from '@/lib/format-name'
 import { fmtDate } from '@/lib/format-date'
@@ -42,7 +41,7 @@ const DEPT_OPTIONS = [
   'Maintenance',
 ]
 
-export default function ProfileForm({ profile, userId }: { profile: Profile; userId: string }) {
+export default function ProfileForm({ profile }: { profile: Profile; userId?: string }) {
   const [form, setForm] = useState({
     first_name: profile.first_name,
     last_name: profile.last_name,
@@ -50,12 +49,9 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
     job_title: profile.job_title || '',
     department: profile.department || '',
   })
-  const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url)
   const [saving, setSaving] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const [pwForm, setPwForm] = useState({ newPassword: '', confirm: '' })
   const [pwSaving, setPwSaving] = useState(false)
@@ -82,34 +78,6 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
       setError(errMsg(e, 'Failed to save'))
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    setError('')
-    try {
-      const { signedUrl, path } = await getSignedUploadUrl(file.name)
-      const res = await fetch(signedUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      if (!res.ok) throw new Error('Upload failed')
-      const publicUrl = await getPublicAvatarUrl(path)
-      await updateAvatarUrl(publicUrl)
-      setAvatarUrl(publicUrl + '?t=' + Date.now())
-    } catch (e: unknown) {
-      setError(errMsg(e, 'Photo upload failed'))
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  async function handleRemovePhoto() {
-    try {
-      await updateAvatarUrl(null)
-      setAvatarUrl(null)
-    } catch (e: unknown) {
-      setError(errMsg(e, 'Failed to remove photo'))
     }
   }
 
@@ -153,33 +121,12 @@ export default function ProfileForm({ profile, userId }: { profile: Profile; use
 
       {/* Avatar section */}
       <div className="bg-white rounded-xl border border-[#d4eef2] p-6 mb-5 flex flex-col sm:flex-row items-center sm:items-center gap-6 text-center sm:text-left">
-        <div className="relative flex-shrink-0">
-          {avatarUrl ? (
-            <Image src={avatarUrl} alt={displayName} width={80} height={80}
-              className="w-20 h-20 rounded-full object-cover border-2 border-[#d4eef2]" />
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[24px] font-black">
-              {initials}
-            </div>
-          )}
+        <div className="flex-shrink-0 w-20 h-20 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[24px] font-black">
+          {initials}
         </div>
         <div>
           <p className="text-[14px] font-semibold text-[#0b2b35] mb-0.5">{displayName}</p>
-          <p className="text-[12px] text-gray-400 mb-3">{profile.email}</p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => fileRef.current?.click()} disabled={uploading}
-              className="text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-[#d4eef2] hover:bg-[#f0f7f8] transition-colors disabled:opacity-50">
-              {uploading ? 'Uploading…' : avatarUrl ? 'Change Photo' : 'Upload Photo'}
-            </button>
-            {avatarUrl && (
-              <button onClick={handleRemovePhoto}
-                className="text-[12px] text-red-400 hover:text-red-600 transition-colors">
-                Remove
-              </button>
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-          <p className="text-[11px] text-gray-400 mt-1.5">JPG, PNG or GIF · Max 5 MB</p>
+          <p className="text-[12px] text-gray-400">{profile.email}</p>
         </div>
       </div>
 

@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import { getCurrentEmployee } from '@/lib/auth/session'
 import DashboardGreeting from '@/components/DashboardGreeting'
@@ -145,11 +144,7 @@ export default async function DashboardPage() {
 
       {/* Profile card */}
       <div className="bg-[#0b2b35] rounded-2xl px-6 py-6 flex flex-wrap items-center gap-5">
-        {employee.avatar_url ? (
-          <Image src={employee.avatar_url} alt={employee.name} width={64} height={64} className="w-16 h-16 rounded-full object-cover flex-shrink-0 border-2 border-white/20" />
-        ) : (
-          <div className="w-16 h-16 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[20px] font-bold flex-shrink-0">{initials}</div>
-        )}
+        <div className="w-16 h-16 rounded-full bg-[#02ACC0] flex items-center justify-center text-white text-[20px] font-bold flex-shrink-0">{initials}</div>
         <div className="flex-1 min-w-[200px]">
           <h2 className="text-white text-[20px] font-bold">{employee.name}</h2>
           <p className="text-white/50 text-[13px] capitalize">{employee.job_title || employee.role.replace('_', ' ')} · {employee.department || 'Community Housing Associates'}</p>
