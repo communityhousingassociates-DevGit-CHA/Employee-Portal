@@ -19,8 +19,22 @@ export async function updateProfile(data: {
   department: string | null
 }) {
   const userId = await getAuthUserId()
+  // Server Action arguments are untrusted at runtime — the TypeScript type is not enforced. Write only these five fields, never
+  // the object as received, or a caller could add `role`, `is_super_admin`, etc. and promote themselves.
+  const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
+  const first_name = text(data?.first_name, 80)
+  const last_name = text(data?.last_name, 80)
+  if (!first_name || !last_name) throw new UserError('First and last name are required.')
+  const optional = (v: unknown, max: number) => text(v, max) || null
+  const clean = {
+    first_name,
+    last_name,
+    middle_initial: optional(data?.middle_initial, 3),
+    job_title: optional(data?.job_title, 120),
+    department: optional(data?.department, 120),
+  }
   const admin = createAdminClient()
-  const { error } = await admin.from('employees').update(data).eq('user_id', userId)
+  const { error } = await admin.from('employees').update(clean).eq('user_id', userId)
   if (error) throw new Error(error.message)
 }
 

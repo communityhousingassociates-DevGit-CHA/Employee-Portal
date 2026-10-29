@@ -18,7 +18,9 @@ const COLUMNS = 'id, funder, funder_type, geography, relationship, fit_notes, as
 // Empty strings from form inputs become null so dates/numbers don't fail on insert.
 function clean(input: FundingInput) {
   const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(input)) out[k] = v === '' ? null : v
+  // Only real, editable columns — never ids, audit fields or anything else a caller adds to the object.
+  const editable = new Set(COLUMNS.split(',').map(c => c.trim()).filter(c => !['id', 'created_by', 'created_at', 'updated_at'].includes(c)))
+  for (const [k, v] of Object.entries(input)) if (editable.has(k)) out[k] = v === '' ? null : v
   for (const k of ['website_url', 'application_url', 'source_url'] as const) {
     if (out[k] != null && !safeUrl(out[k] as string)) throw new Error('Links must start with http:// or https://')
     if (out[k] != null) out[k] = safeUrl(out[k] as string)

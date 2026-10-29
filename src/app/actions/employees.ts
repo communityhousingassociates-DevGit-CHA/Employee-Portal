@@ -1,6 +1,7 @@
 'use server'
 
 import { UserError } from '@/lib/user-error'
+import { canManageAccount, roleChangeProblem, emailChangeProblem, type Actor, type Target } from '@/lib/role-guards'
 import { ADMIN_ROLES } from '@/lib/constants/admin-access'
 import { randomBytes } from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -13,6 +14,25 @@ import { requireRole, requireSuperAdmin } from '@/lib/auth/session'
 import type { Role } from '@/types'
 
 const MANAGER_ROLES: Role[] = ['accounting_manager', 'ceo', 'admin']
+
+type AdminDb = ReturnType<typeof createAdminClient>
+const asActor = (e: { id: string; role: string; is_super_admin?: boolean | null }): Actor => ({ id: e.id, role: e.role as Actor['role'], is_super_admin: e.is_super_admin })
+
+/** The accounts being acted on, as the role rules need to see them. Refuses if any is missing. */
+async function loadTargets(admin: AdminDb, ids: string[]): Promise<Target[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await admin.from('employees').select('id, role, email, is_super_admin').in('id', ids)
+  if (error) throw new Error(error.message)
+  if ((data ?? []).length !== new Set(ids).size) throw new UserError('One of those accounts no longer exists.')
+  return (data ?? []) as Target[]
+}
+
+/** Throws unless `me` may manage every one of these accounts (see lib/role-guards.ts). */
+async function assertMayManage(admin: AdminDb, me: { id: string; role: string; is_super_admin?: boolean | null }, ids: string[]): Promise<Target[]> {
+  const targets = await loadTargets(admin, ids)
+  if (targets.some(t => !canManageAccount(asActor(me), t))) throw new UserError('You do not have permission to manage that account.')
+  return targets
+}
 
 export async function addEmployee(data: {
   first_name: string
@@ -37,7 +57,12 @@ export async function addEmployee(data: {
   state?: string
   postal_code?: string
 }) {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
+  const newAccount: Target = { id: '', role: 'employee', email: '' }
+  const roleProblem = roleChangeProblem(asActor(me), newAccount, data.role)
+  if (roleProblem) throw new UserError(roleProblem)
+  const emailProblem = emailChangeProblem(asActor(me), newAccount, data.email)
+  if (emailProblem) throw new UserError(emailProblem)
   const admin = createAdminClient()
   const { error } = await admin.from('employees').insert({
     first_name: data.first_name,
@@ -91,6 +116,11 @@ export async function editEmployee(id: string, data: {
 }) {
   const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  const [target] = await assertMayManage(admin, me, [id])
+  const roleProblem = roleChangeProblem(asActor(me), target, data.role)
+  if (roleProblem) throw new UserError(roleProblem)
+  const emailProblem = emailChangeProblem(asActor(me), target, data.email)
+  if (emailProblem) throw new UserError(emailProblem)
   const { data: before } = await admin.from('employees').select('email, user_id, login_count').eq('id', id).single()
   const { error } = await admin.from('employees').update({
     first_name: data.first_name,
@@ -136,24 +166,29 @@ export async function editEmployee(id: string, data: {
 }
 
 export async function archiveEmployee(id: string) {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  if (id === me.id) throw new UserError('You cannot deactivate your own account.')
+  await assertMayManage(admin, me, [id])
   const { error } = await admin.from('employees').update({ is_active: false }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
 }
 
 export async function restoreEmployee(id: string) {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  await assertMayManage(admin, me, [id])
   const { error } = await admin.from('employees').update({ is_active: true }).eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
 }
 
 export async function deleteEmployee(id: string) {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  if (id === me.id) throw new UserError('You cannot delete your own account.')
+  await assertMayManage(admin, me, [id])
   const { error } = await admin.from('employees').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
@@ -166,8 +201,9 @@ export async function deleteEmployee(id: string) {
  * themselves via the same /set-password flow used for invites.
  */
 export async function sendPasswordReset(id: string) {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  await assertMayManage(admin, me, [id])
   const { data: employee, error } = await admin
     .from('employees')
     .select('email, user_id')
@@ -192,8 +228,9 @@ export async function sendPasswordReset(id: string) {
  * caller must show it immediately and hand it to the employee securely.
  */
 export async function setTemporaryPassword(id: string): Promise<string> {
-  await requireRole(ADMIN_ROLES)
+  const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
+  await assertMayManage(admin, me, [id])
   const { data: employee, error } = await admin
     .from('employees')
     .select('user_id')
@@ -358,7 +395,9 @@ export async function sendInvites(
 export async function setEmployeesActive(ids: string[], active: boolean) {
   const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
-  const { error } = await admin.from('employees').update({ is_active: active }).in('id', ids.filter(id => id !== me.id))
+  const targetIds = ids.filter(id => id !== me.id)
+  await assertMayManage(admin, me, targetIds)
+  const { error } = await admin.from('employees').update({ is_active: active }).in('id', targetIds)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
 }
@@ -367,7 +406,9 @@ export async function setEmployeesActive(ids: string[], active: boolean) {
 export async function deleteEmployees(ids: string[]) {
   const me = await requireRole(ADMIN_ROLES)
   const admin = createAdminClient()
-  const { error } = await admin.from('employees').delete().in('id', ids.filter(id => id !== me.id)).eq('is_super_admin', false)
+  const targetIds = ids.filter(id => id !== me.id)
+  await assertMayManage(admin, me, targetIds)
+  const { error } = await admin.from('employees').delete().in('id', targetIds).eq('is_super_admin', false)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/users')
 }
@@ -390,6 +431,13 @@ export async function bulkEditEmployees(ids: string[], field: BulkEditableField,
   const admin = createAdminClient()
   const targetIds = ids.filter(id => id !== me.id)
   if (targetIds.length === 0) return
+  const targets = await assertMayManage(admin, me, targetIds)
+  if (field === 'role') {
+    for (const t of targets) {
+      const problem = roleChangeProblem(asActor(me), t, value ?? '')
+      if (problem) throw new UserError(problem)
+    }
+  }
   if (field === 'is_active' && value !== 'true' && value !== 'false') throw new UserError('Status must be active or inactive')
   const normalized = field === 'is_active' ? value === 'true' : field === 'employee_type' && value ? value.toLowerCase() : value
   const { error } = await admin.from('employees').update({ [field]: normalized }).in('id', targetIds)
