@@ -22,6 +22,7 @@ const navItems = [
   { href: '/admin/tags', icon: '🏷️', label: 'Timesheet Tags', roles: CONSOLE_ROLES },
   { href: '/admin/balances', icon: '⚖️', label: 'Leave Balances', roles: CONSOLE_ROLES },
   { href: '/admin/settings', icon: '⚙️', label: 'Portal Settings', roles: CONSOLE_ROLES },
+  { href: '/admin/system', icon: '📊', label: 'System', roles: CONSOLE_ROLES },
 ]
 
 const ROLE_BADGE: Record<string, string> = { admin: 'ADMIN', ceo: 'CEO', accounting_manager: 'ACCOUNTING' }
@@ -34,7 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const displayName = employee.name || 'Admin'
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role) && (item.href !== '/admin/funding' || canAccessFunding(employee)) && (item.href !== '/admin/salary' || canViewSalaries(employee)) && (item.href !== '/admin/tags' || hasPayrollAccess(employee)) && (item.href !== '/admin/balances' || hasPayrollAccess(employee)))
+  const visibleNavItems = navItems.filter(item => item.roles.includes(employee.role) && (item.href !== '/admin/funding' || canAccessFunding(employee)) && (item.href !== '/admin/salary' || canViewSalaries(employee)) && (item.href !== '/admin/tags' || hasPayrollAccess(employee)) && (item.href !== '/admin/balances' || hasPayrollAccess(employee)) && (item.href !== '/admin/system' || employee.is_super_admin))
   const roleBadge = ROLE_BADGE[employee.role] ?? employee.role.toUpperCase()
 
   // Only a superadmin can act on a pending import, so only they see the count.

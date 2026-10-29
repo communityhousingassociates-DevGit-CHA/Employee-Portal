@@ -6,6 +6,7 @@ import { runPersonalDaysGrant } from '@/lib/personal-grants'
 import { applyDueLeaveDeductions } from '@/lib/leave-deductions'
 import { populateDraftTimesheets } from '@/lib/leave-timesheet'
 import { sendApprovalDigest } from '@/lib/approval-digest'
+import { recordJobRun } from '@/lib/system-log'
 import { sendTrackingDigest } from '@/lib/tracking-digest'
 import { sendInviteReminders } from '@/lib/invite-reminders'
 import { sendPaydayTimesheetAlerts } from '@/lib/payday-timesheet-alerts'
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const startedAt = new Date()
   const admin = createAdminClient()
   const carryover = await runYearEndCarryover(admin).catch(e => ({ ran: false, error: e instanceof Error ? e.message : String(e) }))
 
@@ -68,5 +70,6 @@ export async function GET(request: NextRequest) {
   for (const f of inviteReminders.failed) issues.push(`Invite reminder for ${f.name}: ${f.error}`)
   if ((deductions as { shortfalls?: number }).shortfalls) issues.push(`${(deductions as { shortfalls?: number }).shortfalls} approved leave request(s) came due with an insufficient balance — see the notices to approvers.`)
   const tracking = await sendTrackingDigest(admin, issues).catch(e => ({ sent: false, reason: e instanceof Error ? e.message : String(e) }))
+  await recordJobRun(admin, 'daily-cron', startedAt, issues.length === 0, issues.length === 0 ? 'Completed with nothing needing attention' : `${issues.length} item${issues.length === 1 ? '' : 's'} needing attention`, { issues, paydayAlerts: { ran: paydayAlerts.ran, alerted: 'alerted' in paydayAlerts ? paydayAlerts.alerted?.length ?? 0 : 0, failed: paydayAlerts.failed?.length ?? 0 } })
   return NextResponse.json({ paydayAlerts, inviteReminders, tracking, carryover, personalGrant, accruals, deductions, timesheetFill, digest })
 }
