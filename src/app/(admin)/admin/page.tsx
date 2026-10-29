@@ -93,6 +93,7 @@ export default async function AdminPage() {
               { href: '/admin/grants', icon: '🏷️', title: 'Grants & Funding', desc: 'Manage grants and funding sources', color: 'bg-violet-500' },
               { href: '/admin/settings#leave', icon: '📋', title: 'Leave Policy', desc: 'Accrual rules and leave settings', color: 'bg-amber-500' },
               { href: '/admin/settings#payroll', icon: '💰', title: 'Payroll Settings', desc: 'Pay periods and payroll configuration', color: 'bg-slate-600' },
+              ...(employee?.is_super_admin ? [{ href: '/admin/system', icon: '📊', title: 'System', desc: 'Issues, audit log, releases, health, and errors', color: 'bg-cyan-700' }] : []),
             ].map(t => (
               <Link key={t.href} href={t.href} className={`${t.color} rounded-xl p-5 text-white hover:opacity-90 transition-opacity group`}>
                 <span className="text-[24px]">{t.icon}</span>
