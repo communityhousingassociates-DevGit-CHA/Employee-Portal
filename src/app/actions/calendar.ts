@@ -77,3 +77,15 @@ export async function getUpcomingLeave(limit = 10) {
     }
   })
 }
+
+/** Active staff for the calendar's "who's in" count and week view (test accounts hidden from real staff). */
+export async function getTeamRoster() {
+  const employee = await getCurrentEmployee()
+  if (!employee) throw new UserError('Forbidden')
+  const admin = createAdminClient()
+  let query = admin.from('employees').select('id, name').eq('is_active', true).order('name')
+  if (!employee.is_test_account) query = query.eq('is_test_account', false)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(e => ({ id: e.id as string, name: (e.name as string) ?? 'Unknown' }))
+}
