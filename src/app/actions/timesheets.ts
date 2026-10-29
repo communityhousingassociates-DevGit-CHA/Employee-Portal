@@ -11,6 +11,7 @@ import { canViewTimesheetReports } from '@/lib/constants/salary-access'
 import { getOrCreateTimesheetForEmployee } from '@/lib/leave-timesheet'
 import { getCurrentPeriod, getPreviousPeriod, getTimesheetDueDate, periodLockReason, closedRangeOverlapping, type ClosedRange, todayET, shiftDate } from '@/lib/pay-periods'
 import { loadClosedRanges } from '@/lib/period-lock'
+import { periodStatus, missingWeekendDates, unusedWeekendRowIds } from '@/lib/timesheet-period'
 import { logTimesheetEvent } from '@/lib/timesheet-events'
 import { REOPEN_REASON_CODES, REOPEN_OVERRIDE_ROLES, reopenReasonLabel } from '@/lib/constants/timesheet-reopen'
 import { notifyApprovers, notifyEmployee } from '@/lib/notifications'
@@ -201,7 +202,7 @@ export async function saveTimesheetDraft(
   revalidatePath('/timesheet')
 }
 
-export type PeriodSummary = { start: string; status: 'none' | 'draft' | 'returned' | 'submitted' | 'approved'; hours: number }
+export type PeriodSummary = { start: string; status: import('@/lib/timesheet-period').PeriodStatus; hours: number }
 
 /** Status and total hours for each of the given pay periods (the period picker). Yourself always; someone else only via the same on-behalf rule as the timesheet itself. */
 export async function getPeriodSummaries(periodStarts: string[], forEmployeeId?: string): Promise<PeriodSummary[]> {
@@ -217,11 +218,10 @@ export async function getPeriodSummaries(periodStarts: string[], forEmployeeId?:
   const byStart = new Map((data ?? []).map(t => [t.period_start as string, t]))
   return periodStarts.map(start => {
     const t = byStart.get(start)
-    if (!t) return { start, status: 'none' as const, hours: 0 }
+    if (!t) return { start, status: periodStatus(null), hours: 0 }
     const rows = (t.timesheet_rows ?? []) as { regular_hours: number; leave_hours: number; holiday_hours: number | null }[]
     const hours = rows.reduce((sum, r) => sum + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
-    const status = t.status === 'draft' && t.return_reason ? 'returned' : (t.status as 'draft' | 'submitted' | 'approved')
-    return { start, status, hours }
+    return { start, status: periodStatus(t as { status: string; return_reason: string | null }), hours }
   })
 }
 
@@ -239,12 +239,7 @@ export async function addWeekendRows(timesheetId: string, onBehalf?: OnBehalf) {
   await assertNotClosed(admin, current)
   const { data: existing, error: exError } = await admin.from('timesheet_rows').select('work_date').eq('timesheet_id', timesheetId)
   if (exError) throw new Error(exError.message)
-  const have = new Set((existing ?? []).map(r => r.work_date as string))
-  const missing: string[] = []
-  for (let d = current.period_start as string; d <= (current.period_end as string); d = shiftDate(d, 1)) {
-    const dow = new Date(`${d}T00:00:00Z`).getUTCDay()
-    if ((dow === 0 || dow === 6) && !have.has(d)) missing.push(d)
-  }
+  const missing = missingWeekendDates(current.period_start as string, current.period_end as string, (existing ?? []).map(r => r.work_date as string))
   if (missing.length > 0) {
     const { error } = await admin.from('timesheet_rows').insert(missing.map(work_date => ({
       timesheet_id: timesheetId, work_date, description: 'Weekend Hours', regular_hours: 0, leave_hours: 0, holiday_hours: 0, leave_type: null,
@@ -414,9 +409,7 @@ export async function submitTimesheet(timesheetId: string, onBehalf?: OnBehalf) 
   // Weekend rows that were added but never used are dropped, so a normal Monday–Friday sheet stays exactly that.
   const { data: weekendRows, error: weekendError } = await admin.from('timesheet_rows').select('id, work_date, regular_hours, leave_hours, holiday_hours').eq('timesheet_id', timesheetId)
   if (weekendError) throw new Error(weekendError.message)
-  const unusedWeekend = (weekendRows ?? [])
-    .filter(r => { const dow = new Date(`${r.work_date}T00:00:00Z`).getUTCDay(); return (dow === 0 || dow === 6) && Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0) === 0 })
-    .map(r => r.id as string)
+  const unusedWeekend = unusedWeekendRowIds((weekendRows ?? []) as { id: string; work_date: string; regular_hours: number; leave_hours: number; holiday_hours: number | null }[])
   if (unusedWeekend.length > 0) {
     const { error: delError } = await admin.from('timesheet_rows').delete().in('id', unusedWeekend)
     if (delError) throw new Error(delError.message)

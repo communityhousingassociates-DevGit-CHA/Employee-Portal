@@ -17,6 +17,7 @@ import TagsCell from '@/components/TagsCell'
 import { tagRows, timesheetTags, type RowTag } from '@/lib/timesheet-tags'
 import type { Timesheet, TimesheetAudit, TimesheetRow as TimesheetRowType, Expense, TimesheetTag } from '@/types'
 import TimesheetSignatures, { TimesheetHistory } from '@/components/TimesheetSignatures'
+import { isWeekendDate, addDays, rowHours, dueUrgency, splitWeeks, splitHours, needsAttention as periodNeedsAttention, periodStatus } from '@/lib/timesheet-period'
 import { getTimesheetDueDate, getPayDate, periodLockReason, closedRangeOverlapping, type ClosedRange, type PayPeriod, todayET } from '@/lib/pay-periods'
 
 const TARGET_HOURS = 80
@@ -26,12 +27,6 @@ type EditableRow = TimesheetRowType & { dirty?: boolean }
 type Salary = { annual_salary: number; effective_date: string; note: string | null } | null
 
 const currency = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-
-function addDays(d: string, days: number): string {
-  const date = new Date(`${d}T00:00:00Z`)
-  date.setUTCDate(date.getUTCDate() + days)
-  return date.toISOString().slice(0, 10)
-}
 
 function formatPeriodLabel(p: PayPeriod): string {
   return fmtDateRange(p.start, p.end)
@@ -52,8 +47,6 @@ function fmtDayLong(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`)
   return `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()]}, ${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
 }
-
-const isWeekendDate = (iso: string) => { const dow = new Date(`${iso}T00:00:00Z`).getUTCDay(); return dow === 0 || dow === 6 }
 
 const SALARIED_DAILY_HOURS = 8
 
@@ -209,8 +202,7 @@ export default function TimesheetClient({
   const totalHoliday = rows.reduce((s, r) => s + Number(r.holiday_hours ?? 0), 0)
   const total = totalReg + totalLeave + totalHoliday
   // The 80-hour target is for the regular Monday–Friday schedule; weekend hours are extra and tracked on their own.
-  const weekendTotal = rows.filter(r => isWeekendDate(r.work_date)).reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
-  const weekdayTotal = total - weekendTotal
+  const { weekday: weekdayTotal, weekend: weekendTotal } = splitHours(rows)
   const pct = Math.min(Math.round((weekdayTotal / TARGET_HOURS) * 100), 100)
   const remaining = Math.max(TARGET_HOURS - weekdayTotal, 0)
   const over = weekdayTotal > TARGET_HOURS
@@ -462,12 +454,9 @@ export default function TimesheetClient({
   const tagsById = new Map(rows.map((r, i) => [r.id, dayTags[i]]))
   const sheetTags = timesheetTags({ status: timesheet.status, return_reason: timesheet.return_reason, correction_requested_at: timesheet.correction_requested_at, lock_reason: periodLockReason(period, closedRanges) })
   // Weeks split by date (the period starts on a Sunday); weekend rows are listed only when switched on.
-  const weekEnd1 = addDays(period.start, 6)
-  const listed = rows.filter(r => weekendsOn || !isWeekendDate(r.work_date))
-  const week1 = listed.filter(r => r.work_date <= weekEnd1)
-  const week2 = listed.filter(r => r.work_date > weekEnd1)
-  const week1Total = week1.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
-  const week2Total = week2.reduce((s, r) => s + Number(r.regular_hours) + Number(r.leave_hours) + Number(r.holiday_hours ?? 0), 0)
+  const { week1, week2 } = splitWeeks(rows, period.start, weekendsOn)
+  const week1Total = week1.reduce((s, r) => s + rowHours(r), 0)
+  const week2Total = week2.reduce((s, r) => s + rowHours(r), 0)
   const weekendRowsExist = rows.some(r => isWeekendDate(r.work_date))
   const canAddWeekend = !readOnly && timesheet.status === 'draft' && !missing
   async function toggleWeekends() {
@@ -490,18 +479,18 @@ export default function TimesheetClient({
     : timesheet.status === 'approved' ? { label: '✓ Approved', cls: 'bg-emerald-100 text-emerald-700' }
     : timesheet.status === 'submitted' ? { label: '⏳ Submitted', cls: 'bg-blue-100 text-blue-700' }
     : missing ? null : { label: '● Draft', cls: 'bg-slate-100 text-slate-600' }
-  const daysLeft = Math.round((new Date(`${dueDate}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000)
+  const { kind: dueKind, daysLeft } = dueUrgency(dueDate, today, submitted)
   const due: { headline: string; detail: string; cls: string; chip: string } =
-    submitted ? { headline: 'Submitted ✓', detail: timesheet.status === 'approved' ? 'Approved' : 'Waiting on approval', cls: 'text-blue-700', chip: 'bg-blue-100 text-blue-800' }
-    : daysLeft < 0 ? { headline: `Overdue by ${-daysLeft} day${daysLeft === -1 ? '' : 's'}`, detail: `Was due ${fmtDayLong(dueDate)}`, cls: 'text-red-700', chip: 'bg-red-100 text-red-800' }
-    : daysLeft <= 3 ? { headline: daysLeft === 0 ? 'Due today' : `Due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, detail: fmtDayLong(dueDate), cls: 'text-amber-700', chip: 'bg-amber-100 text-amber-800' }
+    dueKind === 'done' ? { headline: 'Submitted ✓', detail: timesheet.status === 'approved' ? 'Approved' : 'Waiting on approval', cls: 'text-blue-700', chip: 'bg-blue-100 text-blue-800' }
+    : dueKind === 'overdue' ? { headline: `Overdue by ${-daysLeft} day${daysLeft === -1 ? '' : 's'}`, detail: `Was due ${fmtDayLong(dueDate)}`, cls: 'text-red-700', chip: 'bg-red-100 text-red-800' }
+    : dueKind === 'soon' ? { headline: daysLeft === 0 ? 'Due today' : `Due in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, detail: fmtDayLong(dueDate), cls: 'text-amber-700', chip: 'bg-amber-100 text-amber-800' }
     : { headline: `Due ${fmtDayLong(dueDate)}`, detail: `in ${daysLeft} days`, cls: 'text-teal-700', chip: 'bg-[#e0f5f8] text-[#028a9e]' }
   /** Colour for one period's timesheet due date in the picker, from that period's own status. */
   function dueTone(periodDue: string, status: PeriodSummary['status'] | undefined) {
-    if (status === 'submitted' || status === 'approved') return { text: 'text-blue-700', note: 'Submitted' }
-    const left = Math.round((new Date(`${periodDue}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) / 86400000)
-    if (left < 0) return { text: 'text-red-700', note: 'Overdue' }
-    if (left <= 3) return { text: 'text-amber-700', note: left === 0 ? 'Today' : `${left}d` }
+    const { kind, daysLeft: left } = dueUrgency(periodDue, today, status === 'submitted' || status === 'approved')
+    if (kind === 'done') return { text: 'text-blue-700', note: 'Submitted' }
+    if (kind === 'overdue') return { text: 'text-red-700', note: 'Overdue' }
+    if (kind === 'soon') return { text: 'text-amber-700', note: left === 0 ? 'Today' : `${left}d` }
     return { text: 'text-teal-700', note: '' }
   }
   const rowByDate = new Map(rows.map(r => [r.work_date, r]))
@@ -716,10 +705,10 @@ export default function TimesheetClient({
               {periods.map((p, i) => {
                 // The period on screen uses its live state; the others come from the summary query.
                 const sm = summaries?.find(x => x.start === p.start)
-                const live: PeriodSummary['status'] | undefined = i === periodIdx ? (missing ? 'none' : timesheet.status === 'draft' && timesheet.return_reason ? 'returned' : timesheet.status as PeriodSummary['status']) : sm?.status
+                const live: PeriodSummary['status'] | undefined = i === periodIdx ? periodStatus(missing ? null : timesheet) : sm?.status
                 const hrs = i === periodIdx ? total : sm?.hours
                 const tone = dueTone(getTimesheetDueDate(p), live)
-                const needsAttention = live === 'returned' || tone.note === 'Overdue'
+                const needsAttention = !!live && periodNeedsAttention(live, getTimesheetDueDate(p), today)
                 const pill = live === 'approved' ? ['✓ Approved', 'bg-emerald-100 text-emerald-700'] : live === 'submitted' ? ['⏳ Submitted', 'bg-blue-100 text-blue-700'] : live === 'returned' ? ['↩ Returned', 'bg-amber-100 text-amber-700'] : live === 'draft' ? ['● Draft', 'bg-slate-100 text-slate-600'] : live === 'none' ? ['Not started', 'bg-gray-100 text-gray-500'] : ['…', 'bg-gray-100 text-gray-400']
                 return (
                   <button key={p.start} role="option" aria-selected={i === periodIdx} onClick={() => { setPickerOpen(false); switchPeriod(i) }}
