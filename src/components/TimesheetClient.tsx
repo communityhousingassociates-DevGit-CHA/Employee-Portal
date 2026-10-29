@@ -650,6 +650,7 @@ export default function TimesheetClient({
           {onBehalf ? timesheetOnBehalfAttestation(employeeName) : TIMESHEET_ATTESTATION}
         </p>
 
+        {!signed && <div role="alert" className="text-[13px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-2.5 mb-3"><strong>Electronic signature required.</strong> Click the box below to sign before this timesheet can be submitted. The Submit button stays disabled until you do.</div>}
         <div
           onClick={() => setSigned(true)}
           className={`rounded-xl border-2 border-dashed px-6 py-4 cursor-pointer transition-colors text-center mb-4 ${
@@ -661,7 +662,7 @@ export default function TimesheetClient({
               <p className="text-[11px] text-gray-400">{onBehalf ? `${onBehalf.actorName} on behalf of ${employeeName}` : employeeName} · Employee ID {employeeIdLabel} · Signed {fmtDate(todayET())}</p>
             </div>
           ) : (
-            <p className="text-gray-300 text-[13px]">Click here to sign</p>
+            <p className="text-gray-400 text-[13px]">Click here to sign (required)</p>
           )}
         </div>
 
@@ -680,7 +681,7 @@ export default function TimesheetClient({
             className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2.5 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
             {submitting ? 'Submitting…' : onBehalf ? `Submit on behalf of ${employeeName.split(' ')[0]}` : 'Submit & Sign'}
           </button>
-          {!signed && <span className="text-[12px] text-gray-400">Sign above to enable.</span>}
+          {!signed && <span className="text-[12px] text-amber-700 font-semibold">Sign above to enable submitting.</span>}
           {signed && behalfIssue && <span className="text-[12px] text-red-600">{behalfIssue}</span>}
         </div>
         {error && <p className="mt-3 text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}

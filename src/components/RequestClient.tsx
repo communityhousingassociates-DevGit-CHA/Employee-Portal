@@ -453,6 +453,7 @@ export default function RequestClient({
           <div className="bg-white rounded-xl border border-[#d4eef2] p-5">
             <p className="text-[11px] uppercase tracking-widest text-gray-400 font-semibold mb-1">{onBehalf ? `Administrator Signature (on behalf of ${employeeName})` : 'Employee Signature'}</p>
             <p className="text-[12px] text-gray-400 mb-4">{onBehalf ? onBehalfAttestation(employeeName) : 'By signing, you confirm this request is accurate and that leave requires approval before it is taken.'}</p>
+            {!signed && <div role="alert" className="text-[13px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-4 py-2.5 mb-3"><strong>Electronic signature required.</strong> Click the box below to sign before this request can be submitted. The Submit button stays disabled until you do, and changing any day clears your signature.</div>}
             <div onClick={() => setSigned(true)}
               className={`rounded-xl border-2 border-dashed px-6 py-4 text-center cursor-pointer transition-all ${signed ? 'border-emerald-400 bg-emerald-50' : 'border-[#d4eef2] hover:border-[#02ACC0] hover:bg-[#f8fcfd]'}`}>
               {signed ? (
@@ -460,7 +461,7 @@ export default function RequestClient({
                   <p className="font-[cursive] text-[22px] text-[#0b2b35]">{onBehalf ? onBehalf.actorName : employeeName}</p>
                   <p className="text-[11px] text-gray-400 mt-1">{onBehalf ? `${onBehalf.actorName} on behalf of ${employeeName} · Employee ID ${employeeIdLabel}` : `${employeeName} · Employee ID ${employeeIdLabel}`} · {fmtDate(todayET())}</p>
                 </div>
-              ) : <p className="text-gray-300 text-[13px]">Click here to sign</p>}
+              ) : <p className="text-gray-400 text-[13px]">Click here to sign (required)</p>}
             </div>
           </div>
 
