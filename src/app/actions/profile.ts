@@ -1,5 +1,6 @@
 'use server'
 
+import { safeUploadExt, attachmentPathProblem } from '@/lib/upload-paths'
 import { UserError } from '@/lib/user-error'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -26,6 +27,13 @@ export async function updateProfile(data: {
 
 export async function updateAvatarUrl(avatarUrl: string | null) {
   const userId = await getAuthUserId()
+  // Only this project's own avatar storage, under the caller's own file name — never an arbitrary or someone else's URL.
+  if (avatarUrl) {
+    const host = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').host } catch { return '' } })()
+    let u: URL | null = null
+    try { u = new URL(avatarUrl) } catch { /* handled below */ }
+    if (!u || !host || u.protocol !== 'https:' || u.host !== host || !u.pathname.includes(`/avatars/${userId}.`)) throw new UserError('That photo link is not valid.')
+  }
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ avatar_url: avatarUrl }).eq('user_id', userId)
   if (error) throw new Error(error.message)
@@ -34,7 +42,8 @@ export async function updateAvatarUrl(avatarUrl: string | null) {
 export async function getSignedUploadUrl(fileName: string) {
   const userId = await getAuthUserId()
   const admin = createAdminClient()
-  const ext = fileName.split('.').pop()
+  const ext = safeUploadExt(fileName)
+  if (!ext || !['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif'].includes(ext)) throw new UserError('Choose a PNG, JPG, GIF or WebP image.')
   const path = `${userId}.${ext}`
   const { data, error } = await admin.storage.from('avatars').createSignedUploadUrl(path)
   if (error) throw new Error(error.message)

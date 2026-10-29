@@ -1,5 +1,6 @@
 'use server'
 
+import { safeUploadExt, attachmentPathProblem } from '@/lib/upload-paths'
 import { UserError } from '@/lib/user-error'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
@@ -177,6 +178,8 @@ export async function createLeaveRequest(data: {
   }
 
   const now = new Date().toISOString()
+  const attachmentProblem = attachmentPathProblem(data.attachment_path, employee.id)
+  if (attachmentProblem) throw new UserError(attachmentProblem)
   const { data: created, error } = await admin.from('leave_requests').insert({
     employee_id: employee.id,
     leave_type: data.leave_type,
@@ -297,7 +300,8 @@ export async function getLeaveAttachmentUploadUrl(fileName: string) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
-  const ext = fileName.split('.').pop()
+  const ext = safeUploadExt(fileName)
+  if (!ext) throw new UserError('That file type is not allowed. Upload a PDF, image, or office document.')
   const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
   const { data, error } = await admin.storage.from('leave-attachments').createSignedUploadUrl(path)
   if (error) throw new Error(error.message)

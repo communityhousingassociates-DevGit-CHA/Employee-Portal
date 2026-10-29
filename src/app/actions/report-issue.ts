@@ -1,5 +1,6 @@
 'use server'
 
+import { safeUploadExt, attachmentPathProblem } from '@/lib/upload-paths'
 import { UserError } from '@/lib/user-error'
 import { Resend } from 'resend'
 import { revalidatePath } from 'next/cache'
@@ -30,6 +31,8 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   if (!description) throw new UserError('Please describe the issue before submitting.')
 
   const admin = createAdminClient()
+  const attachmentProblem = attachmentPathProblem(data.attachment_path, employee.id)
+  if (attachmentProblem) throw new UserError(attachmentProblem)
   const { error: insertError } = await admin.from('issue_reports').insert({
     employee_id: employee.id,
     category: data.category,
@@ -93,7 +96,8 @@ export async function getIssueAttachmentUploadUrl(fileName: string) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new UserError('Forbidden')
   const admin = createAdminClient()
-  const ext = fileName.split('.').pop()
+  const ext = safeUploadExt(fileName)
+  if (!ext) throw new UserError('That file type is not allowed. Upload a PDF, image, or office document.')
   const path = `${employee.id}/${crypto.randomUUID()}.${ext}`
   const { data, error } = await admin.storage.from('issue-attachments').createSignedUploadUrl(path)
   if (error) throw new Error(error.message)

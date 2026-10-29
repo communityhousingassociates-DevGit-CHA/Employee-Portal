@@ -1,5 +1,6 @@
 'use server'
 
+import { safeUploadExt, attachmentPathProblem } from '@/lib/upload-paths'
 import { UserError } from '@/lib/user-error'
 import { denyReasonProblem } from '@/lib/deny-reason'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -88,6 +89,8 @@ export async function submitExpense(data: {
     if (receiptRequired(data.category, amount) && !data.receipt_path) throw new UserError(`A receipt is required for expenses over $${RECEIPT_REQUIRED_OVER}.`)
   }
 
+  const receiptProblem = attachmentPathProblem(data.receipt_path, employee.id)
+  if (receiptProblem) throw new UserError(receiptProblem)
   const { data: created, error } = await admin.from('expenses').insert({
     employee_id: employee.id,
     category: data.category,
@@ -129,7 +132,8 @@ export async function submitExpense(data: {
 export async function getReceiptUploadUrl(fileName: string, forEmployeeId?: string) {
   const subjectId = await resolveSubjectId(forEmployeeId)
   const admin = createAdminClient()
-  const ext = fileName.split('.').pop()
+  const ext = safeUploadExt(fileName)
+  if (!ext) throw new UserError('That file type is not allowed. Upload a PDF, image, or office document.')
   const path = `${subjectId}/${crypto.randomUUID()}.${ext}`
   const { data, error } = await admin.storage.from('receipts').createSignedUploadUrl(path)
   if (error) throw new Error(error.message)

@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { runAccruals } from '@/lib/accruals'
@@ -25,8 +26,10 @@ import { sendPaydayTimesheetAlerts } from '@/lib/payday-timesheet-alerts'
 //  6. Payday timesheet alerts — on a pay date, emails each person with an unsubmitted timesheet for the period being paid and sends Carrileen (cc Nico) a summary.
 //  3. Approver digest — a weekday reminder of anything that's been waiting on approval longer than REMINDER_AFTER_DAYS.
 export async function GET(request: NextRequest) {
-  const auth = request.headers.get('authorization')
-  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  const auth = request.headers.get('authorization') ?? ''
+  const expected = `Bearer ${process.env.CRON_SECRET ?? ''}`
+  const same = auth.length === expected.length && timingSafeEqual(Buffer.from(auth), Buffer.from(expected))
+  if (!process.env.CRON_SECRET || !same) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
