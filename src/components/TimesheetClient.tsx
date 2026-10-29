@@ -489,6 +489,8 @@ export default function TimesheetClient({
                 className="text-[13px] text-[#0b2b35] font-semibold bg-white border border-[#d4eef2] rounded-lg px-2 py-1 focus:outline-none focus:border-[#02ACC0] disabled:opacity-50">
                 <option value={selfId}>My timesheet</option>
                 {people.filter(p => p.id !== selfId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {/* A test account opened by link isn't in the roster; keep the picker showing who is on screen. */}
+                {employeeId !== selfId && !people.some(p => p.id === employeeId) && <option value={employeeId}>{employeeName}</option>}
               </select>
             </div>
           )}
