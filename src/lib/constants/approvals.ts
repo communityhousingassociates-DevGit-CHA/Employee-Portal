@@ -81,3 +81,8 @@ export const CLOSE_PERIOD_ROLES: Role[] = APPROVER_ROLES
 
 // Approvers get a daily digest (weekdays) of anything that has been waiting on them longer than this many days.
 export const REMINDER_AFTER_DAYS = 2
+
+// Dead-man check on the daily job (see lib/job-watchdog.ts): who is emailed, and how long without a run counts as missed.
+// 26h = one missed day plus slack for the cron's start time drifting a little.
+export const WATCHDOG_ALERT_TO: string[] = ['johnnyrio22@gmail.com']
+export const WATCHDOG_MAX_AGE_HOURS = 26

@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "probe:anon": "node scripts/anon-probe.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
