@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { DEMO_MODE_ENABLED } from '@/lib/demo-mode'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ACTIVITY_COOKIE, IDLE_LOGOUT_MS } from '@/lib/constants/session'
+import { sharedRateLimited } from '@/lib/rate-limit'
 import { checkGeofence, regionsFor, resolveGeofenceSettings } from '@/lib/geofence'
 
 const SUPABASE_HOST = (() => {
@@ -60,15 +61,16 @@ function securityHeaders(response: NextResponse, csp: string) {
  * those requests never reach this middleware; Supabase's own Auth rate
  * limits are what protect that path.
  *
- * This in-memory bucket isn't distributed — under Fluid Compute a client
- * can land on a different warm instance and get a fresh bucket, so it's not
- * a hard guarantee. It's still worth having as a first line of defense
- * against basic scripted abuse at this app's traffic volume. If that stops
- * being true, replace this with a shared store (e.g. Upstash Redis via the
- * Vercel Marketplace).
+ * Two layers. The in-memory bucket below is per instance — under Fluid
+ * Compute a client can land on a different warm instance and get a fresh
+ * bucket — so it only catches fast bursts. Behind it, sharedRateLimited()
+ * counts in Postgres (migration 046) so every instance sees one total per IP.
+ * The shared cap is deliberately much higher than the per-instance one: staff
+ * share an office IP, and many people on one address must not trip it.
  */
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX_REQUESTS = 60
+const SHARED_RATE_LIMIT_MAX_REQUESTS = 240
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>()
 
 function isRateLimited(key: string): boolean {
@@ -88,7 +90,7 @@ export async function middleware(request: NextRequest) {
 
   if (request.method === 'POST') {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
-    if (isRateLimited(ip)) {
+    if (isRateLimited(ip) || await sharedRateLimited(createAdminClient(), `ip:${ip}`, SHARED_RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_MS / 1000)) {
       return securityHeaders(
         NextResponse.json({ error: 'Too many requests — please slow down and try again shortly.' }, { status: 429 }),
         csp
