@@ -25,6 +25,8 @@ export interface Employee {
   employee_type: EmployeeType
   staff_category: StaffCategory
   is_super_admin: boolean
+  /** Salary amounts, other people's timesheets and submit-on-behalf. Set only by a super admin (setPayrollAccess); see lib/constants/salary-access.ts. */
+  has_payroll_access?: boolean
   department: string | null
   job_title: string | null
   hire_date: string

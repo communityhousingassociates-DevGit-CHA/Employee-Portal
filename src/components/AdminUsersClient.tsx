@@ -4,7 +4,7 @@ import { errMsg } from '@/lib/user-error'
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { todayET } from '@/lib/pay-periods'
 import { useRouter } from 'next/navigation'
-import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, setGeofenceOverride, type BulkEditableField } from '@/app/actions/employees'
+import { addEmployee, editEmployee, archiveEmployee, restoreEmployee, deleteEmployee, sendPasswordReset, setTemporaryPassword, sendInvites, setEmployeesActive, deleteEmployees, bulkEditEmployees, setEmployeeTestAccount, setPayrollAccess, setGeofenceOverride, type BulkEditableField } from '@/app/actions/employees'
 import { formatEmployeeId } from '@/lib/constants/employee-id'
 import { fmtDate } from '@/lib/format-date'
 
@@ -37,6 +37,7 @@ type Employee = {
   login_geofence_regions: string[] | null
   geofence_override_until: string | null
   is_super_admin: boolean
+  has_payroll_access?: boolean
   pto_uncapped: boolean
   is_exempt: boolean
   is_director: boolean
@@ -164,6 +165,17 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
       showToast(makingTest ? `${e.name} marked as a test account` : `${e.name} restored to ${e.is_active ? 'active' : 'inactive'}`)
     } catch (err) {
       showToast(errMsg(err, 'Failed to update test-account flag'))
+    }
+  }
+
+  async function handleTogglePayroll(e: Employee) {
+    const enabling = !e.has_payroll_access
+    try {
+      await setPayrollAccess(e.id, enabling)
+      setEmployees(es => es.map(x => x.id === e.id ? { ...x, has_payroll_access: enabling } : x))
+      showToast(enabling ? `${e.name} now has payroll access` : `Payroll access removed for ${e.name}`)
+    } catch (err) {
+      showToast(errMsg(err, 'Failed to update payroll access'))
     }
   }
 
@@ -507,6 +519,7 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
                   <span className="text-gray-600 capitalize block">{e.role.replace('_', ' ')}</span>
                   <span className="flex flex-wrap gap-1 mt-0.5">
                     {e.is_super_admin && <span title="Super administrator" className="text-[10px] font-bold bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded-full">Super</span>}
+                    {e.has_payroll_access && <span title="Payroll access: salaries, all timesheets, submit on behalf" className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">Payroll</span>}
                     {e.is_director && <span title="Director" className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">Director</span>}
                     {!e.is_exempt && <span title="Non-exempt" className="text-[10px] font-bold bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">Non-exempt</span>}
                     {e.pto_uncapped && <span title="PTO Uncapped exception" className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">∞ PTO</span>}
@@ -579,6 +592,9 @@ export default function AdminUsersClient({ initialEmployees, grants, isSuperAdmi
               travelOn
                 ? <button role="menuitem" className={`${item} text-sky-700`} disabled={busy} onClick={() => { setMenu(null); handleGeofence(e.id, 0) }}>Clear travel access</button>
                 : <button role="menuitem" className={item} disabled={busy} onClick={() => { setMenu(null); handleGeofence(e.id, 7) }} title="Let this person sign in from outside the allowed states for 7 days">Travel access (7 days)</button>
+            )}
+            {isSuperAdmin && e.id !== currentEmployeeId && (
+              <button role="menuitem" className={`${item} text-emerald-700`} onClick={() => { setMenu(null); handleTogglePayroll(e) }}>{e.has_payroll_access ? 'Remove payroll access' : 'Grant payroll access'}</button>
             )}
             {isSuperAdmin && e.id !== currentEmployeeId && (
               <button role="menuitem" className={`${item} text-violet-600`} onClick={() => { setMenu(null); handleToggleTest(e) }}>{e.is_test_account ? 'Unmark as test account' : 'Mark as test account'}</button>

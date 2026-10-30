@@ -21,7 +21,7 @@ const asActor = (e: { id: string; role: string; is_super_admin?: boolean | null 
 /** The accounts being acted on, as the role rules need to see them. Refuses if any is missing. */
 async function loadTargets(admin: AdminDb, ids: string[]): Promise<Target[]> {
   if (ids.length === 0) return []
-  const { data, error } = await admin.from('employees').select('id, role, email, is_super_admin').in('id', ids)
+  const { data, error } = await admin.from('employees').select('id, role, email, is_super_admin, has_payroll_access').in('id', ids)
   if (error) throw new Error(error.message)
   if ((data ?? []).length !== new Set(ids).size) throw new UserError('One of those accounts no longer exists.')
   return (data ?? []) as Target[]
@@ -260,7 +260,7 @@ export async function getEmployees() {
   const policy = await loadPolicy(admin)
   let query = admin
     .from('employees')
-    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, pto_uncapped, is_exempt, is_director, year_end_holiday, login_geofence_regions, geofence_override_until, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
+    .select('id, employee_number, first_name, last_name, middle_initial, name, email, role, employee_type, staff_category, department, job_title, hire_date, end_date, avatar_url, is_active, is_test_account, is_super_admin, has_payroll_access, pto_uncapped, is_exempt, is_director, year_end_holiday, login_geofence_regions, geofence_override_until, address_line1, address_line2, city, state, postal_code, user_id, grant_id, grant:grants(name), login_count')
     .order('name')
   // Test accounts (workflow testing) are only visible to the super admin who uses them — invisible to every other admin, including other 'admin'-role staff.
   if (!actor.is_super_admin) query = query.eq('is_test_account', false)
@@ -322,6 +322,25 @@ export async function setEmployeeTestAccount(id: string, isTest: boolean) {
   const admin = createAdminClient()
   const { error } = await admin.from('employees').update({ is_test_account: isTest }).eq('id', id)
   if (error) throw new Error(error.message)
+  revalidatePath('/admin/users')
+}
+
+/**
+ * Super admin only — grants or removes payroll access (salary amounts, other people's timesheets, submit-on-behalf) for one employee.
+ * Every change is recorded in payroll_access_audit. A super admin cannot remove their own access this way, so the system always
+ * keeps at least one person who can.
+ */
+export async function setPayrollAccess(id: string, enabled: boolean) {
+  const me = await requireSuperAdmin()
+  if (id === me.id) throw new UserError('You cannot change your own payroll access.')
+  const admin = createAdminClient()
+  const { data: target } = await admin.from('employees').select('id, has_payroll_access').eq('id', id).single()
+  if (!target) throw new UserError('That account no longer exists.')
+  if ((target.has_payroll_access === true) === enabled) return
+  const { error } = await admin.from('employees').update({ has_payroll_access: enabled }).eq('id', id)
+  if (error) throw new Error(error.message)
+  const { error: auditError } = await admin.from('payroll_access_audit').insert({ employee_id: id, changed_by: me.id, enabled })
+  if (auditError) console.error('setPayrollAccess: could not record audit row', auditError.message)
   revalidatePath('/admin/users')
 }
 

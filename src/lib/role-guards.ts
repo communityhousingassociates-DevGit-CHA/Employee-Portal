@@ -11,14 +11,17 @@ export const ALL_ROLES: Role[] = ['employee', 'accounting_manager', 'ceo', 'admi
 const PRIVILEGED_ROLES: Role[] = ['ceo', 'admin']
 
 export type Actor = { id: string; role: Role; is_super_admin?: boolean | null }
-export type Target = { id: string; role: Role | string; email?: string | null; is_super_admin?: boolean | null }
+export type Target = { id: string; role: Role | string; email?: string | null; is_super_admin?: boolean | null; has_payroll_access?: boolean | null }
 
 const isSuper = (a: { is_super_admin?: boolean | null }) => a.is_super_admin === true
 export const hasPayrollEmail = (email?: string | null) => !!email && PAYROLL_ACCESS_EMAILS.includes(email.toLowerCase())
+/** Does this account carry payroll access? The flag decides; the old email list applies only when the column is not there yet. */
+export const carriesPayrollAccess = (t: { email?: string | null; has_payroll_access?: boolean | null }) =>
+  t.has_payroll_access === undefined || t.has_payroll_access === null ? hasPayrollEmail(t.email) : t.has_payroll_access === true
 
 /** A target whose account carries standing power: CEO/admin role, or payroll access. Only the CEO (or a super admin) may manage them. */
 function isPrivilegedTarget(t: Target): boolean {
-  return PRIVILEGED_ROLES.includes(t.role as Role) || hasPayrollEmail(t.email)
+  return PRIVILEGED_ROLES.includes(t.role as Role) || carriesPayrollAccess(t)
 }
 
 /** May `actor` edit, archive, delete, reset the password of, or otherwise manage `target`'s account? */
@@ -42,12 +45,14 @@ export function roleChangeProblem(actor: Actor, target: Target, newRole: string)
   return null
 }
 
-/** Returns why `actor` may not set `target`'s email to `newEmail`, or null. Payroll access follows email, so those are guarded. */
+/** Returns why `actor` may not set `target`'s email to `newEmail`, or null. Changing the email of a payroll-access account could redirect its password reset, so only a super admin may. */
 export function emailChangeProblem(actor: Actor, target: Target, newEmail: string): string | null {
   const current = (target.email ?? '').toLowerCase()
   const next = newEmail.trim().toLowerCase()
   if (current === next) return null
   if (isSuper(actor)) return null
-  if (hasPayrollEmail(current) || hasPayrollEmail(next)) return 'Only a super admin can change an email that carries payroll access.'
+  if (carriesPayrollAccess(target)) return 'Only a super admin can change an email that carries payroll access.'
+  // Before the payroll flag exists, access followed the address itself, so moving a listed address onto another account would hand it over.
+  if ((target.has_payroll_access === undefined || target.has_payroll_access === null) && hasPayrollEmail(next)) return 'Only a super admin can change an email that carries payroll access.'
   return null
 }

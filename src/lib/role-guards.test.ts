@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canManageAccount, roleChangeProblem, emailChangeProblem, hasPayrollEmail } from './role-guards'
+import { canManageAccount, roleChangeProblem, emailChangeProblem, hasPayrollEmail, carriesPayrollAccess } from './role-guards'
 
 const superAdmin = { id: 's', role: 'admin' as const, is_super_admin: true }
 const ceo = { id: 'c', role: 'ceo' as const, is_super_admin: false }
@@ -76,5 +76,13 @@ describe('emailChangeProblem', () => {
   it('matches payroll emails case-insensitively', () => {
     expect(hasPayrollEmail('NSANDERS@communityhousingmd.org')).toBe(true)
     expect(hasPayrollEmail(null)).toBe(false)
+  })
+  it('follows the payroll flag over the old email list once the column exists', () => {
+    expect(carriesPayrollAccess({ email: 'cedwards@communityhousingmd.org', has_payroll_access: false })).toBe(false)
+    expect(carriesPayrollAccess({ email: 'new.person@example.org', has_payroll_access: true })).toBe(true)
+    expect(carriesPayrollAccess({ email: 'cedwards@communityhousingmd.org' })).toBe(true)
+  })
+  it('protects a flagged account from an admin email change, whatever its address', () => {
+    expect(emailChangeProblem(admin, { id: 'p', role: 'employee', email: 'new.person@example.org', has_payroll_access: true }, 'other@example.org')).not.toBeNull()
   })
 })
