@@ -66,6 +66,16 @@ export default function Sidebar({ role = 'employee', openIssueCount = 0, pending
         ))}
       </div>
 
+      {/* Doorstep is a separate app (own subdomain); this plain link hits a route that signs the employee in there. */}
+      <div className="px-3 pb-1">
+        <p className="text-[10px] uppercase tracking-widest text-gray-400 px-2 mb-1.5">Other Apps</p>
+        <a href="/api/doorstep/launch" className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium mb-0.5 text-gray-700 hover:bg-[#f0f7f8] transition-colors">
+          <span className="w-5 text-center">🚪</span>
+          Doorstep
+          <span className="ml-auto text-[9px] font-bold bg-[#e0f5f8] text-[#028a9e] px-1.5 py-0.5 rounded-full">Demo</span>
+        </a>
+      </div>
+
       {/* Coming soon placeholders */}
       <div className="px-3 pb-1">
         {comingSoonItems.map(item => (
