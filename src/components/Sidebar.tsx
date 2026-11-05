@@ -66,8 +66,8 @@ export default function Sidebar({ role = 'employee', openIssueCount = 0, pending
         ))}
       </div>
 
-      {/* Doorstep is a separate app (own subdomain); this plain link hits a route that signs the employee in there. */}
-      <div className="px-3 pb-1">
+      {/* Desktop has Doorstep as a header tab (AppSwitcher); this link is only the phone fallback, where the header has no room. */}
+      <div className="px-3 pb-1 sm:hidden">
         <p className="text-[10px] uppercase tracking-widest text-gray-400 px-2 mb-1.5">Other Apps</p>
         <a href="/api/doorstep/launch" className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium mb-0.5 text-gray-700 hover:bg-[#f0f7f8] transition-colors">
           <span className="w-5 text-center">🚪</span>
