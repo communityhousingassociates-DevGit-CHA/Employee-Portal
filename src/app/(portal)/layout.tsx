@@ -12,6 +12,7 @@ import Link from 'next/link'
 import IdleLogout from '@/components/IdleLogout'
 import ThemeToggle from '@/components/ThemeToggle'
 import AppSwitcher from '@/components/AppSwitcher'
+import BetaFeedbackButton from '@/components/BetaFeedbackButton'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   let displayName = 'User'
@@ -65,6 +66,7 @@ export default async function PortalLayout({ children }: { children: React.React
       sidebar={<Sidebar role={role} openIssueCount={openIssueCount} pendingApprovalCount={pendingApprovalCount} />}
     >
       <IdleLogout />
+      <BetaFeedbackButton />
       {children}
     </ResponsiveShell>
   )

@@ -23,12 +23,16 @@ const CATEGORY_LABELS: Record<IssueCategory, string> = {
 const REPORT_TO = 'communityhousingassociates@gmail.com'
 const REPORT_CC = 'support@globalist.pro'
 
-export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string }) {
+/** 'beta_feedback' comes from the floating Give feedback button; it is stored as a normal ticket (category 'other') labelled with its source system. */
+export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string; beta_feedback_kind?: string }) {
   const employee = await getCurrentEmployee()
   if (!employee) throw new UserError('Forbidden')
 
-  const description = data.description.trim()
-  if (!description) throw new UserError('Please describe the issue before submitting.')
+  const betaKind = data.beta_feedback_kind?.replace(/[^\w \-]/g, '').slice(0, 40)
+  const typed = data.description.trim()
+  if (!typed) throw new UserError('Please describe the issue before submitting.')
+  if (typed.length > 4000) throw new UserError('That is too long. Please shorten it to a few paragraphs.')
+  const description = betaKind ? `[Beta feedback · Employee Portal · ${betaKind}] ${typed}` : typed
 
   const admin = createAdminClient()
   const attachmentProblem = attachmentPathProblem(data.attachment_path, employee.id)
@@ -46,7 +50,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   // what happens below. Email is a best-effort notification on top of that,
   // so a delivery hiccup here shouldn't make the report look like it failed.
   try {
-    const categoryLabel = CATEGORY_LABELS[data.category] ?? 'Something else'
+    const categoryLabel = betaKind ? `Beta feedback: ${betaKind}` : (CATEGORY_LABELS[data.category] ?? 'Something else')
     const submittedDate = new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', day: '2-digit', month: '2-digit', year: 'numeric' }).replaceAll('/', '-')
     const submittedTime = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })
     const submittedAt = `${submittedDate}, ${submittedTime}`
@@ -58,17 +62,17 @@ export async function reportIssue(data: { category: IssueCategory; description: 
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY!)
-    const reportSubject = `[CHA Portal] ${categoryLabel} — ${employee.name}`
+    const reportSubject = `[${betaKind ? 'CHA Portal beta feedback' : 'CHA Portal'}] ${categoryLabel} — ${employee.name}`
     const sent = await resend.emails.send({
       from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
       to: REPORT_TO,
-      cc: REPORT_CC,
+      cc: betaKind ? [REPORT_CC, 'rio@globalist.pro'] : REPORT_CC,
       replyTo: employee.email,
       subject: reportSubject,
       html: `
         <div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto">
           <div style="background:#0b2b35;padding:16px 20px;border-radius:12px 12px 0 0">
-            <span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal — Issue Report</span>
+            <span style="color:#fff;font-size:15px;font-weight:700">CHA Employee Portal — ${betaKind ? 'Beta Feedback' : 'Issue Report'}</span>
           </div>
           <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px">
             <table style="width:100%;font-size:13px;color:#0b2b35;margin-bottom:16px">
@@ -85,7 +89,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
         </div>
       `,
     })
-    const recipients = [REPORT_TO, REPORT_CC]
+    const recipients = betaKind ? [REPORT_TO, REPORT_CC, 'rio@globalist.pro'] : [REPORT_TO, REPORT_CC]
     await logEmails(admin, recipients.map(r => ({ source: 'issue_report' as const, recipient_email: r, subject: reportSubject, status: sent.error ? 'failed' as const : 'sent' as const, resend_id: sent.data?.id ?? null, error: sent.error?.message ?? null })))
   } catch (e) {
     console.error('reportIssue: email notification failed (ticket still logged)', e)
