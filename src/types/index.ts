@@ -118,6 +118,7 @@ export interface Expense {
 
 export interface IssueReport {
   id: string
+  ticket_no: number
   employee_id: string
   category: IssueCategory
   description: string

@@ -20,20 +20,20 @@ export default function BetaFeedbackButton() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [sent, setSent] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
   const hint = KINDS.find(k => k.id === kind)!.hint
 
   async function send() {
     setBusy(true); setError('')
     try {
-      await reportIssue({ category: 'other', description: text, page_url: pathname, beta_feedback_kind: kind })
-      setSent(true); setText('')
+      const r = await reportIssue({ category: 'other', description: text, page_url: pathname, beta_feedback_kind: kind })
+      setSent(r?.ticket ?? 'sent'); setText('')
     } catch (e: unknown) {
       setError(errMsg(e, 'Something went wrong'))
     } finally { setBusy(false) }
   }
 
-  function close() { setOpen(false); setSent(false); setError('') }
+  function close() { setOpen(false); setSent(null); setError('') }
 
   return (
     <>
@@ -47,6 +47,7 @@ export default function BetaFeedbackButton() {
             {sent ? (
               <>
                 <p className="text-[14px] font-semibold">Thank you. Your feedback was sent and will be read.</p>
+                {sent !== 'sent' && <p className="mt-1 text-[13px]">Your tracking number is <strong>{sent}</strong>.</p>}
                 <button onClick={close} className="mt-4 rounded-lg bg-[#02ACC0] px-4 py-2 text-[13px] font-semibold text-white">Close</button>
               </>
             ) : (

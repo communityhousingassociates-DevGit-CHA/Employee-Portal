@@ -25,7 +25,7 @@ export default function ReportIssueClient({ employeeName, employeeEmail }: { emp
   const fileRef = useRef<HTMLInputElement>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [sent, setSent] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
 
   async function handleSubmit() {
     setError('')
@@ -38,8 +38,8 @@ export default function ReportIssueClient({ employeeName, employeeEmail }: { emp
         if (!res.ok) throw new Error('Screenshot upload failed — you can still submit without it')
         attachment_path = path
       }
-      await reportIssue({ category, description, page_url: pathname, attachment_path })
-      setSent(true)
+      const r = await reportIssue({ category, description, page_url: pathname, attachment_path })
+      setSent(r?.ticket ?? 'sent')
     } catch (e: unknown) {
       setError(errMsg(e, 'Something went wrong'))
     } finally {
@@ -52,10 +52,10 @@ export default function ReportIssueClient({ employeeName, employeeEmail }: { emp
       <div className="max-w-lg">
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-[13px] rounded-lg px-4 py-3">
           <span className="mr-1.5">✅</span>
-          Report sent and logged — your Accounting Manager and the admin team have been notified and will follow up.
+          Report sent and logged — your Accounting Manager and the admin team have been notified and will follow up.{sent !== 'sent' && <> Your tracking number is <strong>{sent}</strong>.</>}
         </div>
         <button
-          onClick={() => { setSent(false); setDescription(''); setCategory('other'); setScreenshot(null) }}
+          onClick={() => { setSent(null); setDescription(''); setCategory('other'); setScreenshot(null) }}
           className="mt-4 text-[13px] font-semibold text-[#02ACC0] hover:underline"
         >
           Report another issue

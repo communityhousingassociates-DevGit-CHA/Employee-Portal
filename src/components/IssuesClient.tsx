@@ -132,7 +132,7 @@ export default function IssuesClient({ initialIssues }: { initialIssues: IssueRo
                       {emp?.job_title && <div className="text-[11px] text-gray-400 font-normal">{emp.job_title}</div>}
                     </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{CATEGORY_LABELS[issue.category] ?? issue.category}</td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[360px]">{issue.description}</td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[360px]"><span className="mr-1.5 font-mono text-[11px] font-bold text-[#0b2b35]">PORTAL-{String(issue.ticket_no).padStart(4, '0')}</span>{issue.description}</td>
                     <td className="px-4 py-3">
                       {issue.attachment_url ? (
                         <button onClick={() => handleViewAttachment(issue.id)} className="text-[12px] font-semibold text-[#02ACC0] hover:underline">View</button>

@@ -37,14 +37,15 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   const admin = createAdminClient()
   const attachmentProblem = attachmentPathProblem(data.attachment_path, employee.id)
   if (attachmentProblem) throw new UserError(attachmentProblem)
-  const { error: insertError } = await admin.from('issue_reports').insert({
+  const { data: inserted, error: insertError } = await admin.from('issue_reports').insert({
     employee_id: employee.id,
     category: data.category,
     description,
     page_url: data.page_url || null,
     attachment_url: data.attachment_path || null,
-  })
+  }).select('ticket_no').single()
   if (insertError) throw new Error(insertError.message)
+  const ticket = `PORTAL-${String(inserted?.ticket_no ?? 0).padStart(4, '0')}`
 
   // The DB row is the durable record — admins see it in-app regardless of
   // what happens below. Email is a best-effort notification on top of that,
@@ -62,7 +63,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
     }
 
     const resend = new Resend(process.env.RESEND_API_KEY!)
-    const reportSubject = `[${betaKind ? 'CHA Portal beta feedback' : 'CHA Portal'}] ${categoryLabel} — ${employee.name}`
+    const reportSubject = `[${betaKind ? 'CHA Portal beta feedback' : 'CHA Portal'}] ${ticket}: ${categoryLabel} — ${employee.name}`
     const sent = await resend.emails.send({
       from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
       to: REPORT_TO,
@@ -76,7 +77,8 @@ export async function reportIssue(data: { category: IssueCategory; description: 
           </div>
           <div style="border:1px solid #d4eef2;border-top:none;border-radius:0 0 12px 12px;padding:20px">
             <table style="width:100%;font-size:13px;color:#0b2b35;margin-bottom:16px">
-              <tr><td style="padding:3px 0;color:#6b7280;width:110px">Reported by</td><td style="padding:3px 0;font-weight:600">${employee.name} (${employee.email})</td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280;width:110px">Ticket</td><td style="padding:3px 0;font-weight:600">${ticket}</td></tr>
+              <tr><td style="padding:3px 0;color:#6b7280">Reported by</td><td style="padding:3px 0;font-weight:600">${employee.name} (${employee.email})</td></tr>
               <tr><td style="padding:3px 0;color:#6b7280">Role</td><td style="padding:3px 0">${employee.job_title || employee.role}${employee.department ? ` · ${employee.department}` : ''}</td></tr>
               <tr><td style="padding:3px 0;color:#6b7280">Category</td><td style="padding:3px 0;font-weight:600">${categoryLabel}</td></tr>
               <tr><td style="padding:3px 0;color:#6b7280">Submitted</td><td style="padding:3px 0">${submittedAt} ET</td></tr>
@@ -94,6 +96,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
   } catch (e) {
     console.error('reportIssue: email notification failed (ticket still logged)', e)
   }
+  return { ticket }
 }
 
 export async function getIssueAttachmentUploadUrl(fileName: string) {
