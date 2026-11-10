@@ -3,7 +3,7 @@
 // Same look as Doorstep's header: a bordered pill, a solid colour for the app you are in, white for the other.
 // Each app keeps its own logo colour: the Employee Portal is the logo's purple (#705490), Doorstep the green.
 export default function AppSwitcher() {
-  const base = 'rounded-md px-4 py-1 text-[13px] font-bold transition-colors'
+  const base = 'rounded-[6px] px-4 py-1 text-[13px] font-bold transition-colors'
   return (
     <nav aria-label="Apps" className="hidden sm:flex items-center gap-1 ml-1 rounded-lg border-2 border-white/70 bg-black/15 p-1">
       <span aria-current="page" className={`${base} bg-[#705490] text-white shadow`}>Employee Portal</span>

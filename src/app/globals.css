@@ -29,3 +29,6 @@ body {
   body { background: white !important; }
   @page { margin: 1.5cm; }
 }
+
+/* Headings use Manrope, the same face as communityhousingassociates.org. */
+h1, h2, h3 { font-family: 'Manrope', system-ui, sans-serif; }

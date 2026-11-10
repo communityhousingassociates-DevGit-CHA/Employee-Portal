@@ -16,6 +16,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="h-full" suppressHydrationWarning>
       <head>
         {/* Apply the saved light/dark choice before first paint so there is no flash. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
         <script dangerouslySetInnerHTML={{ __html: "try{if(localStorage.getItem('cha-theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}" }} />
       </head>
       <body className="h-full">{children}</body>

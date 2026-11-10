@@ -48,7 +48,7 @@ export default function BetaFeedbackButton() {
               <>
                 <p className="text-[14px] font-semibold">Thank you. Your feedback was sent and will be read.</p>
                 {sent !== 'sent' && <p className="mt-1 text-[13px]">Your tracking number is <strong>{sent}</strong>.</p>}
-                <button onClick={close} className="mt-4 rounded-lg bg-[#02ACC0] px-4 py-2 text-[13px] font-semibold text-white">Close</button>
+                <button onClick={close} className="mt-4 rounded-[6px] bg-[#02ACC0] px-4 py-2 text-[13px] font-semibold text-white">Close</button>
               </>
             ) : (
               <>
@@ -65,7 +65,7 @@ export default function BetaFeedbackButton() {
                 {error && <p role="alert" className="mt-2 text-[12px] text-red-600">{error}</p>}
                 <div className="mt-3 flex justify-end gap-2">
                   <button onClick={close} className="rounded-lg px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-100">Cancel</button>
-                  <button onClick={send} disabled={busy || text.trim().length < 5} className="rounded-lg bg-[#02ACC0] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">{busy ? 'Sending…' : 'Send feedback'}</button>
+                  <button onClick={send} disabled={busy || text.trim().length < 5} className="rounded-[6px] bg-[#02ACC0] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">{busy ? 'Sending…' : 'Send feedback'}</button>
                 </div>
               </>
             )}
