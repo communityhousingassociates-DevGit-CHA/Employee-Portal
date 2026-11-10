@@ -33,7 +33,7 @@ export async function loadIssueStats(admin: Admin): Promise<IssueStats> {
   const { data } = await admin.from('issue_reports')
     .select('id, ticket_no, created_at, category, status, description, page_url, fixed_at, employee:employees!issue_reports_employee_id_fkey(name)')
     .order('created_at', { ascending: false })
-  const rows = (data ?? []) as unknown as { id: string; created_at: string; category: string; status: string; description: string; page_url: string | null; fixed_at: string | null; employee: { name: string } | { name: string }[] | null }[]
+  const rows = (data ?? []) as unknown as { id: string; ticket_no: number; created_at: string; category: string; status: string; description: string; page_url: string | null; fixed_at: string | null; employee: { name: string } | { name: string }[] | null }[]
   const count = (s: string) => rows.filter(r => r.status === s).length
   const notFixed = rows.filter(r => r.status !== 'fixed')
   const fixed = rows.filter(r => r.status === 'fixed' && r.fixed_at)
