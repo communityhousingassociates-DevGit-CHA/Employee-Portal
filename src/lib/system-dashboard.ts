@@ -26,12 +26,12 @@ export type IssueStats = {
   byCategory: { category: string; count: number }[]
   byWeek: { week: string; count: number }[]
   topPages: { page: string; count: number }[]
-  recent: { id: string; created_at: string; category: string; status: string; reporter: string; description: string; page_url: string | null; fixed_at: string | null }[]
+  recent: { id: string; ticket_no: number; created_at: string; category: string; status: string; reporter: string; description: string; page_url: string | null; fixed_at: string | null }[]
 }
 
 export async function loadIssueStats(admin: Admin): Promise<IssueStats> {
   const { data } = await admin.from('issue_reports')
-    .select('id, created_at, category, status, description, page_url, fixed_at, employee:employees!issue_reports_employee_id_fkey(name)')
+    .select('id, ticket_no, created_at, category, status, description, page_url, fixed_at, employee:employees!issue_reports_employee_id_fkey(name)')
     .order('created_at', { ascending: false })
   const rows = (data ?? []) as unknown as { id: string; created_at: string; category: string; status: string; description: string; page_url: string | null; fixed_at: string | null; employee: { name: string } | { name: string }[] | null }[]
   const count = (s: string) => rows.filter(r => r.status === s).length
@@ -52,7 +52,7 @@ export async function loadIssueStats(admin: Admin): Promise<IssueStats> {
     byCategory: tally(r => r.category).map(([category, count]) => ({ category, count })),
     byWeek: [...weeks.entries()].sort().map(([week, count]) => ({ week, count })),
     topPages: tally(r => (r.page_url ? r.page_url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] || '/' : null)).slice(0, 5).map(([page, count]) => ({ page, count })),
-    recent: rows.slice(0, 15).map(r => ({ id: r.id, created_at: r.created_at, category: r.category, status: r.status, reporter: one(r.employee)?.name ?? 'Unknown', description: r.description, page_url: r.page_url, fixed_at: r.fixed_at })),
+    recent: rows.slice(0, 15).map(r => ({ id: r.id, ticket_no: r.ticket_no, created_at: r.created_at, category: r.category, status: r.status, reporter: one(r.employee)?.name ?? 'Unknown', description: r.description, page_url: r.page_url, fixed_at: r.fixed_at })),
   }
 }
 

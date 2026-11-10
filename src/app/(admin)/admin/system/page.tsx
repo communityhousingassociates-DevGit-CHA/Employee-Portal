@@ -131,9 +131,9 @@ async function Issues({ admin }: A) {
       </div>
       <div className={`${card} p-0 overflow-hidden`}>
         <div className="flex items-center justify-between px-5 py-3"><h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35]">Latest reports</h3><Link href="/issues" className="text-[12px] font-semibold text-[#02ACC0]">Open Issue Reports →</Link></div>
-        <div className="overflow-x-auto"><table className="w-full"><thead><tr><th className={th}>When</th><th className={th}>Reporter</th><th className={th}>Category</th><th className={th}>Status</th><th className={th}>Description</th></tr></thead><tbody>
-          {s.recent.length === 0 && <tr><td className={td} colSpan={5}><Empty>No issue reports.</Empty></td></tr>}
-          {s.recent.map(r => <tr key={r.id}><td className={`${td} whitespace-nowrap`}>{ts(r.created_at)}</td><td className={td}>{r.reporter}</td><td className={td}>{r.category.replace(/_/g, ' ')}</td><td className={td}>{r.status}</td><td className={td}>{r.description.slice(0, 140)}{r.description.length > 140 ? '…' : ''}</td></tr>)}
+        <div className="overflow-x-auto"><table className="w-full"><thead><tr><th className={th}>Ticket</th><th className={th}>When</th><th className={th}>Reporter</th><th className={th}>Category</th><th className={th}>Status</th><th className={th}>Description</th></tr></thead><tbody>
+          {s.recent.length === 0 && <tr><td className={td} colSpan={6}><Empty>No issue reports.</Empty></td></tr>}
+          {s.recent.map(r => <tr key={r.id}><td className={`${td} font-mono font-bold whitespace-nowrap`}>PORTAL-{String(r.ticket_no).padStart(4, '0')}</td><td className={`${td} whitespace-nowrap`}>{ts(r.created_at)}</td><td className={td}>{r.reporter}</td><td className={td}>{r.category.replace(/_/g, ' ')}</td><td className={td}>{r.status}</td><td className={td}>{r.description.slice(0, 140)}{r.description.length > 140 ? '…' : ''}</td></tr>)}
         </tbody></table></div>
       </div>
     </div>
