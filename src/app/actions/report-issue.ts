@@ -22,6 +22,7 @@ const CATEGORY_LABELS: Record<IssueCategory, string> = {
 
 const REPORT_TO = 'communityhousingassociates@gmail.com'
 const REPORT_CC = 'support@globalist.pro'
+const REPORT_CC_DEV = 'rio@globalist.pro'
 
 /** 'beta_feedback' comes from the floating Give feedback button; it is stored as a normal ticket (category 'other') labelled with its source system. */
 export async function reportIssue(data: { category: IssueCategory; description: string; page_url?: string; attachment_path?: string; beta_feedback_kind?: string }) {
@@ -67,7 +68,7 @@ export async function reportIssue(data: { category: IssueCategory; description: 
     const sent = await resend.emails.send({
       from: 'CHA Employee Portal <portal@communityhousingassociates.org>',
       to: REPORT_TO,
-      cc: betaKind ? [REPORT_CC, 'rio@globalist.pro'] : REPORT_CC,
+      cc: [REPORT_CC, REPORT_CC_DEV],
       replyTo: employee.email,
       subject: reportSubject,
       html: `
@@ -91,10 +92,14 @@ export async function reportIssue(data: { category: IssueCategory; description: 
         </div>
       `,
     })
-    const recipients = betaKind ? [REPORT_TO, REPORT_CC, 'rio@globalist.pro'] : [REPORT_TO, REPORT_CC]
+    const recipients = [REPORT_TO, REPORT_CC, REPORT_CC_DEV]
     await logEmails(admin, recipients.map(r => ({ source: 'issue_report' as const, recipient_email: r, subject: reportSubject, status: sent.error ? 'failed' as const : 'sent' as const, resend_id: sent.data?.id ?? null, error: sent.error?.message ?? null })))
   } catch (e) {
     console.error('reportIssue: email notification failed (ticket still logged)', e)
+    // Leave a trace the System dashboard can show: without this a thrown send (missing key, network) left no record at all.
+    try {
+      await logEmails(admin, [REPORT_TO, REPORT_CC, REPORT_CC_DEV].map(r => ({ source: 'issue_report' as const, recipient_email: r, subject: `[CHA Portal] ${ticket}: alert not sent`, status: 'failed' as const, resend_id: null, error: e instanceof Error ? e.message : String(e) })))
+    } catch { /* logging is best-effort */ }
   }
   return { ticket }
 }

@@ -19,7 +19,7 @@ import { closedRangeOverlapping, todayET, deductThroughDate, shiftDate } from '@
 import { denyReasonProblem } from '@/lib/deny-reason'
 import { logLeaveEvent, loadLeaveEvents } from '@/lib/leave-events'
 import { resolveActor, resolveSubjectId } from '@/lib/on-behalf'
-import { onBehalfAttestation, onBehalfReasonLabel, type OnBehalf } from '@/lib/constants/on-behalf'
+import { onBehalfAttestation, onBehalfReasonLabel, onBehalfProblem, canActOnBehalf, type OnBehalf } from '@/lib/constants/on-behalf'
 import { EMPLOYEE_ATTESTATION, APPROVER_APPROVE_ATTESTATION, APPROVER_DENY_ATTESTATION } from '@/lib/constants/leave-signature'
 import { loadProjectionContext, deductRequestFromBalance } from '@/lib/leave-deductions'
 import { getTestAccountIds } from '@/lib/test-accounts'
@@ -84,7 +84,7 @@ function balanceColumnFor(leaveType: LeaveType): 'pto_hours' | 'sick_hours' | 'p
 }
 
 /** Everything that can reject a set of leave days before anything is saved. Throws a plain-language message. */
-async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, employeeId: string, leaveType: LeaveType, days: LeaveDay[]) {
+async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, employeeId: string, leaveType: LeaveType, days: LeaveDay[], opts: { skipBackdateLimit?: boolean; excludeRequestId?: string } = {}) {
   const closedRanges = await loadClosedRanges(admin)
   const earliest = earliestLeaveDate()
   const { data: emp } = await admin.from('employees').select('hire_date').eq('id', employeeId).single()
@@ -98,7 +98,8 @@ async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, emplo
     if (day.date > latestLeaveDate()) {
       throw new UserError(`${label}: leave can be requested through ${fmtDate(latestLeaveDate())}. For later dates, contact your Accounting Manager.`)
     }
-    if (day.date < earliest) {
+    // The 14-day window exists so staff catch up daily. An administrator completing an entry on someone's behalf (a logged exception) is exempt; closed periods below still apply.
+    if (!opts.skipBackdateLimit && day.date < earliest) {
       throw new UserError(`${label}: leave can be entered up to ${LEAVE_BACKDATE_DAYS} days back (from ${fmtDate(earliest)}). For earlier dates, contact your Accounting Manager.`)
     }
     const closedHit = closedRangeOverlapping(day.date, day.date, closedRanges)
@@ -106,7 +107,7 @@ async function checkLeaveDays(admin: ReturnType<typeof createAdminClient>, emplo
       throw new UserError(`${label} is in ${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)}, which accounting has closed, so no new leave can be entered for it. Contact your Accounting Manager.`)
     }
   }
-  const overage = await dailyLeaveOverage(admin, employeeId, days)
+  const overage = await dailyLeaveOverage(admin, employeeId, days, opts.excludeRequestId)
   if (overage) throw new UserError(overage)
 }
 
@@ -150,7 +151,7 @@ export async function createLeaveRequest(data: {
     const { data: flex } = await admin.from('leave_balances').select('flex_hours').eq('employee_id', employee.id).maybeSingle()
     if (requestedHours > Number(flex?.flex_hours ?? 0)) throw new UserError('You don’t have enough flex time for this request.')
   }
-  await checkLeaveDays(admin, employee.id, data.leave_type, days)
+  await checkLeaveDays(admin, employee.id, data.leave_type, days, { skipBackdateLimit: !!onBehalf })
 
   const totalHours = Math.round(days.reduce((sum, d) => sum + d.hours, 0) * 100) / 100
   const startDate = days[0].date
@@ -262,10 +263,11 @@ export async function createLeaveRequest(data: {
  */
 export async function checkMyLeaveDays(leaveType: LeaveType, days: LeaveDay[], forEmployeeId?: string) {
   const subjectId = await resolveSubjectId(forEmployeeId)
+  const actor = await getCurrentEmployee()
   const ready = days.filter(d => d.date && Number(d.hours) > 0).map(d => ({ date: d.date, hours: Number(d.hours) }))
   if (ready.length === 0) return null
   try {
-    await checkLeaveDays(createAdminClient(), subjectId, leaveType, ready)
+    await checkLeaveDays(createAdminClient(), subjectId, leaveType, ready, { skipBackdateLimit: !!actor && subjectId !== actor.id })
     return null
   } catch (e) {
     return e instanceof Error ? e.message : 'These days can’t be requested.'
@@ -628,28 +630,166 @@ export async function denyLeaveRequest(id: string, reason: string) {
  * approved that has started stays with the approvers. Restores any deducted balance and takes the hours back off the timesheet.
  */
 export async function cancelMyLeaveRequest(id: string) {
-  const employee = await getCurrentEmployee()
-  if (!employee) throw new UserError('Forbidden')
+  return cancelLeave(id)
+}
+
+/**
+ * An administrator (Nico, Carrileen, super admin) cancelling an employee's leave request — including approved leave that has
+ * already started, which the employee can't undo themselves. Needs a reason code and notes (logged on the request's audit trail),
+ * restores any deducted balance, takes the hours off the timesheet and tells the employee. Used to correct hours: cancel, then
+ * re-enter the days with the right hours (on-behalf entries are exempt from the 14-day backdate limit). A closed pay period can
+ * only be changed by the CEO override role.
+ */
+export async function cancelLeaveOnBehalf(id: string, onBehalf: OnBehalf) {
+  return cancelLeave(id, onBehalf)
+}
+
+/**
+ * An administrator (Nico, Carrileen, super admin) correcting the hours on an existing leave request in place — e.g. an 8-hr/day
+ * sick request that should be 4 hrs/day — without cancelling it. `days` is the full corrected set of dates and hours. Needs a
+ * reason code and notes; the before/after is written to the request's audit trail. Any balance already deducted is trued up by
+ * the difference, the timesheet is re-posted with the new hours, and the employee and approvers are told. Entries are exempt
+ * from the 14-day backdate limit; a closed pay period blocks it (the CEO must reopen it first).
+ */
+export async function adjustLeaveOnBehalf(id: string, newDays: LeaveDay[], onBehalf: OnBehalf) {
+  const actor = await getCurrentEmployee()
+  if (!actor || !canActOnBehalf(actor)) throw new UserError('Forbidden')
+  const problem = onBehalfProblem(onBehalf)
+  if (problem) throw new UserError(problem)
+  const admin = createAdminClient()
+
+  const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
+  if (fetchError || !request) throw new UserError('Leave request not found')
+  if (request.employee_id === actor.id) throw new UserError('Adjust your own leave by cancelling it and entering it again.')
+  if (request.status !== 'pending' && request.status !== 'approved') throw new UserError('Only pending or approved leave can be adjusted.')
+  const { data: owner, error: ownerError } = await admin.from('employees').select('*').eq('id', request.employee_id).single()
+  if (ownerError || !owner) throw new UserError('Employee not found')
+  const employee = owner as typeof actor
+
+  const days = newDays.map(d => ({ date: d.date, hours: Math.round(Number(d.hours) * 100) / 100 })).sort((a, b) => a.date.localeCompare(b.date))
+  if (days.length === 0) throw new UserError('Keep at least one day. To remove all of it, cancel the request instead.')
+  if (new Set(days.map(d => d.date)).size !== days.length) throw new UserError('Each date can only appear once.')
+  if (days.some(d => !(d.hours > 0))) throw new UserError('Every day needs hours greater than 0. To drop a day, remove it from the request.')
+
+  const oldDays = ((await loadRequestDays(admin, [request])).get(request.id) ?? []).map(d => ({ date: d.date, hours: Number(d.hours) })).sort((a, b) => a.date.localeCompare(b.date))
+  const sameAsBefore = oldDays.length === days.length && oldDays.every((d, i) => d.date === days[i].date && d.hours === days[i].hours)
+  if (sameAsBefore) throw new UserError('Nothing has changed — adjust at least one day’s hours first.')
+
+  // A closed pay period can't be changed this way, whether the old or the new days fall in it.
+  const closedRanges = await loadClosedRanges(admin)
+  for (const d of [...oldDays, ...days]) {
+    const hit = closedRangeOverlapping(d.date, d.date, closedRanges)
+    if (hit) throw new UserError(`${fmtDate(d.date)} is in ${fmtDate(hit.start)} – ${fmtDate(hit.end)}, which accounting has closed. The CEO needs to reopen that period before this leave can be changed.`)
+  }
+  await checkLeaveDays(admin, employee.id, request.leave_type, days, { skipBackdateLimit: true, excludeRequestId: request.id })
+
+  const oldTotal = Math.round(oldDays.reduce((t, d) => t + d.hours, 0) * 100) / 100
+  const newTotal = Math.round(days.reduce((t, d) => t + d.hours, 0) * 100) / 100
+  const col = balanceColumnFor(request.leave_type)
+  const deducted = !!request.balance_deducted_at
+  let newBalance: number | null = null
+  if (deducted && col) {
+    const { data: balance, error: balError } = await admin.from('leave_balances').select('*').eq('employee_id', employee.id).maybeSingle()
+    if (balError) throw new Error(balError.message)
+    newBalance = Math.round((Number(balance?.[col] ?? 0) - (newTotal - oldTotal)) * 100) / 100
+    if (newBalance < 0) throw new UserError(`${employee.name} doesn’t have enough ${request.leave_type} balance for the extra ${Math.round((newTotal - oldTotal) * 100) / 100} hrs (available: ${Number(balance?.[col] ?? 0)} hrs).`)
+  }
+
+  // Swap the days, then the totals. If the new days can't be saved, put the old ones back.
+  const { error: delError } = await admin.from('leave_request_days').delete().eq('request_id', id)
+  if (delError) throw new Error(delError.message)
+  const { error: insError } = await admin.from('leave_request_days').insert(days.map(d => ({ request_id: id, work_date: d.date, hours: d.hours })))
+  if (insError) {
+    await admin.from('leave_request_days').insert(oldDays.map(d => ({ request_id: id, work_date: d.date, hours: d.hours })))
+    throw new Error(insError.message)
+  }
+  const { error: updError } = await admin.from('leave_requests').update({ hours: newTotal, start_date: days[0].date, end_date: days[days.length - 1].date }).eq('id', id)
+  if (updError) throw new Error(updError.message)
+
+  if (newBalance !== null && col) {
+    const { error: balUpdError } = await admin.from('leave_balances').update({ [col]: newBalance }).eq('employee_id', employee.id)
+    if (balUpdError) throw new Error(balUpdError.message)
+  }
+
+  let posting: LeavePostingSummary | null = null
+  if (request.status === 'approved') {
+    const leaveLabel = `${request.leave_type} leave (${rangeLabel(days[0].date, days[days.length - 1].date)})`
+    const removed = await removeLeaveFromTimesheets(admin, employee.id, request.leave_type, oldDays, { actorId: actor.id, leaveLabel })
+    const applied = await applyLeaveToTimesheets(admin, employee.id, request.leave_type, days, { actorId: actor.id, leaveLabel })
+    const uniq = <T extends { periodStart: string }>(a: T[], b: T[]) => [...new Map([...a, ...b].map(x => [x.periodStart, x])).values()]
+    posting = { reopened: uniq(removed.reopened, applied.reopened), held: uniq(removed.held, applied.held) }
+    await announceLeavePosting(admin, employee.id, posting, leaveLabel)
+  }
+
+  const fmtDaysList = (list: { date: string; hours: number }[]) => list.map(d => `${fmtDate(d.date)} · ${d.hours} hrs`).join('\n')
+  await logLeaveEvent(admin, {
+    requestId: id, action: 'adjusted_on_behalf', actor, reasonCode: onBehalf.reasonCode,
+    note: `Hours adjusted on the employee’s behalf: ${oldTotal} hrs → ${newTotal} hrs. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note.trim()}\nBefore:\n${fmtDaysList(oldDays)}\nAfter:\n${fmtDaysList(days)}`,
+  })
+
+  const balanceLine = newBalance !== null ? `\nYour ${request.leave_type} balance is now ${newBalance} hrs.` : ''
+  await notifyEmployee(admin, employee.id, {
+    kind: 'on_behalf',
+    title: `${actor.name} adjusted the hours on your ${request.leave_type} leave`,
+    body: `${request.leave_type}\nWas ${oldTotal} hrs, now ${newTotal} hrs:\n${fmtDaysList(days)}\nReason: ${onBehalfReasonLabel(onBehalf.reasonCode)}\nNotes: ${onBehalf.note.trim()}${balanceLine}`,
+    link: '/history',
+    cta: 'View My Requests',
+  })
+  await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
+    title: `${actor.name} adjusted ${employee.name}’s ${request.leave_type} leave`,
+    body: `${request.leave_type} · was ${oldTotal} hrs, now ${newTotal} hrs (${days.length} day${days.length === 1 ? '' : 's'}).\nException: adjusted by ${actor.name}. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note.trim()}`,
+  })
+
+  revalidatePath('/history')
+  revalidatePath('/dashboard')
+  revalidatePath('/timesheet')
+  revalidatePath('/approvals')
+  revalidatePath(`/employees/${employee.id}`)
+  return { oldTotal, newTotal, newBalance }
+}
+
+async function cancelLeave(id: string, onBehalf?: OnBehalf) {
+  const actor = await getCurrentEmployee()
+  if (!actor) throw new UserError('Forbidden')
   const admin = createAdminClient()
   const { data: request, error: fetchError } = await admin.from('leave_requests').select('*').eq('id', id).single()
   if (fetchError) throw new Error(fetchError.message)
-  if (request.employee_id !== employee.id) throw new UserError('Forbidden')
+
+  let employee = actor
+  if (onBehalf) {
+    if (!canActOnBehalf(actor)) throw new UserError('Forbidden')
+    if (request.employee_id === actor.id) throw new UserError('Cancel your own leave from My Requests.')
+    const problem = onBehalfProblem(onBehalf)
+    if (problem) throw new UserError(problem)
+    const { data: owner, error: ownerError } = await admin.from('employees').select('*').eq('id', request.employee_id).single()
+    if (ownerError || !owner) throw new UserError('Employee not found')
+    employee = owner as typeof actor
+  } else if (request.employee_id !== actor.id) {
+    throw new UserError('Forbidden')
+  }
   if (request.status === 'denied' || request.status === 'cancelled') throw new UserError('This request is already closed.')
 
   const deducted = !!request.balance_deducted_at
   const selfService = request.status === 'pending' || !request.approver_id || request.start_date > todayET()
-  if (!selfService) throw new UserError('This leave was approved by an approver and has already started, so it needs your Accounting Manager to change it.')
+  if (!onBehalf && !selfService) throw new UserError('This leave was approved by an approver and has already started, so it needs your Accounting Manager to change it.')
 
   const closedHit = closedRangeOverlapping(request.start_date, request.end_date, await loadClosedRanges(admin))
-  if (closedHit) throw new UserError(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)
+  if (closedHit) {
+    if (!onBehalf) throw new UserError(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so this request can’t be cancelled here. Contact your Accounting Manager.`)
+    if (!(actor.is_super_admin || REOPEN_OVERRIDE_ROLES.includes(actor.role))) throw new UserError(`${fmtDate(closedHit.start)} – ${fmtDate(closedHit.end)} has been closed by accounting, so only the CEO can cancel this leave (CEO override).`)
+  }
 
   // Claim the cancel first so a double-click can't restore the balance twice.
   const { data: claimed, error: claimError } = await admin.from('leave_requests')
-    .update({ status: 'cancelled', deny_reason: 'Cancelled by employee' })
+    .update({ status: 'cancelled', deny_reason: onBehalf ? `Cancelled by ${actor.name} on the employee’s behalf` : 'Cancelled by employee' })
     .eq('id', id).eq('status', request.status).select('id').maybeSingle()
   if (claimError) throw new Error(claimError.message)
   if (!claimed) throw new UserError('This request was just changed — refresh and try again.')
-  await logLeaveEvent(admin, { requestId: id, action: 'cancelled', actor: employee, note: `Cancelled by employee (was ${request.status})` })
+  await logLeaveEvent(admin, {
+    requestId: id, action: 'cancelled', actor,
+    note: onBehalf ? `Cancelled on the employee’s behalf (was ${request.status}). Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note.trim()}` : `Cancelled by employee (was ${request.status})`,
+    ...(onBehalf ? { reasonCode: onBehalf.reasonCode } : {}),
+  })
 
   const col = balanceColumnFor(request.leave_type)
   let newBalance: number | null = null
@@ -664,13 +804,13 @@ export async function cancelMyLeaveRequest(id: string) {
   if (request.status === 'approved') {
     const allocations = (await loadRequestDays(admin, [request])).get(request.id) ?? []
     const leaveLabel = `${request.leave_type} leave (${rangeLabel(request.start_date, request.end_date)})`
-    await removeLeaveFromTimesheets(admin, employee.id, request.leave_type, allocations, { actorId: employee.id, leaveLabel })
+    await removeLeaveFromTimesheets(admin, employee.id, request.leave_type, allocations, { actorId: actor.id, leaveLabel })
   }
 
   await notifyEmployee(admin, employee.id, {
-    kind: 'approved',
-    title: `Your ${request.leave_type} request was cancelled`,
-    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\nCancelled by you.${newBalance !== null ? ` The ${request.hours} hrs went back to your balance.` : ''}`,
+    kind: onBehalf ? 'on_behalf' : 'approved',
+    title: onBehalf ? `${actor.name} cancelled your ${request.leave_type} request` : `Your ${request.leave_type} request was cancelled`,
+    body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\n${onBehalf ? `Cancelled by ${actor.name} on your behalf.\nReason: ${onBehalfReasonLabel(onBehalf.reasonCode)}\nNotes: ${onBehalf.note.trim()}` : 'Cancelled by you.'}${newBalance !== null ? ` The ${request.hours} hrs went back to your balance.` : ''}`,
     link: '/history',
     cta: 'View My Requests',
   })
@@ -679,11 +819,12 @@ export async function cancelMyLeaveRequest(id: string) {
   const priorApprover = request.approver_id ? (await getRecipient(admin, request.approver_id))?.name : null
   await notifyApprovers(admin, employee.id, FINAL_APPROVER_ROLES, {
     kind: 'cancelled',
-    title: `${employee.name} cancelled a ${request.leave_type} request`,
+    title: `${onBehalf ? `${actor.name} cancelled` : `${employee.name} cancelled`} a ${request.leave_type} request${onBehalf ? ` for ${employee.name}` : ''}`,
     body: `${request.leave_type} · ${rangeLabel(request.start_date, request.end_date)} · ${request.hours} hrs\n` +
       `Status when cancelled: ${request.status}${request.status === 'approved' ? (priorApprover ? ` (approved by ${priorApprover})` : ' (auto-approved)') : ''}.\n` +
       `${newBalance !== null ? `The ${request.hours} hrs were returned to the employee’s balance.` : 'No balance had been deducted.'}` +
-      `${request.status === 'approved' ? ' The days were removed from their timesheet.' : ''}`,
+      `${request.status === 'approved' ? ' The days were removed from their timesheet.' : ''}` +
+      `${onBehalf ? `\nException: cancelled by ${actor.name}. Reason: ${onBehalfReasonLabel(onBehalf.reasonCode)} — ${onBehalf.note.trim()}` : ''}`,
     cta: 'View Cancelled Requests',
   })
 
@@ -692,6 +833,7 @@ export async function cancelMyLeaveRequest(id: string) {
   revalidatePath('/dashboard')
   revalidatePath('/timesheet')
   revalidatePath('/approvals')
+  revalidatePath(`/employees/${employee.id}`)
 }
 
 /**

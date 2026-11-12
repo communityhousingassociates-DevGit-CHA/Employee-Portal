@@ -69,6 +69,7 @@ async function Overview({ admin }: A) {
   const o = await loadOverview(admin)
   const attention: { text: string; href: string }[] = []
   if (o.issues.open) attention.push({ text: `${o.issues.open} open issue report${o.issues.open === 1 ? '' : 's'}${o.issues.oldestOpenDays ? ` — oldest ${o.issues.oldestOpenDays} day${o.issues.oldestOpenDays === 1 ? '' : 's'}` : ''}`, href: '/admin/system?tab=issues' })
+  if (o.health.issueAlertsMissing.length) attention.unshift({ text: `No alert email was sent for ${o.health.issueAlertsMissing.map(i => `PORTAL-${String(i.ticket_no).padStart(4, '0')}`).join(', ')} — nobody was told about ${o.health.issueAlertsMissing.length === 1 ? 'this issue' : 'these issues'}`, href: '/admin/system?tab=health' })
   if (o.compliance && o.compliance.missing.length) attention.push({ text: `${o.compliance.missing.length} timesheet${o.compliance.missing.length === 1 ? '' : 's'} not submitted for ${o.compliance.period}: ${o.compliance.missing.join(', ')}`, href: '/approvals' })
   if (o.health.jobFailures.length) attention.push({ text: `A scheduled job reported a problem (${o.health.jobFailures[0].summary ?? 'see System health'})`, href: '/admin/system?tab=health' })
   if (o.health.emailFailed7d) attention.push({ text: `${o.health.emailFailed7d} email${o.health.emailFailed7d === 1 ? '' : 's'} failed to send in the last 7 days`, href: '/admin/system?tab=health' })
@@ -207,6 +208,13 @@ async function Health({ admin }: A) {
         ))}
         {h.jobFailures.length > 0 && <div className="mt-3 text-[12px] text-gray-500"><p className="font-semibold mb-1">Recent problems</p>{h.jobFailures.map(f => <p key={f.started_at}>{ts(f.started_at)} — {f.summary}</p>)}</div>}
       </div>
+      {h.issueAlertsMissing.length > 0 && (
+        <div className={`${card} border-red-200 bg-red-50`}>
+          <h3 className="text-[12px] font-bold uppercase tracking-wide text-red-700 mb-2">Issue alerts not sent ({h.issueAlertsMissing.length})</h3>
+          <p className="text-[13px] text-red-700">{h.issueAlertsMissing.map(i => `PORTAL-${String(i.ticket_no).padStart(4, '0')} (${ts(i.created_at)})`).join(' · ')}</p>
+          <p className="text-[12px] text-red-600 mt-1">These reports are saved in Issue Reports but no email went out for them, so check that page directly.</p>
+        </div>
+      )}
       <div className={card}>
         <h3 className="text-[12px] font-bold uppercase tracking-wide text-[#0b2b35] mb-3">Email delivery (7 days): {h.emailSent7d} sent, {h.emailFailed7d} failed</h3>
         {h.emailFailed.length === 0 ? <Empty>No failed sends.</Empty> : <table className="w-full"><tbody>{h.emailFailed.map((e, n) => <tr key={n}><td className={`${td} whitespace-nowrap`}>{ts(e.created_at)}</td><td className={td}>{e.recipient_email}</td><td className={td}>{e.subject}</td><td className={`${td} text-red-500`}>{e.error ?? 'failed'}</td></tr>)}</tbody></table>}

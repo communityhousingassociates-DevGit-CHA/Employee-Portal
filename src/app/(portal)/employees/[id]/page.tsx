@@ -104,6 +104,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           title={`${employee.name}'s Leave Requests`}
           subtitle="Full history of submitted requests"
           showNewRequestLink={false}
+          adminCancel={canActOnBehalf(me) && employee.id !== me.id ? { employeeName: employee.name, actorName: me.name } : undefined}
         />
       </div>
     </div>

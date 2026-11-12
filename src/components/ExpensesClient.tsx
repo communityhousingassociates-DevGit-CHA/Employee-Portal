@@ -306,6 +306,16 @@ export default function ExpensesClient({ initialExpenses, currentMileageRate, on
                 {missingReceipt && <span className="text-[11px] text-red-500">Expenses over ${RECEIPT_REQUIRED_OVER} need a receipt — attach an image or PDF.</span>}
               </div>
             </div>
+        {!canSubmit && (
+          <p role="status" className="px-6 pb-3 text-[12px] text-amber-700">
+            To submit: {[
+              form.category === 'mileage' ? (!form.miles && 'enter the miles') : (!form.amount && 'enter the amount'),
+              missingDescription && 'add a description',
+              missingReceipt && 'attach a receipt',
+              behalfIssue && 'choose a reason code and add notes (10+ characters) in the yellow box above',
+            ].filter(Boolean).join(', ')}.
+          </p>
+        )}
             <div className="flex gap-3 px-6 pb-6">
               <button onClick={handleSubmit} disabled={!canSubmit || saving || isPending}
                 className="bg-[#02ACC0] text-white text-[13px] font-semibold px-5 py-2 rounded-lg hover:bg-[#028a9e] transition-colors disabled:opacity-40 disabled:cursor-not-allowed">

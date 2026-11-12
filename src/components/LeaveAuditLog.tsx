@@ -3,6 +3,7 @@ import type { LeaveEvent, LeaveEventAction } from '@/types'
 const ACTION_LABEL: Record<LeaveEventAction, string> = {
   submitted: 'Submitted',
   submitted_on_behalf: 'Submitted on the employee’s behalf (exception)',
+  adjusted_on_behalf: 'Hours adjusted on the employee’s behalf (exception)',
   auto_approved: 'Auto-approved',
   approved: 'Reviewed — Approved',
   denied: 'Reviewed — Denied',
@@ -12,6 +13,7 @@ const ACTION_LABEL: Record<LeaveEventAction, string> = {
 const ACTION_COLOR: Record<LeaveEventAction, string> = {
   submitted: 'border-[#d4eef2]',
   submitted_on_behalf: 'border-amber-400',
+  adjusted_on_behalf: 'border-amber-400',
   auto_approved: 'border-emerald-300',
   approved: 'border-emerald-400',
   denied: 'border-red-400',

@@ -160,13 +160,20 @@ export async function loadErrors(admin: Admin, days = 7) {
 
 export async function loadHealth(admin: Admin) {
   const { rows, testIds } = await people(admin)
-  const [runs, failedEmails, emailTotals, blocks, authUsers] = await Promise.all([
+  const [runs, failedEmails, emailTotals, blocks, authUsers, recentIssues, issueEmails] = await Promise.all([
     admin.from('job_runs').select('job, started_at, ok, summary').order('started_at', { ascending: false }).limit(60),
     admin.from('email_log').select('created_at, kind, recipient_email, subject, error').eq('status', 'failed').gte('created_at', daysAgo(7)).order('created_at', { ascending: false }).limit(25),
     admin.from('email_log').select('status').gte('created_at', daysAgo(7)).limit(5000),
     admin.from('geofence_blocks').select('employee_id, city, region, created_at').gte('created_at', daysAgo(7)).order('created_at', { ascending: false }).limit(200),
     admin.auth.admin.listUsers({ page: 1, perPage: 200 }),
+    admin.from('issue_reports').select('ticket_no, created_at').gte('created_at', daysAgo(14)).order('created_at', { ascending: false }),
+    admin.from('email_log').select('created_at').eq('source', 'issue_report').eq('status', 'sent').gte('created_at', daysAgo(14)),
   ])
+  // An issue report whose alert email never went out: no successful 'issue_report' send within 15 minutes of the ticket being filed.
+  const sentAt = ((issueEmails.data ?? []) as { created_at: string }[]).map(e => Date.parse(e.created_at))
+  const issueAlertsMissing = ((recentIssues.data ?? []) as { ticket_no: number; created_at: string }[])
+    .filter(i => Date.now() - Date.parse(i.created_at) > 5 * 60000 && !sentAt.some(t => t >= Date.parse(i.created_at) - 60000 && t <= Date.parse(i.created_at) + 15 * 60000))
+    .map(i => ({ ticket_no: i.ticket_no, created_at: i.created_at }))
   const jobRows = (runs.data ?? []) as { job: string; started_at: string; ok: boolean; summary: string | null }[]
   const latestByJob = new Map<string, (typeof jobRows)[number]>()
   for (const r of jobRows) if (!latestByJob.has(r.job)) latestByJob.set(r.job, r)
@@ -185,6 +192,7 @@ export async function loadHealth(admin: Admin) {
     emailFailed7d: emailStatuses.filter(e => e.status === 'failed').length,
     geofenceBlocks7d: blockRows.length,
     neverSignedIn: neverSignedIn.map(p => p.name),
+    issueAlertsMissing,
   }
 }
 

@@ -190,7 +190,7 @@ export default function RequestClient({
     const holiday = holidayOn(date, yearEnd)
     if (holiday) return holiday
     if (eligibleFrom && date < eligibleFrom) return `Waiting period — available from ${fmtDate(eligibleFrom)}`
-    if (date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
+    if (!onBehalf && date < earliest) return `More than ${LEAVE_BACKDATE_DAYS} days back`
     if (date > latest) return 'Too far ahead'
     if (closedRangeOverlapping(date, date, closedRanges)) return 'Period closed'
     const booked = bookedDays[date]
@@ -395,7 +395,7 @@ export default function RequestClient({
               {dayCount === 0 ? 'No days selected yet.' : <><strong className="text-[#0b2b35]">{dayCount} day{dayCount === 1 ? '' : 's'}</strong> selected · <strong className="text-[#0b2b35]">{hoursNum} hrs</strong> total{dates.some(d => d < viewStart || d > viewEnd) ? ' (including other pay periods — use Prev/Next to review)' : ''}</>}
             </p>
             <p className="text-[11px] text-gray-400 -mt-2 mb-4">
-              Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). Foreseeable <strong>sick leave</strong> (like a planned appointment) can be booked ahead too — give at least 7 days&apos; notice when you know that far in advance. You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.
+              Request planned time off as far ahead as you like (through {fmtDate(latestLeaveDate())}). Foreseeable <strong>sick leave</strong> (like a planned appointment) can be booked ahead too — give at least 7 days&apos; notice when you know that far in advance. {onBehalf ? 'As an administrator completing this on their behalf, you can enter earlier dates too (closed pay periods still can’t be changed).' : <>You can also enter leave up to {LEAVE_BACKDATE_DAYS} days back (from {fmtDate(earliest)}) to catch your timesheet up.</>}
             </p>
             {beyondLatest && (
               <div className="text-[11px] bg-red-50 border border-red-200 text-red-600 rounded-lg px-3 py-2 mb-4">

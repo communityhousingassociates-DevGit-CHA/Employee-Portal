@@ -4,11 +4,13 @@ import { errMsg } from '@/lib/user-error'
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest } from '@/app/actions/leave-requests'
+import { getLeaveAttachmentViewUrl, cancelMyLeaveRequest, cancelLeaveOnBehalf, adjustLeaveOnBehalf } from '@/app/actions/leave-requests'
 import { fmtDate, fmtDateRange, fmtDaySet } from '@/lib/format-date'
 import LeaveDaysList from '@/components/LeaveDaysList'
 import LeaveRecordDetail from '@/components/LeaveRecordDetail'
 import { todayET } from '@/lib/pay-periods'
+import OnBehalfPanel from '@/components/OnBehalfPanel'
+import { onBehalfProblem } from '@/lib/constants/on-behalf'
 import type { LeaveRequest } from '@/types'
 
 type Request = LeaveRequest & { approver_name: string | null }
@@ -53,10 +55,14 @@ function canCancel(r: Request) {
   return r.status === 'approved' && (!r.approver_id || r.start_date > todayET())
 }
 
-function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expanded: boolean; onToggle: () => void; allowCancel: boolean }) {
+function RequestRow({ r, expanded, onToggle, allowCancel, adminCancel }: { r: Request; expanded: boolean; onToggle: () => void; allowCancel: boolean; adminCancel?: { employeeName: string; actorName: string } }) {
   const router = useRouter()
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState('')
+  const [adminOpen, setAdminOpen] = useState<null | 'cancel' | 'edit'>(null)
+  const [editHours, setEditHours] = useState<Record<string, string>>({})
+  const [adjusted, setAdjusted] = useState('')
+  const [behalf, setBehalf] = useState({ reasonCode: '', note: '' })
 
   async function cancel(e: React.MouseEvent) {
     e.stopPropagation()
@@ -72,6 +78,44 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
       setCancelling(false)
     }
   }
+  async function adminCancelNow() {
+    setCancelling(true)
+    setCancelError('')
+    try {
+      await cancelLeaveOnBehalf(r.id, behalf)
+      setAdminOpen(null)
+      router.refresh()
+    } catch (err) {
+      setCancelError(errMsg(err, 'Could not cancel this request.'))
+      setCancelling(false)
+    }
+  }
+  const editableDays = (r.days && r.days.length > 0 ? r.days : [{ date: r.start_date, hours: Number(r.hours) }])
+  function openEdit() {
+    setEditHours(Object.fromEntries(editableDays.map(d => [d.date, String(d.hours)])))
+    setCancelError('')
+    setAdjusted('')
+    setAdminOpen(o => (o === 'edit' ? null : 'edit'))
+  }
+  const editedDays = editableDays.map(d => ({ date: d.date, hours: Number(editHours[d.date] ?? d.hours) }))
+  const editedTotal = Math.round(editedDays.reduce((t, d) => t + (Number.isFinite(d.hours) ? d.hours : 0), 0) * 100) / 100
+  const editChanged = editedDays.some((d, i) => d.hours !== Number(editableDays[i].hours))
+  const editInvalid = editedDays.some(d => !(d.hours > 0) || d.hours > 8)
+  async function saveAdjust() {
+    setCancelling(true)
+    setCancelError('')
+    try {
+      const res = await adjustLeaveOnBehalf(r.id, editedDays, behalf)
+      setAdjusted(`Saved: ${res.oldTotal} hrs → ${res.newTotal} hrs.${res.newBalance !== null ? ` Balance is now ${res.newBalance} hrs.` : ''}`)
+      setAdminOpen(null)
+      setCancelling(false)
+      router.refresh()
+    } catch (err) {
+      setCancelError(errMsg(err, 'Could not adjust this request.'))
+      setCancelling(false)
+    }
+  }
+  const adminCanCancel = !!adminCancel && (r.status === 'pending' || r.status === 'approved')
   const tc = TYPE_STYLE[r.leave_type] || TYPE_STYLE.PTO
   const multiDay = (r.days?.length ?? 0) > 1
   const hasNote = !!(r.note || r.attachment_url || multiDay || (r.status === 'denied' && r.deny_reason) || (r.events?.length ?? 0) > 0)
@@ -110,11 +154,73 @@ function RequestRow({ r, expanded, onToggle, allowCancel }: { r: Request; expand
               {cancelling ? 'Cancelling…' : 'Cancel'}
             </button>
           )}
+          {adminCanCancel && (
+            <>
+              <button onClick={e => { e.stopPropagation(); openEdit() }} className="text-[11px] font-semibold text-[#028a9e] border border-[#b6e3ea] hover:bg-[#e0f5f8] px-2.5 py-1 rounded-full">
+                Edit hours
+              </button>
+              <button onClick={e => { e.stopPropagation(); setCancelError(''); setAdminOpen(o => (o === 'cancel' ? null : 'cancel')) }} className="text-[11px] font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-2.5 py-1 rounded-full">
+                Cancel
+              </button>
+            </>
+          )}
           <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full capitalize ${STATUS_STYLE[r.status]}`}>{r.status}</span>
           {hasNote && <span className={`text-gray-300 text-[13px] transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>}
         </div>
       </div>
 
+      {adjusted && <p role="status" className="px-6 py-2 text-[12px] font-semibold text-emerald-700 bg-emerald-50 border-b border-emerald-100">{adjusted}</p>}
+      {adminOpen === 'edit' && adminCancel && (
+        <div className="bg-[#f8fcfd] border-b border-[#e8f4f7] px-6 py-4">
+          <p className="text-[12px] text-gray-600 mb-3">Correct the hours for each day. The request stays in place: any balance already taken is adjusted by the difference, and the timesheet is updated to match.</p>
+          <div className="flex flex-wrap items-center gap-2 mb-3 text-[12px]">
+            <span className="font-semibold text-[#0b2b35]">Set every day to</span>
+            <input type="number" min="0.25" max="8" step="0.25" aria-label="Hours for every day" placeholder="hrs"
+              onChange={e => { const v = e.target.value; if (v) setEditHours(Object.fromEntries(editableDays.map(d => [d.date, v]))) }}
+              className="w-20 px-2 py-1.5 border border-[#d4eef2] rounded-lg focus:outline-none focus:border-[#02ACC0]" />
+            <span className="text-gray-400">or edit days individually:</span>
+          </div>
+          <div className="rounded-lg border border-[#e8f4f7] bg-white max-w-sm mb-3">
+            {editableDays.map(d => (
+              <label key={d.date} className="flex items-center justify-between px-3 py-1.5 text-[12px] border-b border-[#f0f7f8] last:border-0">
+                <span className="text-[#0b2b35]">{fmtDate(d.date)}</span>
+                <span className="flex items-center gap-1.5">
+                  <input type="number" min="0.25" max="8" step="0.25" value={editHours[d.date] ?? ''} onChange={e => setEditHours(h => ({ ...h, [d.date]: e.target.value }))}
+                    className="w-20 px-2 py-1 border border-[#d4eef2] rounded-lg text-right focus:outline-none focus:border-[#02ACC0]" />
+                  <span className="text-gray-400">hrs</span>
+                </span>
+              </label>
+            ))}
+            <div className="flex items-center justify-between px-3 py-1.5 text-[12px] bg-[#f8fcfd] font-semibold text-[#0b2b35]">
+              <span>Total</span><span>{Number(r.hours)} hrs → {editedTotal} hrs</span>
+            </div>
+          </div>
+          <OnBehalfPanel employeeName={adminCancel.employeeName} actorName={adminCancel.actorName} what="leave request" edit reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} />
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={saveAdjust} disabled={cancelling || !editChanged || editInvalid || !!onBehalfProblem(behalf)} className="text-[12px] font-semibold text-white bg-[#02ACC0] hover:bg-[#028a9e] px-4 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
+              {cancelling ? 'Saving…' : 'Save corrected hours'}
+            </button>
+            <button onClick={() => setAdminOpen(null)} className="text-[12px] font-semibold border border-[#d4eef2] px-4 py-2 rounded-lg hover:bg-[#f0f7f8]">Close</button>
+            {(!editChanged || editInvalid || onBehalfProblem(behalf)) && (
+              <span className="text-[11px] text-amber-700">
+                {!editChanged ? 'Change at least one day’s hours. ' : ''}{editInvalid ? 'Each day needs between 0.25 and 8 hours. ' : ''}{onBehalfProblem(behalf) ? 'Choose a reason code and add notes (10+ characters). ' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+      {adminOpen === 'cancel' && adminCancel && (
+        <div className="bg-[#f8fcfd] border-b border-[#e8f4f7] px-6 py-4">
+          <p className="text-[12px] text-gray-600 mb-3">This cancels the whole request. Any hours already taken off the balance go back, and they come off the timesheet. To correct hours instead, use <strong>Edit hours</strong>.</p>
+          <OnBehalfPanel employeeName={adminCancel.employeeName} actorName={adminCancel.actorName} what="leave request" reasonCode={behalf.reasonCode} note={behalf.note} onChange={setBehalf} />
+          <div className="flex gap-2">
+            <button onClick={adminCancelNow} disabled={cancelling || !!onBehalfProblem(behalf)} className="text-[12px] font-semibold text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
+              {cancelling ? 'Cancelling…' : 'Cancel this leave request'}
+            </button>
+            <button onClick={() => setAdminOpen(null)} className="text-[12px] font-semibold border border-[#d4eef2] px-4 py-2 rounded-lg hover:bg-[#f0f7f8]">Keep it</button>
+          </div>
+        </div>
+      )}
       {expanded && (
         <div className="bg-[#f8fcfd] border-b border-[#e8f4f7] px-6 py-4 space-y-2">
           {multiDay && <LeaveDaysList days={r.days!} className="max-w-xs" />}
@@ -155,11 +261,14 @@ export default function HistoryClient({
   title = 'My Leave Requests',
   subtitle = 'Full history of submitted requests',
   showNewRequestLink = true,
+  adminCancel,
 }: {
   initialRequests: Request[]
   title?: string
   subtitle?: string
   showNewRequestLink?: boolean
+  /** Set when a named administrator is viewing another employee's history: shows an on-behalf Cancel with a reason code and notes. */
+  adminCancel?: { employeeName: string; actorName: string }
 }) {
   const [statusFilter, setStatusFilter] = useState<string>('All')
   const [typeFilter, setTypeFilter] = useState<string>('All')
@@ -235,7 +344,7 @@ export default function HistoryClient({
         ) : (
           <div>
             {filtered.map(r => (
-              <RequestRow key={r.id} r={r} allowCancel={showNewRequestLink} expanded={expanded === r.id} onToggle={() => setExpanded(prev => prev === r.id ? null : r.id)} />
+              <RequestRow key={r.id} r={r} allowCancel={showNewRequestLink} adminCancel={adminCancel} expanded={expanded === r.id} onToggle={() => setExpanded(prev => prev === r.id ? null : r.id)} />
             ))}
           </div>
         )}

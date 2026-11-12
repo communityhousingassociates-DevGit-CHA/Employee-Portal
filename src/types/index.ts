@@ -143,7 +143,7 @@ export interface LeaveBalance {
   updated_at: string
 }
 
-export type LeaveEventAction = 'submitted' | 'submitted_on_behalf' | 'auto_approved' | 'approved' | 'denied' | 'cancelled'
+export type LeaveEventAction = 'submitted' | 'submitted_on_behalf' | 'adjusted_on_behalf' | 'auto_approved' | 'approved' | 'denied' | 'cancelled'
 
 export interface LeaveEvent {
   id: string
