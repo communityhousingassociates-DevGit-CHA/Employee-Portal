@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { reportIssue } from '@/app/actions/report-issue'
+import { reportIssue, getIssueAttachmentUploadUrl } from '@/app/actions/report-issue'
 import { errMsg } from '@/lib/user-error'
 
 const KINDS = [
@@ -21,19 +21,35 @@ export default function BetaFeedbackButton() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState<string | null>(null)
+  const [screenshot, setScreenshot] = useState<File | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const hint = KINDS.find(k => k.id === kind)!.hint
+  const MAX_BYTES = 10 * 1024 * 1024
+
+  function pick(file: File | null) {
+    if (file && file.size > MAX_BYTES) { setError('That file is over 10 MB. Please attach a smaller screenshot.'); return }
+    setError(''); setScreenshot(file)
+  }
+  function clearShot() { setScreenshot(null); if (fileRef.current) fileRef.current.value = '' }
 
   async function send() {
     setBusy(true); setError('')
     try {
-      const r = await reportIssue({ category: 'other', description: text, page_url: pathname, beta_feedback_kind: kind })
-      setSent(r?.ticket ?? 'sent'); setText('')
+      let attachment_path: string | undefined
+      if (screenshot) {
+        const { signedUrl, path } = await getIssueAttachmentUploadUrl(screenshot.name)
+        const res = await fetch(signedUrl, { method: 'PUT', body: screenshot, headers: { 'Content-Type': screenshot.type } })
+        if (!res.ok) throw new Error('Screenshot upload failed. You can still send your feedback without it.')
+        attachment_path = path
+      }
+      const r = await reportIssue({ category: 'other', description: text, page_url: pathname, beta_feedback_kind: kind, attachment_path })
+      setSent(r?.ticket ?? 'sent'); setText(''); clearShot()
     } catch (e: unknown) {
       setError(errMsg(e, 'Something went wrong'))
     } finally { setBusy(false) }
   }
 
-  function close() { setOpen(false); setSent(null); setError('') }
+  function close() { setOpen(false); setSent(null); setError(''); clearShot() }
 
   return (
     <>
@@ -61,7 +77,17 @@ export default function BetaFeedbackButton() {
                   ))}
                 </div>
                 <textarea value={text} onChange={e => setText(e.target.value)} rows={5} placeholder={hint}
+                  onPaste={e => { const img = [...e.clipboardData.files].find(f => f.type.startsWith('image/')); if (img) { e.preventDefault(); pick(img) } }}
                   className="mt-3 w-full rounded-lg border border-[#d4eef2] px-3 py-2 text-[14px] focus:border-[#02ACC0] focus:outline-none" />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => fileRef.current?.click()}
+                    className="rounded-lg border border-[#d4eef2] px-3 py-1.5 text-[12px] font-semibold hover:bg-[#f0f7f8]">
+                    {screenshot ? screenshot.name : 'Attach screenshot (optional)'}
+                  </button>
+                  {screenshot && <button type="button" onClick={clearShot} className="text-[11px] text-gray-400 hover:text-red-500">Remove</button>}
+                  {!screenshot && <span className="text-[11px] text-gray-400">or paste an image into the box above</span>}
+                  <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => pick(e.target.files?.[0] ?? null)} />
+                </div>
                 {error && <p role="alert" className="mt-2 text-[12px] text-red-600">{error}</p>}
                 <div className="mt-3 flex justify-end gap-2">
                   <button onClick={close} className="rounded-lg px-4 py-2 text-[13px] text-gray-600 hover:bg-gray-100">Cancel</button>
