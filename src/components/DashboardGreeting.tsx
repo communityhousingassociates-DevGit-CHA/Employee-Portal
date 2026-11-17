@@ -11,8 +11,8 @@ export default function DashboardGreeting({ firstName }: { firstName: string }) 
 
   return (
     <div suppressHydrationWarning>
-      <h1 className="text-[24px] font-bold text-[#0b2b35]">{greeting}, {firstName}</h1>
-      <p className="text-[13px] text-gray-400 mt-0.5">{dayLabel}</p>
+      <p className="dx-eyebrow">{dayLabel}</p>
+      <h1 className="dx-h1">{greeting}, {firstName}</h1>
     </div>
   )
 }
